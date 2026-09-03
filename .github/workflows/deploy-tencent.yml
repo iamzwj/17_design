@@ -133,3 +133,18 @@ jobs:
           done
           echo 'Public HTTPS health check failed after five attempts.' >&2
           exit 1
+
+      - name: Inspect HTTPS ingress after verification
+        if: always()
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" <<'REMOTE'
+            set -euo pipefail
+            echo '--- UFW ---'
+            (sudo ufw status verbose || true)
+            echo '--- recent Nginx errors ---'
+            sudo tail -n 40 /var/log/nginx/error.log || true
+            echo '--- recent Nginx access ---'
+            sudo tail -n 20 /var/log/nginx/access.log || true
+            echo '--- packet filter rules ---'
+            (sudo iptables -S || true)
+          REMOTE
