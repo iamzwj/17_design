@@ -266,20 +266,10 @@ function loadWaterfallTasks() {
   try {
     const tasks = JSON.parse(fs.readFileSync(waterfallStoreFile, 'utf8'))
     if (!Array.isArray(tasks)) return []
-    return tasks.map((task) => {
-      const normalizedTask = { ...task, refundedCount: Math.min(task.refundedCount || 0, task.count || task.slots?.length || 0) }
-      if (task.status !== 'running') return normalizedTask
-      const interruptedCount = task.slots.filter((slot) => slot.status === 'running').length
-      return {
-        ...normalizedTask,
-        status: 'failed',
-        completedAt: new Date().toISOString(),
-        error: '应用重启，任务已中断',
-        refundedCount: (task.refundedCount || 0) + interruptedCount,
-        recoveryRefundCount: interruptedCount,
-        slots: task.slots.map((slot) => slot.status === 'running' ? { ...slot, status: 'failed', error: '应用重启，任务已中断' } : slot),
-      }
-    })
+    return tasks.map((task) => ({
+      ...task,
+      refundedCount: Math.min(task.refundedCount || 0, task.count || task.slots?.length || 0),
+    }))
   } catch { return [] }
 }
 

@@ -225,10 +225,10 @@ function isFailedWaterfallTask(task) {
 }
 
 function waterfallThumbnailUrl(value) {
-  // Keep history cards on the same Drive media address as previews.  The
-  // thumbnail route is deliberately not used until it is browser-verified;
-  // a task that completed successfully must never become an empty card.
-  return value
+  const url = String(value || '')
+  // A previous 404 can be cached by the browser while a deployment writes the
+  // local asset. Versioning this route makes saved images retry cleanly.
+  return url.startsWith('/api/waterfall/assets/') ? `${url}${url.includes('?') ? '&' : '?'}v=2` : url
 }
 
 function failureTaskDeadline(task) {
@@ -422,9 +422,9 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
     <aside className={`sidebar glass-strong ${open ? 'is-open' : ''}`}>
       <div className="brand">
         <span className="brand-avatar" role="img" aria-label="小蝶">
-          <img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=2" alt="" />
-          <img className="mascot-frame mascot-wave" src="/xiaodie-frame-wave.png?v=2" alt="" />
-          <img className="mascot-frame mascot-blink" src="/xiaodie-frame-blink.png?v=2" alt="" />
+          <img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="" />
+          <img className="mascot-frame mascot-wave" src="/xiaodie-frame-wave.png?v=3" alt="" style={{ opacity: 0 }} />
+          <img className="mascot-frame mascot-blink" src="/xiaodie-frame-blink.png?v=3" alt="" style={{ opacity: 0 }} />
         </span>
         <div className="brand-copy">
           <div className="brand-name">小蝶</div>
@@ -533,7 +533,7 @@ function AuthScreen({ onAuthenticated, onClose, requiredModule = 'general' }) {
   const prompt = moduleLabel ? `登录后才能使用“${moduleLabel}”。` : '登录后继续你的创作与对话。'
   return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
-  <div className="auth-brand"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=2" alt="小蝶"/></span><div><b>小蝶</b><small>AI 办公小能手</small></div></div>
+  <div className="auth-brand"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="小蝶"/></span><div><b>小蝶</b><small>AI 办公小能手</small></div></div>
     <div className="auth-heading"><span>{isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</span><h1>{isRegister ? '注册企业账号' : '登录后继续'}</h1><p>{isRegister ? '使用 onewo.com 企业邮箱注册' : prompt}</p></div>
     <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} onClick={() => switchMode('register')}>注册</button></div>
     {isRegister && <div className="auth-steps"><i className="done">1</i><span className={registerStep !== 'email' ? 'done' : ''}/><i className={registerStep !== 'email' ? 'done' : ''}>2</i><span className={registerStep === 'password' ? 'done' : ''}/><i className={registerStep === 'password' ? 'done' : ''}>3</i></div>}
@@ -1615,6 +1615,6 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (localVideoPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Topbar onMenu={() => {}}/><VideoHub/></main></div>
-  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=2" alt="小蝶"/></span><i/></div>
+  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="小蝶"/></span><i/></div>
   return <div className={`app-shell ${active === 'video' && !archiveViewOpen ? 'video-shell' : ''}`}><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
