@@ -55,6 +55,11 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" <<'REMOTE'
             set -euo pipefail
+            # GitHub cancellation only terminates the runner. The remote SSH
+            # process can otherwise keep building while the next run starts,
+            # leaving index.html and hashed CSS/JS from different builds.
+            exec 9>/tmp/17design-deploy.lock
+            flock -x 9
             cd /home/ubuntu/17_design
             mkdir -p data
             previous_revision=$(git rev-parse HEAD)
