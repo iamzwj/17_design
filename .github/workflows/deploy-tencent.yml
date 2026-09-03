@@ -104,6 +104,17 @@ jobs:
             sudo systemctl restart nginx
             sleep 2
             sudo systemctl is-active --quiet nginx
+            # Keep a concise, non-sensitive TLS diagnosis in the Action log.
+            # This differentiates a local Nginx/certificate fault from a
+            # Tencent network-path fault when public verification fails.
+            echo '--- HTTPS listener ---'
+            sudo ss -lntp '( sport = :443 )'
+            echo '--- local TLS health check ---'
+            curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+              --resolve app.17design.fun:443:127.0.0.1 \
+              https://app.17design.fun/api/health >/dev/null
+            echo '--- enabled virtual host ---'
+            sudo sed -n '/server_name app\\.17design\\.fun/,/}/p' "$nginx_site"
           REMOTE
 
       - name: Verify public HTTPS endpoint
