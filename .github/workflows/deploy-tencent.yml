@@ -74,6 +74,24 @@ jobs:
             npm ci
             npm run build
 
+            # Keep the web shell available even while Node is restarting.
+            # The existing TLS/server settings remain untouched; only a legacy
+            # catch-all proxy block is replaced with static files plus /api.
+            nginx_site=/etc/nginx/sites-available/app.17design.fun
+            if sudo grep -qE '^[[:space:]]*location[[:space:]]+/[[:space:]]*\{' "$nginx_site" && ! sudo grep -q '17design-static-shell' "$nginx_site"; then
+              backup_site="${nginx_site}.before-static-$(date +%Y%m%d%H%M%S)"
+              sudo cp "$nginx_site" "$backup_site"
+              sudo python3 scripts/configure-nginx-static.py "$nginx_site"
+              if sudo nginx -t; then
+                sudo systemctl reload nginx
+              else
+                sudo cp "$backup_site" "$nginx_site"
+                sudo nginx -t
+                sudo systemctl reload nginx
+                exit 1
+              fi
+            fi
+
             if [ "$restart_required" -eq 1 ]; then
               sudo systemctl restart 17design
               sleep 2
