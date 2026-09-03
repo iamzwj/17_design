@@ -56,13 +56,29 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" <<'REMOTE'
             set -euo pipefail
             cd /home/ubuntu/17_design
+            mkdir -p data
+            previous_revision=$(git rev-parse HEAD)
+            GIT_SSH_COMMAND='ssh -i /home/ubuntu/.ssh/17design_server -o IdentitiesOnly=yes' git pull --ff-only origin main
+
+            # A UI-only deployment must not briefly take the whole site offline.
+            # Restart Node only when its runtime files or configuration changed.
+            restart_required=0
+            if ! git diff --quiet "$previous_revision" HEAD -- server package.json package-lock.json; then
+              restart_required=1
+            fi
+            if ! cmp -s .env .env.next 2>/dev/null; then
+              restart_required=1
+            fi
             install -m 600 .env.next .env
             rm .env.next
-            mkdir -p data
-            GIT_SSH_COMMAND='ssh -i /home/ubuntu/.ssh/17design_server -o IdentitiesOnly=yes' git pull --ff-only origin main
             npm ci
             npm run build
-            sudo systemctl restart 17design
-            sleep 2
+
+            if [ "$restart_required" -eq 1 ]; then
+              sudo systemctl restart 17design
+              sleep 2
+            else
+              echo 'Static-only deployment: keeping 17design.service running.'
+            fi
             sudo systemctl is-active --quiet 17design
           REMOTE

@@ -226,9 +226,10 @@ function isFailedWaterfallTask(task) {
 
 function waterfallThumbnailUrl(value) {
   const url = String(value || '')
-  // A previous 404 can be cached by the browser while a deployment writes the
-  // local asset. Versioning this route makes saved images retry cleanly.
-  return url.startsWith('/api/waterfall/assets/') ? `${url}${url.includes('?') ? '&' : '?'}v=2` : url
+  // Use one canonical URL wherever a saved server image is rendered. A prior
+  // 404 must not leave thumbnails working while the preview still opens the
+  // browser's stale, unversioned URL.
+  return url.startsWith('/api/waterfall/assets/') ? `${url}${url.includes('?') ? '&' : '?'}v=3` : url
 }
 
 function failureTaskDeadline(task) {
@@ -398,6 +399,17 @@ function ConversationRow({ conversation, activeConversationId, onSelect, onPin, 
   </div>
 }
 
+function MascotImage({ alt = '' }) {
+  const [loaded, setLoaded] = useState(false)
+  return <img
+    className={`mascot-static${loaded ? ' is-ready' : ''}`}
+    src="/xiaodie-frame-open.png?v=4"
+    alt={alt}
+    onLoad={() => setLoaded(true)}
+    onError={() => setLoaded(false)}
+  />
+}
+
 function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, onNew, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
@@ -422,9 +434,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
     <aside className={`sidebar glass-strong ${open ? 'is-open' : ''}`}>
       <div className="brand">
         <span className="brand-avatar" role="img" aria-label="小蝶">
-          <img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="" />
-          <img className="mascot-frame mascot-wave" src="/xiaodie-frame-wave.png?v=3" alt="" style={{ opacity: 0 }} />
-          <img className="mascot-frame mascot-blink" src="/xiaodie-frame-blink.png?v=3" alt="" style={{ opacity: 0 }} />
+          <MascotImage />
         </span>
         <div className="brand-copy">
           <div className="brand-name">小蝶</div>
@@ -533,7 +543,7 @@ function AuthScreen({ onAuthenticated, onClose, requiredModule = 'general' }) {
   const prompt = moduleLabel ? `登录后才能使用“${moduleLabel}”。` : '登录后继续你的创作与对话。'
   return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
-  <div className="auth-brand"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="小蝶"/></span><div><b>小蝶</b><small>AI 办公小能手</small></div></div>
+  <div className="auth-brand"><span className="brand-avatar"><MascotImage alt="小蝶"/></span><div><b>小蝶</b><small>AI 办公小能手</small></div></div>
     <div className="auth-heading"><span>{isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</span><h1>{isRegister ? '注册企业账号' : '登录后继续'}</h1><p>{isRegister ? '使用 onewo.com 企业邮箱注册' : prompt}</p></div>
     <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} onClick={() => switchMode('register')}>注册</button></div>
     {isRegister && <div className="auth-steps"><i className="done">1</i><span className={registerStep !== 'email' ? 'done' : ''}/><i className={registerStep !== 'email' ? 'done' : ''}>2</i><span className={registerStep === 'password' ? 'done' : ''}/><i className={registerStep === 'password' ? 'done' : ''}>3</i></div>}
@@ -1085,9 +1095,9 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           const displayedCount = task.status === 'running' ? task.count : visibleSlots.filter((slot) => slot.status === 'succeeded').length
           const referenceThumbnails = referenceImages.map(waterfallThumbnailUrl)
           return <article className="waterfall-task" key={task.id}>
-          <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <img src={url} alt="" loading="lazy" decoding="async" key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url, prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><img src={referenceThumbnails[index]} alt={`参考图 ${index + 1}`} loading="lazy" decoding="async"/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {task.aspectRatio === 'auto' ? `自动 · ${task.resolvedAspectRatio || '1:1'}` : task.aspectRatio} · {displayedCount} 张</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
+          <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <img src={url} alt="" loading="lazy" decoding="async" key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url: referenceThumbnails[index], prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><img src={referenceThumbnails[index]} alt={`参考图 ${index + 1}`} loading="lazy" decoding="async"/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {task.aspectRatio === 'auto' ? `自动 · ${task.resolvedAspectRatio || '1:1'}` : task.aspectRatio} · {displayedCount} 张</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status} ${task.aspectRatio === 'auto' ? 'auto-ratio' : ''}`} style={{ aspectRatio: (task.resolvedAspectRatio || (task.aspectRatio === 'auto' ? '1:1' : task.aspectRatio)).replace(':', ' / ') }} key={slot.index}>
-            {slot.status === 'succeeded' && slot.url ? <><button type="button" onClick={() => setPreviewImage({ url: slot.url, urls: visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => item.url), prompt: task.prompt })}><img src={waterfallThumbnailUrl(slot.url)} alt={`${task.prompt} ${slot.index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, slot.url); event.dataTransfer.setData('text/uri-list', slot.url) }}/></button><button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(slot.url, task.prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button></> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'succeeded' && slot.url ? <><button type="button" onClick={() => setPreviewImage({ url: waterfallThumbnailUrl(slot.url), urls: visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url)), prompt: task.prompt })}><img src={waterfallThumbnailUrl(slot.url)} alt={`${task.prompt} ${slot.index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { const assetUrl = waterfallThumbnailUrl(slot.url); event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, assetUrl); event.dataTransfer.setData('text/uri-list', assetUrl) }}/></button><button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(waterfallThumbnailUrl(slot.url), task.prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button></> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}
@@ -1623,6 +1633,6 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (localVideoPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Topbar onMenu={() => {}}/><VideoHub/></main></div>
-  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><img className="mascot-frame mascot-open" src="/xiaodie-frame-open.png?v=3" alt="小蝶"/></span><i/></div>
+  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><MascotImage alt="小蝶"/></span><i/></div>
   return <div className={`app-shell ${active === 'video' && !archiveViewOpen ? 'video-shell' : ''}`}><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }

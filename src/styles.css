@@ -38,15 +38,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .sidebar { position: fixed; z-index: 50; left: 18px; top: 18px; bottom: 18px; width: 246px; border-radius: 27px; padding: 20px 13px 14px; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 4px 22px; margin-left: -8px; }
 .brand-avatar { position: relative; width: 66px; height: 66px; flex: 0 0 66px; display: block; margin-right: -5px; filter: drop-shadow(0 6px 8px rgba(73, 55, 104, .14)); }
-.mascot-frame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; animation-duration: 5.2s; animation-timing-function: step-end; animation-iteration-count: infinite; }
-.mascot-open { opacity: 1; animation-name: mascot-open-frame; }
-.mascot-wave { animation-name: mascot-wave-frame; }
-.mascot-blink { animation-name: mascot-blink-frame; }
-.brand:hover .mascot-frame { animation-duration: 1.8s; }
-@keyframes mascot-open-frame { 0%, 50%, 58.01%, 63%, 71.01%, 88%, 92.01%, 100% { opacity: 1; } 50.01%, 58%, 63.01%, 71%, 88.01%, 92% { opacity: 0; } }
-@keyframes mascot-wave-frame { 0%, 50% { opacity: 0; } 50.01%, 58% { opacity: 1; } 58.01%, 63% { opacity: 0; } 63.01%, 71% { opacity: 1; } 71.01%, 100% { opacity: 0; } }
-@keyframes mascot-blink-frame { 0%, 88% { opacity: 0; } 88.01%, 92% { opacity: 1; } 92.01%, 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .mascot-frame { animation: none; opacity: 0; } .mascot-open { opacity: 1; } }
+.mascot-static { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .12s ease-out; }
+.mascot-static.is-ready { opacity: 1; }
 .brand-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .brand-name { font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; font-size: 20px; line-height: 1.2; font-weight: 600; white-space: nowrap; }
 .brand-caption { color: var(--muted); font-size: 10px; line-height: 1.2; white-space: nowrap; }
