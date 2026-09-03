@@ -1,0 +1,14 @@
+node_modules
+dist
+cloudflare-pages
+cloudflare-worker/.wrangler/
+release
+.env
+.env.local
+.DS_Store
+npm-debug.log*
+data/
+xiaodie-*-deploy.zip
+xiaodie-cloudflare-worker.zip
+offline-avatar/*.zip
+cloudflare-worker/.dev.vars

@@ -1,0 +1,32 @@
+name = "xiaodie-api"
+main = "src/index.js"
+compatibility_date = "2026-08-13"
+
+# Create the KV namespace first, then replace the placeholder ID.
+[[kv_namespaces]]
+binding = "XIAODIE_TASKS"
+id = "e4a8fc3e55af4d4296fcd1402eec03f9"
+
+[[durable_objects.bindings]]
+name = "AVATAR_DOWNLOAD_COUNTER"
+class_name = "AvatarDownloadCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AvatarDownloadCounter"]
+
+[vars]
+ALLOWED_ORIGIN = "https://xiaodie.pages.dev"
+GRSAI_BASE_URL = "https://grsaiapi.com"
+GRSAI_FALLBACK_BASE_URL = "https://grsai.dakka.com.cn"
+SMTP_HOST = "smtp.163.com"
+SMTP_PORT = "465"
+SMTP_USERNAME = "19919901874@163.com"
+ENVIRONMENT = "production"
+VIDEO_ASSET_PUBLIC_ORIGIN = "https://xiaodie.pages.dev"
+GOOGLE_DRIVE_CLIENT_ID = "117362785743-8ngf7tri8rm2o14qfqh3gvvcf7rie9rc.apps.googleusercontent.com"
+GOOGLE_DRIVE_FOLDER_ID = "1q7qgcO6VXWWnQMnsX3BjHgRjHeXkm6Ow"
+GOOGLE_OAUTH_REDIRECT_URI = "https://xiaodie-api.zhangwj19683.workers.dev/api/google-drive/callback"
+
+[triggers]
+crons = ["15 3 * * *"]
