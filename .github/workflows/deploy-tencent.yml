@@ -104,6 +104,12 @@ jobs:
             sudo systemctl restart nginx
             sleep 2
             sudo systemctl is-active --quiet nginx
+            # Nginx is healthy locally, but a host firewall can still reset
+            # TLS clients before their request reaches it. Only change UFW
+            # when it is explicitly enabled on this server.
+            if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q '^Status: active'; then
+              sudo ufw allow 443/tcp comment '17design HTTPS'
+            fi
             # Keep a concise, non-sensitive TLS diagnosis in the Action log.
             # This differentiates a local Nginx/certificate fault from a
             # Tencent network-path fault when public verification fails.
