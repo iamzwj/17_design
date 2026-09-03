@@ -250,7 +250,7 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
     <button type="button" disabled={imageState !== 'ready'} onClick={() => onPreview({ url: previewUrl, urls, prompt })}>
       <img className={imageState === 'loading' ? 'is-loading' : ''} src={thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={imageState === 'ready'} onLoad={() => setImageState('ready')} onError={() => setImageState('failed')} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, previewUrl); event.dataTransfer.setData('text/uri-list', previewUrl) }}/>
     </button>
-    {imageState === 'loading' && <div className="waterfall-asset-loading" role="status">加载中</div>}
+    {imageState === 'loading' && <div className="waterfall-asset-loading" role="status" aria-label="图片加载中"><i/><i/><i/></div>}
     {imageState === 'ready' && <button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(previewUrl, prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button>}
   </>
 }
