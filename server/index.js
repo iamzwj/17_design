@@ -34,7 +34,7 @@ loadEnv(path.join(rootDir, '.env.local'))
 const app = express()
 const port = Number(process.env.PORT || 8787)
 const apiBase = (process.env.GRSAI_BASE_URL || 'https://grsaiapi.com').replace(/\/$/, '')
-const vipImageSizes = {
+const standardImageSizes = {
   '1:1': '1024x1024',
   '16:9': '1280x720',
   '9:16': '720x1280',
@@ -47,7 +47,38 @@ const vipImageSizes = {
   '21:9': '1456x624',
   '9:21': '624x1456',
 }
-const supportedImageRatios = new Set(Object.keys(vipImageSizes))
+const vipImageSizes = {
+  '1k': standardImageSizes,
+  '2k': {
+    '1:1': '2048x2048', '16:9': '2560x1440', '9:16': '1440x2560',
+    '4:3': '2304x1728', '3:4': '1728x2304', '3:2': '2496x1664',
+    '2:3': '1664x2496', '5:4': '2240x1792', '4:5': '1792x2240',
+    '21:9': '3024x1296', '9:21': '1296x3024',
+  },
+  '4k': {
+    '1:1': '2880x2880', '16:9': '3840x2160', '9:16': '2160x3840',
+    '4:3': '3264x2448', '3:4': '2448x3264', '3:2': '3504x2336',
+    '2:3': '2336x3504', '5:4': '3136x2509', '4:5': '2509x3136',
+    '21:9': '3696x1584', '9:21': '1584x3696',
+  },
+}
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip'])
+const imageResolutions = new Set(['1k', '2k', '4k'])
+const supportedImageRatios = new Set(Object.keys(standardImageSizes))
+
+function imageModelSettings(model, resolution) {
+  const selectedModel = String(model || 'gpt-image-2-vip')
+  if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
+  if (selectedModel !== 'gpt-image-2-vip') return { model: selectedModel, resolution: '1k' }
+  const selectedResolution = String(resolution || '2k').toLowerCase()
+  if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('VIP 清晰度仅支持 1K、2K 或 4K'), { status: 400 })
+  return { model: selectedModel, resolution: selectedResolution }
+}
+
+function generationSize(model, resolution, ratio) {
+  const sizes = model === 'gpt-image-2-vip' ? vipImageSizes[resolution] : standardImageSizes
+  return sizes[ratio] || sizes['1:1']
+}
 
 function resolvePromptAspectRatio(prompt) {
   const match = String(prompt || '').match(/(\d{1,2})\s*[:：比x×]\s*(\d{1,2})/i)
@@ -95,9 +126,10 @@ const waterfallDataDir = process.env.DIEFA_DATA_DIR || path.join(rootDir, 'data'
 const waterfallAssetsDir = path.join(waterfallDataDir, 'waterfall-assets')
 const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
 const waterfallStoreFile = path.join(waterfallDataDir, 'waterfall-tasks.json')
+const avatarDownloadStoreFile = path.join(waterfallDataDir, 'please-day-avatar-downloads.json')
 const waterfallControllers = new Map()
 const videoTasks = new Map()
-const FAILED_TASK_TTL = 10 * 60 * 1000
+const FAILED_TASK_TTL = 5 * 60 * 1000
 const MAX_BATCH_IMAGE_BYTES = 12 * 1024 * 1024
 
 function isPrivateAddress(address) {
@@ -212,6 +244,19 @@ async function readTencentSmartSheet(value) {
 
 fs.mkdirSync(waterfallAssetsDir, { recursive: true })
 fs.mkdirSync(videoAssetsDir, { recursive: true })
+
+function avatarDownloadCount() {
+  try {
+    const count = Number(JSON.parse(fs.readFileSync(avatarDownloadStoreFile, 'utf8')).count)
+    return Number.isSafeInteger(count) && count >= 0 ? count : 0
+  } catch { return 0 }
+}
+
+function increaseAvatarDownloadCount() {
+  const count = avatarDownloadCount() + 1
+  fs.writeFileSync(avatarDownloadStoreFile, JSON.stringify({ count }), { mode: 0o600 })
+  return count
+}
 
 function loadWaterfallTasks() {
   try {
@@ -455,6 +500,14 @@ async function persistWaterfallReference(source, taskId, index) {
   return `/api/waterfall/assets/${fileName}`
 }
 
+async function persistUploadedImage(source, name = 'upload') {
+  const { mimeType, buffer } = await imageSourceToData(source)
+  const safeName = String(name || 'upload').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'upload'
+  const fileName = `${safeName}-${Date.now()}-${randomUUID()}.${imageExtension(mimeType)}`
+  await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), buffer)
+  return `/api/waterfall/assets/${fileName}`
+}
+
 async function waterfallReferenceForUpstream(source) {
   if (!source.startsWith('/api/waterfall/assets/')) return source
   const fileName = path.basename(new URL(source, 'http://localhost').pathname)
@@ -482,7 +535,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
   waterfallControllers.set(taskId, controllers)
   try {
     let result = await requestUpstream('/v1/api/generate', {
-      model: 'gpt-image-2',
+      model: config.model,
       prompt: config.prompt.slice(0, 30_000),
       images: config.images,
       aspectRatio: config.aspectRatio,
@@ -542,7 +595,12 @@ async function runWaterfallTask(task, images) {
   const timeout = setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, 10 * 60 * 1000)
   try {
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
-    const config = { prompt: task.prompt, images: upstreamImages, aspectRatio: task.generationSize || task.aspectRatio }
+    const config = {
+      model: task.model || 'gpt-image-2-vip',
+      prompt: task.prompt,
+      images: upstreamImages,
+      aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2-vip', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
+    }
     await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
   } catch (error) {
     const runningCount = waterfallTasks.find((item) => item.id === task.id)?.slots.filter((slot) => slot.status === 'running').length || 0
@@ -714,6 +772,14 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, apiConfigured: Boolean(process.env.GRSAI_API_KEY), baseUrl: apiBase })
 })
 
+app.get('/api/please-day/avatar-downloads', (_req, res) => {
+  res.json({ count: avatarDownloadCount() })
+})
+
+app.post('/api/please-day/avatar-downloads', (_req, res) => {
+  res.json({ count: increaseAvatarDownloadCount() })
+})
+
 app.get('/api/batch-image', async (req, res, next) => {
   try {
     const image = await downloadPublicImage(req.query.url)
@@ -756,31 +822,44 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
   }
 })
 
+// On the server deployment, user reference images are stored on the instance
+// instead of passing through Cloudflare KV or requiring a Google Drive session.
+app.post('/api/google-drive/uploads', requireAuth, async (req, res, next) => {
+  try {
+    const { source, name } = req.body || {}
+    if (!String(source || '').startsWith('data:image/')) return res.status(400).json({ error: '请上传有效的图片文件' })
+    res.status(201).json({ url: await persistUploadedImage(source, name) })
+  } catch (error) { next(error) }
+})
+
 app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
   try {
-    const { prompt, images = [], aspectRatio = 'auto' } = req.body
+    const { prompt, images = [], aspectRatio = 'auto', model, resolution } = req.body
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt 不能为空' })
     }
     if (!Array.isArray(images) || images.length > 4) {
       return res.status(400).json({ error: '参考图最多 4 张' })
     }
+    const settings = imageModelSettings(model, resolution)
     chargedUser = spendCredits(req.user.id, 1)
-    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(images[0], prompt) : aspectRatio
-    const vipAspectRatio = vipImageSizes[resolvedAspectRatio] || (/^\d+x\d+$/.test(resolvedAspectRatio) ? resolvedAspectRatio : vipImageSizes['1:1'])
+    const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
+    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
     const data = await requestUpstream('/v1/api/generate', {
-      model: 'gpt-image-2',
+      model: settings.model,
       prompt: prompt.slice(0, 30_000),
-      images,
-      aspectRatio: vipAspectRatio,
+      images: upstreamImages,
+      aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       replyType: 'json',
     })
     const urls = (data.results || []).map((item) => item?.url).filter(Boolean)
     if (data.status !== 'succeeded' || urls.length === 0) {
       throw new Error(data.error || `图片生成未成功，当前状态：${data.status || 'unknown'}`)
     }
-    res.json({ id: data.id, status: data.status, aspectRatio: resolvedAspectRatio, urls, user: chargedUser })
+    const assetPrefix = `image-${data.id || randomUUID()}`
+    const localUrls = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
+    res.json({ id: data.id, status: data.status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localUrls, user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, 1)
     next(error)
@@ -854,20 +933,21 @@ app.use('/api/waterfall/assets', express.static(waterfallAssetsDir, { fallthroug
 app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
   cleanupExpiredFailedTasks()
   const offset = Math.max(0, Number(req.query.offset) || 0)
-  const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 12))
-  const ordered = [...waterfallTasks].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const limit = Math.min(30, Math.max(20, Number(req.query.limit) || 20))
+  const ordered = waterfallTasks.filter((task) => task.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   res.json({ tasks: ordered.slice(offset, offset + limit), total: ordered.length, hasMore: offset + limit < ordered.length, user: req.user })
 })
 
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { prompt, images = [], aspectRatio = 'auto', count = 2 } = req.body
+    const { prompt, images = [], aspectRatio = 'auto', count = 2, model, resolution, clientRequestId } = req.body
     const requestedCount = Number(count)
     if (!prompt || typeof prompt !== 'string') return res.status(400).json({ error: '提示词不能为空' })
     if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
-    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(images[0], prompt) : (vipImageSizes[aspectRatio] ? aspectRatio : '1:1')
-    const vipAspectRatio = vipImageSizes[resolvedAspectRatio]
+    const settings = imageModelSettings(model, resolution)
+    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(images[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
+    const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
     const now = new Date().toISOString()
     const id = randomUUID()
     const referenceImages = await Promise.all(images.map((source, index) => persistWaterfallReference(source, id, index)))
@@ -878,11 +958,14 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       prompt: prompt.trim().slice(0, 30_000),
       aspectRatio,
       resolvedAspectRatio,
-      generationSize: vipAspectRatio,
+      model: settings.model,
+      resolution: settings.resolution,
+      generationSize: imageSize,
       count: requestedCount,
       referenceCount: images.length,
       referenceImages,
       status: 'running',
+      clientRequestId: typeof clientRequestId === 'string' ? clientRequestId.slice(0, 96) : null,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
@@ -901,6 +984,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
 app.delete('/api/waterfall/tasks/:id', requireAuth, async (req, res) => {
   const task = waterfallTasks.find((item) => item.id === req.params.id)
   if (!task) return res.status(404).json({ error: '任务不存在' })
+  if (task.userId !== req.user.id) return res.status(404).json({ error: '任务不存在或无权操作' })
   const stopped = await stopWaterfallTask(task.id)
   res.json({ task: stopped, user: stopped?.userId === req.user.id ? refundCredits(req.user.id, 0) || req.user : req.user })
 })
