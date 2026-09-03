@@ -907,6 +907,14 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     return () => document.removeEventListener('pointerdown', close)
   }, [])
 
+  useEffect(() => {
+    const closeReferences = (event) => {
+      if (event.target instanceof Element && !event.target.closest('.waterfall-reference-summary')) setExpandedReferenceTaskIds(new Set())
+    }
+    document.addEventListener('pointerdown', closeReferences)
+    return () => document.removeEventListener('pointerdown', closeReferences)
+  }, [])
+
   function scrollToLatestTask() {
     followLatestTask.current = true
   }
