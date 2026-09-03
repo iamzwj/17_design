@@ -98,11 +98,11 @@ jobs:
               echo 'Static-only deployment: keeping 17design.service running.'
             fi
             sudo systemctl is-active --quiet 17design
-            # Recover a wedged Nginx worker and fail safely if its active
-            # configuration cannot be validated.
+            # Validate and gracefully reload Nginx. A hard restart closes
+            # active client connections and made page refreshes flaky during
+            # frequent front-end deployments.
             sudo nginx -t
-            sudo systemctl restart nginx
-            sleep 2
+            sudo systemctl reload nginx
             sudo systemctl is-active --quiet nginx
             # Nginx is healthy locally, but a host firewall can still reset
             # TLS clients before their request reaches it. Only change UFW
@@ -121,6 +121,8 @@ jobs:
               https://app.17design.fun/api/health >/dev/null
             echo '--- enabled virtual host ---'
             sudo sed -n '/server_name app\\.17design\\.fun/,/}/p' "$nginx_site"
+            echo '--- active TLS rules ---'
+            sudo nginx -T 2>&1 | grep -E -C 4 'listen .*443|server_name|ssl_reject_handshake|ssl_certificate' || true
           REMOTE
 
       - name: Verify public HTTPS endpoint
