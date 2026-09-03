@@ -1,0 +1,67 @@
+name: Deploy to Tencent Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 17design-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    env:
+      SERVER_HOST: 49.235.121.231
+      SERVER_USER: ubuntu
+      SERVER_APP_DIR: /home/ubuntu/17_design
+    steps:
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+      - name: Build server environment
+        run: |
+          umask 077
+          {
+            printf '%s\n' 'PORT=8787'
+            printf '%s\n' 'DIEFA_DATA_DIR=/home/ubuntu/17_design/data'
+            printf '%s\n' "GRSAI_BASE_URL=${{ secrets.GRSAI_BASE_URL }}"
+            printf '%s\n' "GRSAI_API_KEY=${{ secrets.GRSAI_API_KEY }}"
+            printf '%s\n' "VIBBIT_OPENAPI_KEY=${{ secrets.VIBBIT_OPENAPI_KEY }}"
+            printf '%s\n' "VIBBIT_OPENAPI_BASE_URL=${{ secrets.VIBBIT_OPENAPI_BASE_URL }}"
+            printf '%s\n' 'VIBBIT_PUBLIC_BASE_URL=https://app.17design.fun'
+            printf '%s\n' "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}"
+            printf '%s\n' "SMTP_HOST=${{ secrets.SMTP_HOST }}"
+            printf '%s\n' "SMTP_PORT=${{ secrets.SMTP_PORT }}"
+            printf '%s\n' "SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}"
+            printf '%s\n' "SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}"
+            printf '%s\n' 'SMTP_HELO=onewo.com'
+          } > .deployment.env
+
+      - name: Upload server environment
+        run: |
+          scp -i ~/.ssh/id_ed25519 .deployment.env "$SERVER_USER@$SERVER_HOST:$SERVER_APP_DIR/.env.next"
+
+      - name: Update application and restart
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" <<'REMOTE'
+            set -euo pipefail
+            cd /home/ubuntu/17_design
+            install -m 600 .env.next .env
+            rm .env.next
+            mkdir -p data
+            GIT_SSH_COMMAND='ssh -i /home/ubuntu/.ssh/17design_server -o IdentitiesOnly=yes' git pull --ff-only origin main
+            npm ci
+            npm run build
+            sudo systemctl restart 17design
+            curl --fail --silent http://127.0.0.1:8787/api/health
+          REMOTE
