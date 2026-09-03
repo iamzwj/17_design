@@ -12,7 +12,7 @@ import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import VideoHub from './VideoHub.jsx'
 import ImagePreview from './ImagePreview.jsx'
-import { IMAGE_MODEL_OPTIONS, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageResolutionForModel } from './imageModels.js'
+import { IMAGE_MODEL_OPTIONS, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 
 const MODULES = [
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
@@ -704,7 +704,8 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     scrollToLatestResult()
     onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio, imageModel: model, imageResolution: resolution, editImage: editSnapshot, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
     setPrompt(''); setReferences([]); setLoading(true); setRunningStartedAt(startedAt); setError('')
-    onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 50) - 1) } : current)
+    const creditCost = imageCreditCost(model)
+    onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 50) - creditCost) } : current)
     try {
       const requestPrompt = editSnapshot
         ? `请基于提供的第一张图片继续编辑。保持用户没有要求改变的主体、构图、风格、光影与细节，只执行这项修改：${text}`
@@ -729,7 +730,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         const { user: refreshedUser } = await getCurrentAccount()
         onUserUpdate(refreshedUser)
       } catch {
-        onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 50) + 1 } : current)
+        onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 50) + creditCost } : current)
       }
       setError(err.message)
       const failedMessages = [...userMessages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
@@ -934,6 +935,12 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     } catch (error) { setError(error.message || '图片读取失败') }
   }
 
+  function appendGeneratedReference(source) {
+    if (!source) return
+    setReferences((current) => current.some((item) => item.src === source) ? current : [...current, { name: '已生成图片', src: source }].slice(0, 9))
+    setError('')
+  }
+
   async function submitTask() {
     if (!prompt.trim() || submitting) return
     if (!getAuthToken()) { onRequireLogin(); return }
@@ -1052,6 +1059,11 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
 
   async function handleDrop(event) {
     event.preventDefault(); dragDepth.current = 0; setDraggingFiles(false)
+    const generatedImage = event.dataTransfer?.getData(GENERATED_IMAGE_DRAG_TYPE)
+    if (generatedImage) {
+      appendGeneratedReference(generatedImage)
+      return
+    }
     await appendReferences(droppedFiles(event.dataTransfer))
   }
 
@@ -1067,7 +1079,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           return <article className="waterfall-task" key={task.id}>
           <header><div><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {task.aspectRatio === 'auto' ? `自动 · ${task.resolvedAspectRatio || '1:1'}` : task.aspectRatio} · {displayedCount} 张</small>{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'} ${referenceImages.length} 张参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <img src={url} alt="" loading="lazy" decoding="async" key={`${url}-${index}`}/>)}</span>{referenceImages.length > 1 && <i>{referenceImages.length}</i>}</button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url, prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><img src={referenceThumbnails[index]} alt={`参考图 ${index + 1}`} loading="lazy" decoding="async"/></button>)}</div>}</div>}</div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status} ${task.aspectRatio === 'auto' ? 'auto-ratio' : ''}`} style={{ aspectRatio: (task.resolvedAspectRatio || (task.aspectRatio === 'auto' ? '1:1' : task.aspectRatio)).replace(':', ' / ') }} key={slot.index}>
-            {slot.status === 'succeeded' && slot.url ? <><button type="button" onClick={() => setPreviewImage({ url: slot.url, urls: visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => item.url), prompt: task.prompt })}><img src={waterfallThumbnailUrl(slot.url)} alt={`${task.prompt} ${slot.index + 1}`} loading="lazy" decoding="async"/></button><button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(slot.url, task.prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button></> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'succeeded' && slot.url ? <><button type="button" onClick={() => setPreviewImage({ url: slot.url, urls: visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => item.url), prompt: task.prompt })}><img src={waterfallThumbnailUrl(slot.url)} alt={`${task.prompt} ${slot.index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, slot.url); event.dataTransfer.setData('text/uri-list', slot.url) }}/></button><button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(slot.url, task.prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button></> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}
@@ -1083,7 +1095,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(nextModel === VIP_IMAGE_MODEL ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={model !== VIP_IMAGE_MODEL} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <div className="count-picker"><span>数量</span>{[1,2,3,4].map((value) => <button type="button" className={count === value ? 'active' : ''} onClick={() => setCount(value)} key={value}>{value}</button>)}</div>
-        </div><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${count} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div>
+        </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
       {error && <small className="composer-note error">{error}{error.includes('Google Drive 授权已失效') && <button className="drive-reconnect" type="button" onClick={() => { void reconnectGoogleDrive().catch((err) => setError(err.message || '无法打开 Google Drive 授权页面')) }}>重新连接 Google Drive</button>}</small>}
     </div>
@@ -1236,7 +1248,7 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
           <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(nextModel === VIP_IMAGE_MODEL ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={model !== VIP_IMAGE_MODEL} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
         </div>
-        <button className="send-button" aria-label={loading ? '生成中' : '生成，消耗 1 积分'} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button>
+        <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? '生成中' : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button></div>
       </div>
     </div>
     {error && <small className="composer-note error">{error}</small>}

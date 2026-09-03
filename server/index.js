@@ -75,6 +75,10 @@ function imageModelSettings(model, resolution) {
   return { model: selectedModel, resolution: selectedResolution }
 }
 
+function imageCreditCost(model, count = 1) {
+  return (model === 'gpt-image-2-vip' ? 4 : 1) * Math.max(1, Number(count) || 1)
+}
+
 function generationSize(model, resolution, ratio) {
   const sizes = model === 'gpt-image-2-vip' ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
@@ -326,6 +330,12 @@ async function refundWaterfallCredits(taskId, amount) {
   return updated?.userId ? refundCredits(updated.userId, refundable) : null
 }
 
+function waterfallCreditCostPerImage(task) {
+  const count = Math.max(1, Number(task?.count) || task?.slots?.length || 1)
+  const charged = Number(task?.chargedCredits || 0)
+  return charged > 0 ? charged / count : imageCreditCost(task?.model, 1)
+}
+
 for (const task of waterfallTasks.filter((item) => item.recoveryRefundCount)) {
   void refundWaterfallCredits(task.id, task.recoveryRefundCount).finally(() => {
     updateWaterfallTask(task.id, (current) => ({ ...current, recoveryRefundCount: 0 }))
@@ -451,6 +461,36 @@ async function requestUpstreamResult(id, signal) {
   return data
 }
 
+const pendingUpstreamStatuses = new Set(['running', 'pending', 'queued', 'processing', 'in_progress'])
+const succeededUpstreamStatuses = new Set(['succeeded', 'completed', 'success'])
+
+function upstreamStatus(result) {
+  return String(result?.status || result?.data?.status || result?.result?.status || '').trim().toLowerCase()
+}
+
+function upstreamId(result) {
+  return result?.id || result?.data?.id || result?.result?.id || null
+}
+
+function upstreamResultUrls(result) {
+  const resultLists = [result?.results, result?.data?.results, result?.result?.results]
+  const urls = []
+  for (const list of resultLists) {
+    if (Array.isArray(list)) urls.push(...list.map((item) => item?.url).filter(Boolean))
+  }
+  urls.push(result?.result?.url, result?.data?.url, result?.url)
+  return [...new Set(urls.filter(Boolean))]
+}
+
+function upstreamResultUrl(result) {
+  return upstreamResultUrls(result)[0] || null
+}
+
+function upstreamError(result) {
+  const value = result?.error || result?.data?.error || result?.result?.error || result?.message || result?.data?.message
+  return typeof value === 'string' ? value : value?.message || ''
+}
+
 function waitForPoll(milliseconds, signal) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds)
@@ -534,23 +574,31 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
   controllers.add(controller)
   waterfallControllers.set(taskId, controllers)
   try {
-    let result = await requestUpstream('/v1/api/generate', {
-      model: config.model,
-      prompt: config.prompt.slice(0, 30_000),
-      images: config.images,
-      aspectRatio: config.aspectRatio,
-      replyType: 'async',
-    }, controller.signal)
-    if (!result?.id) throw new Error(result?.error || '上游未返回任务编号')
-    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, upstreamId: result.id } : slot) }))
-
-    const pendingStatuses = new Set(['running', 'pending', 'queued', 'processing'])
-    while (!result.status || pendingStatuses.has(result.status)) {
-      await waitForPoll(5_000, controller.signal)
-      result = await requestUpstreamResult(result.id, controller.signal)
+    const savedSlot = waterfallTasks.find((task) => task.id === taskId)?.slots?.[slotIndex]
+    let result
+    let id = savedSlot?.upstreamId
+    if (id) {
+      result = await requestUpstreamResult(id, controller.signal)
+    } else {
+      result = await requestUpstream('/v1/api/generate', {
+        model: config.model,
+        prompt: config.prompt.slice(0, 30_000),
+        images: config.images,
+        aspectRatio: config.aspectRatio,
+        replyType: 'async',
+      }, controller.signal)
+      id = upstreamId(result)
+      if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
+      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, upstreamId: id } : slot) }))
     }
-    const sourceUrl = result?.results?.[0]?.url
-    if (result.status !== 'succeeded' || !sourceUrl) throw new Error(result?.error || `生成失败（${result.status || 'unknown'}）`)
+
+    while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
+      await waitForPoll(5_000, controller.signal)
+      result = await requestUpstreamResult(id, controller.signal)
+    }
+    const status = upstreamStatus(result)
+    const sourceUrl = upstreamResultUrl(result)
+    if (!succeededUpstreamStatuses.has(status) || !sourceUrl) throw new Error(upstreamError(result) || `生成失败（${status || 'unknown'}）`)
     const localUrl = await persistWaterfallImage(sourceUrl, taskId, slotIndex)
     updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', url: localUrl, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
@@ -562,7 +610,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
       refundedCount: (current.refundedCount || 0) + (current.slots[slotIndex]?.status === 'running' ? 1 : 0),
       slots: current.slots.map((slot, index) => index === slotIndex && slot.status === 'running' ? { ...slot, status, error: status === 'cancelled' ? '已停止' : status === 'timeout' ? '生成超时' : (error?.message || '生成失败') } : slot),
     }))
-    if (shouldRefund) await refundWaterfallCredits(taskId, 1)
+    if (shouldRefund) await refundWaterfallCredits(taskId, waterfallCreditCostPerImage(task))
   } finally {
     controllers.delete(controller)
     finishWaterfallTaskIfReady(taskId)
@@ -587,12 +635,13 @@ async function stopWaterfallTask(taskId, status = 'cancelled') {
     }
   })
   for (const controller of waterfallControllers.get(taskId) || []) controller.abort()
-  await refundWaterfallCredits(taskId, unfinishedCount)
+  await refundWaterfallCredits(taskId, unfinishedCount * waterfallCreditCostPerImage(task))
   return waterfallTasks.find((item) => item.id === taskId)
 }
 
 async function runWaterfallTask(task, images) {
-  const timeout = setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, 10 * 60 * 1000)
+  const remainingTime = Math.max(5_000, 10 * 60 * 1000 - (Date.now() - new Date(task.createdAt).getTime()))
+  const timeout = setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, remainingTime)
   try {
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
@@ -611,8 +660,16 @@ async function runWaterfallTask(task, images) {
       refundedCount: current.slots.length,
       slots: current.slots.map((slot) => ({ ...slot, status: 'failed', error: error?.message || '读取参考图失败' })),
     }))
-    await refundWaterfallCredits(task.id, runningCount)
+    await refundWaterfallCredits(task.id, runningCount * waterfallCreditCostPerImage(task))
   } finally { clearTimeout(timeout) }
+}
+
+function recoverWaterfallTasks() {
+  for (const task of waterfallTasks.filter((item) => item.status === 'running')) {
+    // Deploying restarts Node. Continue polling saved upstream IDs rather
+    // than leaving an already-completed image in the generating state.
+    setImmediate(() => runWaterfallTask(task, task.referenceImages || []))
+  }
 }
 
 function ocrExecutablePath() {
@@ -834,6 +891,7 @@ app.post('/api/google-drive/uploads', requireAuth, async (req, res, next) => {
 
 app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
+  let creditCost = 0
   try {
     const { prompt, images = [], aspectRatio = 'auto', model, resolution } = req.body
     if (!prompt || typeof prompt !== 'string') {
@@ -843,7 +901,8 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: '参考图最多 4 张' })
     }
     const settings = imageModelSettings(model, resolution)
-    chargedUser = spendCredits(req.user.id, 1)
+    creditCost = imageCreditCost(settings.model)
+    chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
     const data = await requestUpstream('/v1/api/generate', {
@@ -853,15 +912,16 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       replyType: 'json',
     })
-    const urls = (data.results || []).map((item) => item?.url).filter(Boolean)
-    if (data.status !== 'succeeded' || urls.length === 0) {
-      throw new Error(data.error || `图片生成未成功，当前状态：${data.status || 'unknown'}`)
+    const urls = upstreamResultUrls(data)
+    const status = upstreamStatus(data)
+    if (!succeededUpstreamStatuses.has(status) || urls.length === 0) {
+      throw new Error(upstreamError(data) || `图片生成未成功，当前状态：${status || 'unknown'}`)
     }
     const assetPrefix = `image-${data.id || randomUUID()}`
     const localUrls = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
-    res.json({ id: data.id, status: data.status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localUrls, user: chargedUser })
+    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localUrls, user: chargedUser })
   } catch (error) {
-    if (chargedUser) refundCredits(req.user.id, 1)
+    if (chargedUser) refundCredits(req.user.id, creditCost)
     next(error)
   }
 })
@@ -951,7 +1011,9 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     const now = new Date().toISOString()
     const id = randomUUID()
     const referenceImages = await Promise.all(images.map((source, index) => persistWaterfallReference(source, id, index)))
-    const chargedUser = spendCredits(req.user.id, requestedCount)
+    const creditCostPerImage = imageCreditCost(settings.model)
+    const chargedCredits = imageCreditCost(settings.model, requestedCount)
+    const chargedUser = spendCredits(req.user.id, chargedCredits)
     const task = {
       id,
       userId: req.user.id,
@@ -969,7 +1031,8 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       createdAt: now,
       updatedAt: now,
       completedAt: null,
-      chargedCredits: requestedCount,
+      chargedCredits,
+      creditCostPerImage,
       refundedCredits: 0,
       refundedCount: 0,
       slots: Array.from({ length: requestedCount }, (_, index) => ({ index, status: 'running', url: null, error: null, upstreamId: null })),
@@ -1000,6 +1063,8 @@ app.use((error, _req, res, _next) => {
   const status = Number(error?.status) || (isTimeout ? 504 : 500)
   res.status(status).json({ error: isTimeout ? '请求超时，请稍后重试' : error?.message || '服务暂时不可用' })
 })
+
+recoverWaterfallTasks()
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Die Fa AI server listening on http://localhost:${port}`)

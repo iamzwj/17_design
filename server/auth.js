@@ -9,6 +9,9 @@ const CODE_TTL = 10 * 60 * 1000
 const SHORT_SESSION_TTL = 12 * 60 * 60 * 1000
 const REMEMBER_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CREDITS = 50
+const DAILY_CREDIT_OVERRIDES = new Map([
+  ['zhangwj159@onewo.com', 999],
+])
 const REGISTRATION_WHITELIST = new Set([
   'zhoumt10@onewo.com', 'chenjl76@onewo.com', 'cheny453@onewo.com',
   'helg03@onewo.com', 'huangjq59@onewo.com', 'ligy70@onewo.com',
@@ -16,6 +19,7 @@ const REGISTRATION_WHITELIST = new Set([
 ])
 
 function normalizeEmail(value) { return String(value || '').trim().toLowerCase() }
+function dailyCreditLimit(email) { return DAILY_CREDIT_OVERRIDES.get(normalizeEmail(email)) || DEFAULT_CREDITS }
 function currentCreditDay() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
@@ -44,9 +48,11 @@ export function installAuth(app, { dataDir }) {
   function save() { fs.writeFileSync(storeFile, JSON.stringify(store, null, 2), { mode: 0o600 }) }
   let migratedCredits = false
   for (const user of store.users) {
-    if (!Number.isInteger(user.credits) || user.credits < 0 || user.creditsUpdatedOn !== currentCreditDay()) {
-      user.credits = DEFAULT_CREDITS
+    const limit = dailyCreditLimit(user.email)
+    if (!Number.isInteger(user.credits) || user.credits < 0 || user.creditsUpdatedOn !== currentCreditDay() || user.creditLimit !== limit) {
+      user.credits = limit
       user.creditsUpdatedOn = currentCreditDay()
+      user.creditLimit = limit
       migratedCredits = true
     }
   }
@@ -59,8 +65,9 @@ export function installAuth(app, { dataDir }) {
   function refreshDailyCredits(user) {
     const today = currentCreditDay()
     if (user.creditsUpdatedOn === today) return false
-    user.credits = DEFAULT_CREDITS
+    user.credits = dailyCreditLimit(user.email)
     user.creditsUpdatedOn = today
+    user.creditLimit = dailyCreditLimit(user.email)
     return true
   }
   function sessionFor(req) {
@@ -102,7 +109,7 @@ export function installAuth(app, { dataDir }) {
     if (!user) return null
     refreshDailyCredits(user)
     if (amount) {
-      user.credits = Math.min(DEFAULT_CREDITS, user.credits + amount)
+      user.credits = Math.min(dailyCreditLimit(user.email), user.credits + amount)
       save()
     }
     return publicUser(user)
@@ -219,7 +226,8 @@ export function installAuth(app, { dataDir }) {
     if (store.users.some((item) => item.email === email)) return res.status(409).json({ error: '该邮箱已注册，请直接登录' })
     const verification = verifyCode(email, code)
     if (verification.error) return res.status(verification.status || 400).json({ error: verification.error })
-    const user = { id: randomBytes(16).toString('hex'), email, passwordHash: passwordHash(password), credits: DEFAULT_CREDITS, creditsUpdatedOn: currentCreditDay(), createdAt: new Date().toISOString() }
+    const creditLimit = dailyCreditLimit(email)
+    const user = { id: randomBytes(16).toString('hex'), email, passwordHash: passwordHash(password), credits: creditLimit, creditLimit, creditsUpdatedOn: currentCreditDay(), createdAt: new Date().toISOString() }
     store.users.push(user)
     store.codes = store.codes.filter((item) => item.email !== email)
     save()
