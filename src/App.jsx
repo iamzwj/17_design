@@ -245,6 +245,14 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
   const [imageState, setImageState] = useState('loading')
   const previewUrl = waterfallThumbnailUrl(slot.url)
   const thumbnailUrl = waterfallDisplayUrl(slot)
+  useEffect(() => {
+    if (imageState !== 'ready' || !previewUrl || previewUrl === thumbnailUrl) return undefined
+    // Keep list rendering fast: load the 640px image first, then warm the
+    // browser cache for the full-resolution preview in the background.
+    const preview = new Image()
+    preview.src = previewUrl
+    return () => { preview.src = '' }
+  }, [imageState, previewUrl, thumbnailUrl])
   if (imageState === 'failed') return <div className="waterfall-asset-unavailable" role="status"><b>加载失败</b></div>
   return <>
     <button type="button" disabled={imageState !== 'ready'} onClick={() => onPreview({ url: previewUrl, urls, prompt })}>
