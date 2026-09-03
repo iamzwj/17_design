@@ -98,4 +98,21 @@ jobs:
               echo 'Static-only deployment: keeping 17design.service running.'
             fi
             sudo systemctl is-active --quiet 17design
+            # Recover a wedged Nginx worker and fail safely if its active
+            # configuration cannot be validated.
+            sudo nginx -t
+            sudo systemctl restart nginx
+            sleep 2
+            sudo systemctl is-active --quiet nginx
           REMOTE
+
+      - name: Verify public HTTPS endpoint
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --connect-timeout 10 --max-time 20 https://app.17design.fun/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Public HTTPS health check failed after five attempts.' >&2
+          exit 1
