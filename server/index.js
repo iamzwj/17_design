@@ -411,7 +411,7 @@ async function persistVideoReference(source) {
   return `/api/video/assets/${fileName}`
 }
 
-async function requestUpstream(endpoint, body, signal) {
+async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
   const response = await fetch(`${apiBase}${endpoint}`, {
     method: 'POST',
     headers: {
@@ -419,7 +419,7 @@ async function requestUpstream(endpoint, body, signal) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   })
 
   const raw = await response.text()
@@ -568,18 +568,20 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     let result
     let id = savedSlot?.upstreamId
     if (id) {
+      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'polling', lastEvent: '正在向生图服务查询结果' } : slot) }))
       result = await requestUpstreamResult(id, controller.signal)
     } else {
+      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: '正在提交到生图服务' } : slot) }))
       result = await requestUpstream('/v1/api/generate', {
         model: config.model,
         prompt: config.prompt.slice(0, 30_000),
         images: config.images,
         aspectRatio: config.aspectRatio,
         replyType: 'async',
-      }, controller.signal)
+      }, controller.signal, 45_000)
       id = upstreamId(result)
       if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
-      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, upstreamId: id } : slot) }))
+      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, upstreamId: id, phase: 'polling', submittedAt: new Date().toISOString(), lastEvent: `已提交生图服务（任务 ${id}）` } : slot) }))
     }
 
     while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
@@ -590,7 +592,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     const sourceUrl = upstreamResultUrl(result)
     if (!succeededUpstreamStatuses.has(status) || !sourceUrl) throw new Error(upstreamError(result) || `生成失败（${status || 'unknown'}）`)
     const localUrl = await persistWaterfallImage(sourceUrl, taskId, slotIndex)
-    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', url: localUrl, completedAt: new Date().toISOString() } : slot) }))
+    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localUrl, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
     const status = task?.status === 'cancelled' ? 'cancelled' : task?.status === 'timeout' ? 'timeout' : 'failed'
@@ -598,7 +600,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     updateWaterfallTask(taskId, (current) => ({
       ...current,
       refundedCount: (current.refundedCount || 0) + (current.slots[slotIndex]?.status === 'running' ? 1 : 0),
-      slots: current.slots.map((slot, index) => index === slotIndex && slot.status === 'running' ? { ...slot, status, error: status === 'cancelled' ? '已停止' : status === 'timeout' ? '生成超时' : (error?.message || '生成失败') } : slot),
+      slots: current.slots.map((slot, index) => index === slotIndex && slot.status === 'running' ? { ...slot, status, phase: 'failed', lastEvent: '提交或查询失败', error: status === 'cancelled' ? '已停止' : status === 'timeout' ? '生成超时' : (error?.name === 'TimeoutError' || /timeout|timed out/i.test(error?.message || '') ? '提交生图服务超时，上游未创建任务' : (error?.message || '生成失败')) } : slot),
     }))
     if (shouldRefund) await refundWaterfallCredits(taskId, waterfallCreditCostPerImage(task))
   } finally {
@@ -1025,7 +1027,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       creditCostPerImage,
       refundedCredits: 0,
       refundedCount: 0,
-      slots: Array.from({ length: requestedCount }, (_, index) => ({ index, status: 'running', url: null, error: null, upstreamId: null })),
+      slots: Array.from({ length: requestedCount }, (_, index) => ({ index, status: 'running', phase: 'queued', lastEvent: '等待提交', url: null, error: null, upstreamId: null })),
     }
     waterfallTasks = [task, ...waterfallTasks]
     saveWaterfallTasks()
