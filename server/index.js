@@ -535,7 +535,19 @@ function imageMimeFromFileName(fileName) {
 }
 
 async function persistWaterfallReference(source, taskId, index) {
-  if (source.startsWith('/api/waterfall/assets/')) return source
+  if (source.startsWith('/api/waterfall/assets/')) {
+    const fileName = path.basename(new URL(source, 'http://localhost').pathname)
+    if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效，请重新上传'), { status: 422 })
+    try {
+      await fs.promises.access(path.join(waterfallAssetsDir, fileName))
+    } catch {
+      // Do this before credits are charged and before the task is created.
+      // A missing local reference otherwise fails silently before any upstream
+      // generation request can be made.
+      throw Object.assign(new Error('参考图已不可用，请重新上传后再生成'), { status: 422 })
+    }
+    return `/api/waterfall/assets/${fileName}`
+  }
   const { mimeType, buffer } = await imageSourceToData(source)
   const fileName = `${taskId}-reference-${index}.${imageExtension(mimeType)}`
   await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), buffer)
