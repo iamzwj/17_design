@@ -232,6 +232,29 @@ function waterfallThumbnailUrl(value) {
   return url.startsWith('/api/waterfall/assets/') ? `${url}${url.includes('?') ? '&' : '?'}v=3` : url
 }
 
+function waterfallDisplayUrl(slot) {
+  if (slot?.thumbnailUrl) return waterfallThumbnailUrl(slot.thumbnailUrl)
+  const originalUrl = String(slot?.url || '')
+  // Older tasks predate generated thumbnails. Ask the server for a cached,
+  // on-demand thumbnail instead of pulling their 2K/4K source into the list.
+  if (originalUrl.startsWith('/api/waterfall/assets/')) return waterfallThumbnailUrl(originalUrl.replace('/api/waterfall/assets/', '/api/waterfall/thumbnails/'))
+  return waterfallThumbnailUrl(originalUrl)
+}
+
+function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
+  const [imageState, setImageState] = useState('loading')
+  const previewUrl = waterfallThumbnailUrl(slot.url)
+  const thumbnailUrl = waterfallDisplayUrl(slot)
+  if (imageState === 'failed') return <div className="waterfall-asset-unavailable" role="status"><b>加载失败</b></div>
+  return <>
+    <button type="button" disabled={imageState !== 'ready'} onClick={() => onPreview({ url: previewUrl, urls, prompt })}>
+      <img className={imageState === 'loading' ? 'is-loading' : ''} src={thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={imageState === 'ready'} onLoad={() => setImageState('ready')} onError={() => setImageState('failed')} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, previewUrl); event.dataTransfer.setData('text/uri-list', previewUrl) }}/>
+    </button>
+    {imageState === 'loading' && <div className="waterfall-asset-loading" role="status">加载中</div>}
+    {imageState === 'ready' && <button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(previewUrl, prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button>}
+  </>
+}
+
 function failureTaskDeadline(task) {
   const finishedAt = new Date(task?.completedAt || task?.updatedAt || task?.createdAt || '').getTime()
   return Number.isFinite(finishedAt) ? finishedAt + FAILURE_MESSAGE_TTL_MS : 0
@@ -1097,7 +1120,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           return <article className="waterfall-task" key={task.id}>
           <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <img src={url} alt="" loading="lazy" decoding="async" key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url: referenceThumbnails[index], prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><img src={referenceThumbnails[index]} alt={`参考图 ${index + 1}`} loading="lazy" decoding="async"/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {task.aspectRatio === 'auto' ? `自动 · ${task.resolvedAspectRatio || '1:1'}` : task.aspectRatio} · {displayedCount} 张</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status} ${task.aspectRatio === 'auto' ? 'auto-ratio' : ''}`} style={{ aspectRatio: (task.resolvedAspectRatio || (task.aspectRatio === 'auto' ? '1:1' : task.aspectRatio)).replace(':', ' / ') }} key={slot.index}>
-            {slot.status === 'succeeded' && slot.url ? <><button type="button" onClick={() => setPreviewImage({ url: waterfallThumbnailUrl(slot.url), urls: visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url)), prompt: task.prompt })}><img src={waterfallThumbnailUrl(slot.url)} alt={`${task.prompt} ${slot.index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { const assetUrl = waterfallThumbnailUrl(slot.url); event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, assetUrl); event.dataTransfer.setData('text/uri-list', assetUrl) }}/></button><button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(waterfallThumbnailUrl(slot.url), task.prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button></> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}

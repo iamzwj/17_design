@@ -9,6 +9,7 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import sharp from 'sharp'
 import { installAuth } from './auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -503,8 +504,19 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex) {
   const contentType = response.headers.get('content-type') || 'image/png'
   const extension = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png'
   const fileName = `${taskId}-${slotIndex}.${extension}`
-  await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), Buffer.from(await response.arrayBuffer()))
-  return `/api/waterfall/assets/${fileName}`
+  const imageBuffer = Buffer.from(await response.arrayBuffer())
+  await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), imageBuffer)
+  let thumbnailUrl = null
+  try {
+    const thumbnailName = `${taskId}-${slotIndex}.thumb.webp`
+    await sharp(imageBuffer, { failOn: 'none' }).rotate().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 78 }).toFile(path.join(waterfallAssetsDir, thumbnailName))
+    thumbnailUrl = `/api/waterfall/assets/${thumbnailName}`
+  } catch (error) {
+    // The original remains usable if an unusual upstream image cannot be
+    // thumbnailed; do not turn a completed generation into a failed one.
+    console.warn('Unable to create generated-image thumbnail:', error?.message || error)
+  }
+  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl }
 }
 
 function imageExtension(mimeType) {
@@ -591,8 +603,8 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     const status = upstreamStatus(result)
     const sourceUrl = upstreamResultUrl(result)
     if (!succeededUpstreamStatuses.has(status) || !sourceUrl) throw new Error(upstreamError(result) || `生成失败（${status || 'unknown'}）`)
-    const localUrl = await persistWaterfallImage(sourceUrl, taskId, slotIndex)
-    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localUrl, completedAt: new Date().toISOString() } : slot) }))
+    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex)
+    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
     const status = task?.status === 'cancelled' ? 'cancelled' : task?.status === 'timeout' ? 'timeout' : 'failed'
@@ -910,8 +922,8 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       throw new Error(upstreamError(data) || `图片生成未成功，当前状态：${status || 'unknown'}`)
     }
     const assetPrefix = `image-${data.id || randomUUID()}`
-    const localUrls = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
-    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localUrls, user: chargedUser })
+    const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
+    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localImages.map((image) => image.url), user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, creditCost)
     next(error)
@@ -977,6 +989,23 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
     const progress = progressCandidates.find((value) => Number.isInteger(value) && value >= 0 && value <= 100)
     if (['COMPLETED', 'FAILED'].includes(task.status)) videoTasks.delete(req.params.id)
     res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '', progress: progress ?? null })
+  } catch (error) { next(error) }
+})
+
+app.get('/api/waterfall/thumbnails/:fileName', async (req, res, next) => {
+  try {
+    const fileName = path.basename(req.params.fileName)
+    if (!fileName || fileName !== req.params.fileName) return res.status(400).json({ error: '缩略图文件名无效' })
+    const sourcePath = path.join(waterfallAssetsDir, fileName)
+    const thumbnailPath = path.join(waterfallAssetsDir, `${fileName}.thumb.webp`)
+    await fs.promises.access(sourcePath)
+    try {
+      await fs.promises.access(thumbnailPath)
+    } catch {
+      await sharp(sourcePath, { failOn: 'none' }).rotate().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 78 }).toFile(thumbnailPath)
+    }
+    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    res.type('image/webp').sendFile(thumbnailPath)
   } catch (error) { next(error) }
 })
 
