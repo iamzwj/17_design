@@ -63,5 +63,13 @@ jobs:
             npm ci
             npm run build
             sudo systemctl restart 17design
-            curl --fail --silent http://127.0.0.1:8787/api/health
+            for attempt in $(seq 1 15); do
+              if curl --fail --silent http://127.0.0.1:8787/api/health; then
+                exit 0
+              fi
+              sleep 1
+            done
+            sudo systemctl status 17design --no-pager || true
+            sudo journalctl -u 17design -n 80 --no-pager || true
+            exit 1
           REMOTE
