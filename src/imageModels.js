@@ -2,7 +2,7 @@ export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
 
 export function supportsImageResolution(model) {
-  return [VIP_IMAGE_MODEL, 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
+  return [VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
 }
 
 export function imageCreditCost(model, count = 1) {
@@ -10,11 +10,11 @@ export function imageCreditCost(model, count = 1) {
 }
 
 export const IMAGE_MODEL_OPTIONS = [
-  { value: STANDARD_IMAGE_MODEL, label: 'Image 2' },
-  { value: VIP_IMAGE_MODEL, label: 'Image 2 VIP' },
-  { value: 'image-2.5', label: 'Image 2.5' },
-  { value: 'image-2.5-flare', label: 'Image 2.5 Flare' },
-  { value: 'image-2.5-sunburst', label: 'Image 2.5 Sunburst' },
+  { value: STANDARD_IMAGE_MODEL, label: 'GPT Image 2' },
+  { value: VIP_IMAGE_MODEL, label: 'GPT Image 2 VIP' },
+  { value: 'gpt-image-2.5', label: 'GPT Image 2.5' },
+  { value: 'gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare' },
+  { value: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst' },
 ]
 
 export const VIP_IMAGE_RESOLUTION_OPTIONS = [

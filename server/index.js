@@ -63,14 +63,18 @@ const vipImageSizes = {
     '21:9': '3696x1584', '9:21': '1584x3696',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 
+function upstreamImageModel(model) {
+  return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
+}
+
 function imageModelSettings(model, resolution) {
-  const selectedModel = String(model || 'gpt-image-2-vip')
+  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2-vip'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
-  if (!['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
+  if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
   return { model: selectedModel, resolution: selectedResolution }
@@ -81,7 +85,7 @@ function imageCreditCost(model, count = 1) {
 }
 
 function generationSize(model, resolution, ratio) {
-  const sizes = ['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? vipImageSizes[resolution] : standardImageSizes
+  const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
 }
 
@@ -597,7 +601,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     } else {
       updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: '正在提交到生图服务' } : slot) }))
       result = await requestUpstream('/v1/api/generate', {
-        model: config.model,
+        model: upstreamImageModel(config.model),
         prompt: config.prompt.slice(0, 30_000),
         images: config.images,
         aspectRatio: config.aspectRatio,
@@ -922,7 +926,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
     const data = await requestUpstream('/v1/api/generate', {
-      model: settings.model,
+      model: upstreamImageModel(settings.model),
       prompt: prompt.slice(0, 30_000),
       images: upstreamImages,
       aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),

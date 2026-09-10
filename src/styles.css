@@ -116,7 +116,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .composer-tools { display: flex; justify-content: space-between; align-items: center; }
 .tool-group { display: flex; gap: 7px; align-items: center; }
 .tool-button, .ratio-trigger, .brand-trigger { height: 31px; border: 1px solid rgba(61,79,63,.08); background: rgba(255,255,255,.33); border-radius: 9px; display: flex; align-items: center; gap: 6px; padding: 0 9px; color: var(--muted); font-size: 10px; cursor: pointer; }
-.image-model-select { height: 31px; max-width: 160px; padding: 0 24px 0 9px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; outline: 0; background: rgba(255,255,255,.33); color: var(--mid); font-size: 10px; cursor: pointer; }
+.image-model-select { height: 31px; max-width: 185px; padding: 0 24px 0 9px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; outline: 0; background: rgba(255,255,255,.33); color: var(--mid); font-size: 10px; cursor: pointer; }
 .image-resolution-select { max-width: 56px; padding-right: 7px; }.image-model-select:disabled { cursor: default; opacity: .58; }
 .reference-add { width: 31px; padding: 0; justify-content: center; }
 .tool-button:disabled { opacity: .5; cursor: default; }
@@ -302,7 +302,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .hub-image-footer b { margin-right: 4px; color: var(--mid); font-size: 11px; }
 .hub-image-footer span { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .hub-image-footer select,.hub-video-footer select { min-width: 0; height: 32px; padding: 0 8px; border: 0; border-radius: 8px; outline: 0; background: rgba(61,79,63,.055); color: var(--mid); font-size: 11px; cursor: pointer; }
-.hub-image-footer select:first-child { width: 156px; }.hub-image-footer select:nth-child(2) { width: 52px; }.hub-image-footer select:disabled { cursor: default; opacity: .58; }
+.hub-image-footer select:first-child { width: 185px; }.hub-image-footer select:nth-child(2) { width: 52px; }.hub-image-footer select:disabled { cursor: default; opacity: .58; }
 .hub-video-footer select:nth-of-type(1) { width: 108px; }
 .hub-video-footer select:nth-of-type(2) { width: 92px; }
 .hub-video-footer select:nth-of-type(3) { width: 62px; }

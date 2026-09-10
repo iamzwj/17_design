@@ -5,7 +5,7 @@ const SIZES = {
   '4:3': '1152x864', '3:4': '864x1152', '3:2': '1536x1024',
   '2:3': '1024x1536', '21:9': '1456x624', '9:21': '624x1456',
 }
-const IMAGE_MODELS = new Set(['gpt-image-2', 'gpt-image-2-vip', 'image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'])
+const IMAGE_MODELS = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
 const IMAGE_RESOLUTIONS = new Set(['1k', '2k', '4k'])
 const VIP_SIZES = {
   '1k': SIZES,
@@ -21,17 +21,21 @@ const VIP_SIZES = {
   },
 }
 
+function upstreamImageModel(model) {
+  return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
+}
+
 function imageModelSettings(model, resolution) {
-  const selectedModel = String(model || 'gpt-image-2-vip')
+  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2-vip'))
   if (!IMAGE_MODELS.has(selectedModel)) throw new HttpError('不支持的生图模型', 400)
-  if (!['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
+  if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!IMAGE_RESOLUTIONS.has(selectedResolution)) throw new HttpError('清晰度仅支持 1K、2K 或 4K', 400)
   return { model: selectedModel, resolution: selectedResolution }
 }
 
 function generationSize(model, resolution, ratio) {
-  const sizes = ['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? VIP_SIZES[resolution] : SIZES
+  const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? VIP_SIZES[resolution] : SIZES
   return sizes[ratio] || sizes['1:1']
 }
 const KEY_PREFIX = 'task:'
@@ -1170,7 +1174,7 @@ async function generateImage(request, env, user) {
     const upstreamImages = await Promise.all(images.map((source) => driveReferenceForUpstream(env, source)))
     const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : SIZES[aspectRatio] ? aspectRatio : '1:1'
     const data = await upstream(env, '/v1/api/generate', {
-      model: settings.model,
+      model: upstreamImageModel(settings.model),
       prompt: prompt.slice(0, 30_000),
       images: upstreamImages,
       aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
@@ -1248,7 +1252,7 @@ async function submitPendingWaterfallSlots(env, taskId) {
   const taskModel = initialTask.model || 'gpt-image-2-vip'
   const taskResolution = initialTask.resolution || '2k'
   const payload = {
-    model: taskModel,
+    model: upstreamImageModel(taskModel),
     prompt: initialTask.prompt,
     images: upstreamImages,
     aspectRatio: initialTask.generationSize || generationSize(taskModel, taskResolution, initialTask.resolvedAspectRatio || '1:1'),
