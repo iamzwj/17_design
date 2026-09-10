@@ -5,7 +5,7 @@ const SIZES = {
   '4:3': '1152x864', '3:4': '864x1152', '3:2': '1536x1024',
   '2:3': '1024x1536', '21:9': '1456x624', '9:21': '624x1456',
 }
-const IMAGE_MODELS = new Set(['gpt-image-2', 'gpt-image-2-vip'])
+const IMAGE_MODELS = new Set(['gpt-image-2', 'gpt-image-2-vip', 'image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'])
 const IMAGE_RESOLUTIONS = new Set(['1k', '2k', '4k'])
 const VIP_SIZES = {
   '1k': SIZES,
@@ -24,14 +24,14 @@ const VIP_SIZES = {
 function imageModelSettings(model, resolution) {
   const selectedModel = String(model || 'gpt-image-2-vip')
   if (!IMAGE_MODELS.has(selectedModel)) throw new HttpError('不支持的生图模型', 400)
-  if (selectedModel !== 'gpt-image-2-vip') return { model: selectedModel, resolution: '1k' }
+  if (!['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
   const selectedResolution = String(resolution || '2k').toLowerCase()
-  if (!IMAGE_RESOLUTIONS.has(selectedResolution)) throw new HttpError('VIP 清晰度仅支持 1K、2K 或 4K', 400)
+  if (!IMAGE_RESOLUTIONS.has(selectedResolution)) throw new HttpError('清晰度仅支持 1K、2K 或 4K', 400)
   return { model: selectedModel, resolution: selectedResolution }
 }
 
 function generationSize(model, resolution, ratio) {
-  const sizes = model === 'gpt-image-2-vip' ? VIP_SIZES[resolution] : SIZES
+  const sizes = ['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? VIP_SIZES[resolution] : SIZES
   return sizes[ratio] || sizes['1:1']
 }
 const KEY_PREFIX = 'task:'

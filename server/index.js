@@ -63,16 +63,16 @@ const vipImageSizes = {
     '21:9': '3696x1584', '9:21': '1584x3696',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip'])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 
 function imageModelSettings(model, resolution) {
   const selectedModel = String(model || 'gpt-image-2-vip')
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
-  if (selectedModel !== 'gpt-image-2-vip') return { model: selectedModel, resolution: '1k' }
+  if (!['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
   const selectedResolution = String(resolution || '2k').toLowerCase()
-  if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('VIP 清晰度仅支持 1K、2K 或 4K'), { status: 400 })
+  if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
   return { model: selectedModel, resolution: selectedResolution }
 }
 
@@ -81,7 +81,7 @@ function imageCreditCost(model, count = 1) {
 }
 
 function generationSize(model, resolution, ratio) {
-  const sizes = model === 'gpt-image-2-vip' ? vipImageSizes[resolution] : standardImageSizes
+  const sizes = ['gpt-image-2-vip', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
 }
 

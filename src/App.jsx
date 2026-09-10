@@ -12,7 +12,7 @@ import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import VideoHub from './VideoHub.jsx'
 import ImagePreview from './ImagePreview.jsx'
-import { IMAGE_MODEL_OPTIONS, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
+import { IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 
 const MODULES = [
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
@@ -1147,8 +1147,8 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         <div className="composer-tools"><div className="tool-group">
           <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= 9}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
           <div className="ratio-picker" ref={ratioPickerRef}><button className="ratio-trigger" type="button" onClick={() => setRatioOpen((open) => !open)}><span>比例</span><b>{RATIO_OPTIONS.find((item) => item.value === ratio)?.label}</b><Icon name="chevron" size={14}/></button>{ratioOpen && <div className="ratio-menu glass-strong"><div className="ratio-menu-title">比例</div><div className="ratio-grid">{RATIO_OPTIONS.map((item) => <button key={item.value} className={ratio === item.value ? 'active' : ''} onClick={() => { setRatio(item.value); setRatioOpen(false) }}><span className={`ratio-shape ${item.value === 'auto' ? 'auto' : ''}`} style={shapeStyle(item.value)}/><b>{item.label}</b></button>)}</div></div>}</div>
-          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(nextModel === VIP_IMAGE_MODEL ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-          <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={model !== VIP_IMAGE_MODEL} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(supportsImageResolution(nextModel) ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <div className="count-picker"><span>数量</span>{[1,2,3,4].map((value) => <button type="button" className={count === value ? 'active' : ''} onClick={() => setCount(value)} key={value}>{value}</button>)}</div>
         </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
@@ -1300,8 +1300,8 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
               </button>)}</div>
             </div>}
           </div>
-          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(nextModel === VIP_IMAGE_MODEL ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-          <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={model !== VIP_IMAGE_MODEL} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; setModel(nextModel); setResolution(supportsImageResolution(nextModel) ? '2k' : '1k') }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => setResolution(event.target.value)}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
         </div>
         <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? '生成中' : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button></div>
       </div>
