@@ -1142,7 +1142,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     <div className="waterfall-composer-wrap">
       <div className={`composer waterfall-composer glass-strong ${draggingFiles ? 'is-dragging-files' : ''}`} onDragEnter={(event) => { if (hasSupportedDrag(event.dataTransfer)) { event.preventDefault(); dragDepth.current += 1; setDraggingFiles(true) } }} onDragOver={(event) => { if (hasSupportedDrag(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDragLeave={(event) => { event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDraggingFiles(false) }} onDrop={handleDrop}>
         {draggingFiles && <div className="image-drop-zone" aria-hidden="true"><b>松开以上传参考图</b><small>最多 9 张</small></div>}
-        {references.length > 0 && <div className="reference-strip">{references.map((item, index) => <div key={item.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(waterfallThumbnailUrl(item.src))}><QuietReferenceImage src={waterfallThumbnailUrl(item.src)}/></button><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Icon name="x" size={13}/></button></div>)}</div>}
+        {references.length > 0 && <ReferenceStrip references={references} setReferences={setReferences} onPreview={setPreviewImage} thumbnail={waterfallThumbnailUrl}/>}
         <textarea ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) { event.preventDefault(); submitTask() } }} placeholder="描述这一组图片…" rows="2"/>
         <div className="composer-tools"><div className="tool-group">
           <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= 9}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
@@ -1227,6 +1227,72 @@ function ComplianceReport({ content }) {
   </div>
 }
 
+function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src) => src }) {
+  const draggedIndex = useRef(null)
+  const [draggingIndex, setDraggingIndex] = useState(null)
+  const [targetIndex, setTargetIndex] = useState(null)
+
+  function resetDrag() {
+    draggedIndex.current = null
+    setDraggingIndex(null)
+    setTargetIndex(null)
+  }
+
+  function moveReference(from, to) {
+    setReferences((current) => {
+      if (from === to || from < 0 || to < 0 || from >= current.length || to >= current.length) return current
+      const next = [...current]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+
+  return <div className="reference-strip sortable-reference-strip" aria-label="参考图，拖动可调整顺序">
+    {references.map((item, index) => <div key={item.name + index} className={`${draggingIndex === index ? 'is-sorting' : ''} ${targetIndex === index && draggingIndex !== index ? 'is-sort-target' : ''}`}
+      draggable
+      onDragStart={(event) => {
+        event.stopPropagation()
+        draggedIndex.current = index
+        setDraggingIndex(index)
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('application/x-xiaodie-reference-order', String(index))
+      }}
+      onDragEnter={(event) => {
+        if (draggedIndex.current === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        setTargetIndex(index)
+      }}
+      onDragOver={(event) => {
+        if (draggedIndex.current === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        event.dataTransfer.dropEffect = 'move'
+      }}
+      onDrop={(event) => {
+        if (draggedIndex.current === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        moveReference(draggedIndex.current, index)
+        resetDrag()
+      }}
+      onDragEnd={resetDrag}>
+      <button type="button" className="reference-preview" title={`参考图 ${index + 1} · 拖动排序，点击预览；Alt + 方向键移动`} onClick={() => onPreview(thumbnail(item.src))} aria-label={`预览参考图 ${index + 1}，可拖动排序`} onKeyDown={(event) => {
+        if (!event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+        event.preventDefault()
+        const nextIndex = index + (event.key === 'ArrowLeft' ? -1 : 1)
+        if (nextIndex < 0 || nextIndex >= references.length) return
+        const strip = event.currentTarget.closest('.reference-strip')
+        moveReference(index, nextIndex)
+        strip?.querySelectorAll('.reference-preview')[nextIndex]?.focus()
+      }}><QuietReferenceImage src={thumbnail(item.src)}/></button>
+      <span className="reference-order" aria-hidden="true">{index + 1}</span>
+      <button type="button" className="reference-remove" draggable={false} onDragStart={(event) => event.preventDefault()} onClick={() => setReferences((current) => current.filter((_, i) => i !== index))} aria-label={`移除参考图 ${index + 1}`}><Icon name="x" size={13}/></button>
+    </div>)}
+  </div>
+}
+
 function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, resolution, setResolution, references, setReferences, editImage, fileRef, addFiles, appendFiles, submit, loading, error, onPreview }) {
   const [ratioOpen, setRatioOpen] = useState(false)
   const [draggingFiles, setDraggingFiles] = useState(false)
@@ -1284,7 +1350,7 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
   return <div className="composer-wrap">
     <div className={`composer glass-strong ${draggingFiles ? 'is-dragging-files' : ''}`} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {draggingFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
-      {references.length > 0 && <div className="reference-strip">{references.map((item, index) => <div key={item.name + index}><button type="button" className="reference-preview" onClick={() => onPreview(item.src)} aria-label={`预览参考图 ${index + 1}`}><QuietReferenceImage src={item.src}/></button><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, i) => i !== index))} aria-label={`移除参考图 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
+        {references.length > 0 && <ReferenceStrip references={references} setReferences={setReferences} onPreview={onPreview}/>}
       <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} placeholder="描述你想生成的画面…" rows="2" />
       <div className="composer-tools">
         <div className="tool-group">

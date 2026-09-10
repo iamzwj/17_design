@@ -550,3 +550,17 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Uploaded reference order is also the order submitted to image generation. */
+.sortable-reference-strip { overflow-x: auto; padding-top: 6px; }
+.sortable-reference-strip > div { flex: 0 0 52px; cursor: grab; }
+.sortable-reference-strip .reference-preview { cursor: grab; }
+.sortable-reference-strip .reference-preview img { pointer-events: none; -webkit-user-drag: none; }
+.sortable-reference-strip > .is-sorting { opacity: .45; cursor: grabbing; }
+.sortable-reference-strip > .is-sort-target { border-color: #6b4eff; box-shadow: 0 0 0 2px #6b4eff; }
+.sortable-reference-strip .reference-preview:focus-visible { outline: 2px solid #6b4eff; outline-offset: 2px; }
+.reference-order { position: absolute; left: 3px; bottom: 3px; min-width: 16px; padding: 1px 4px; border-radius: 4px; background: #26332d; color: #fff; font-size: 10px; line-height: 14px; text-align: center; pointer-events: none; }
+:root[data-theme='dark'] .sortable-reference-strip > div { border-color: #777080; }
+:root[data-theme='dark'] .sortable-reference-strip > .is-sort-target { border-color: #b1a0ff; box-shadow: 0 0 0 2px #b1a0ff; }
+:root[data-theme='dark'] .sortable-reference-strip .reference-preview:focus-visible { outline-color: #b1a0ff; }
+:root[data-theme='dark'] .sortable-reference-strip .reference-remove { background: #ddd8e9; color: #24202e; border-color: #777080; }
