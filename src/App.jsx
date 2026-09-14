@@ -447,7 +447,7 @@ function MascotImage({ alt = '' }) {
   />
 }
 
-function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, onNew, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
+function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
@@ -478,7 +478,6 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <div className="brand-caption">AI办公小能手</div>
         </div>
       </div>
-      <button className="new-task" onClick={() => { onNew(); onClose() }}><Icon name="plus" size={18}/> 新对话</button>
       <nav className="module-nav primary-tools">
         {MODULES.map((item) => item.id === 'image' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={imageExpanded} onClick={() => { if (item.disabled) return; setImageExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
