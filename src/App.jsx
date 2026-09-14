@@ -13,6 +13,7 @@ import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import VideoHub from './VideoHub.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import { IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
+import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
@@ -724,13 +725,16 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   async function appendFiles(fileList) {
     const referenceLimit = editImage ? 3 : 4
     const files = Array.from(fileList || []).slice(0, referenceLimit - references.length)
-    const valid = files.filter((file) => (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|heic|heif|avif|bmp|tiff?)$/i.test(file.name)) && file.size <= 8 * 1024 * 1024)
+    const valid = files.filter(isSupportedImageFile)
     if (files.length && !valid.length) {
-      setError('没有识别到可上传的图片，请使用 PNG、JPG、WebP 等格式，单张不超过 8MB')
+      setError('没有识别到可上传的图片，请使用 PNG、JPG、WebP 等格式')
       return
     }
     try {
-      const encoded = await Promise.all(valid.map(async (file) => ({ name: file.name, src: await fileToDataUrl(file) })))
+      const encoded = await Promise.all(valid.map(async (file) => {
+        const prepared = await compressImageForUpload(file)
+        return { name: prepared.name, src: await fileToDataUrl(prepared) }
+      }))
       setReferences((current) => [...current, ...encoded].slice(0, referenceLimit))
       if (encoded.length) setError('')
       void Promise.allSettled(encoded.map(async (reference) => ({ source: reference.src, url: (await uploadGoogleDriveImage({ source: reference.src, name: reference.name })).url }))).then((results) => {
@@ -982,10 +986,13 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
 
   async function appendReferences(fileList) {
     const files = Array.from(fileList || []).slice(0, 9 - references.length)
-    const valid = files.filter((file) => (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|heic|heif|avif)$/i.test(file.name)) && file.size <= 8 * 1024 * 1024)
-    if (files.length && !valid.length) return setError('请选择单张不超过 8MB 的图片文件')
+    const valid = files.filter(isSupportedImageFile)
+    if (files.length && !valid.length) return setError('请选择 PNG、JPG、WebP 等图片文件')
     try {
-      const encoded = await Promise.all(valid.map(async (file) => ({ name: file.name, src: await fileToDataUrl(file) })))
+      const encoded = await Promise.all(valid.map(async (file) => {
+        const prepared = await compressImageForUpload(file)
+        return { name: prepared.name, src: await fileToDataUrl(prepared) }
+      }))
       setReferences((current) => [...current, ...encoded].slice(0, 9))
       if (encoded.length) setError('')
       void Promise.allSettled(encoded.map(async (reference) => ({ source: reference.src, url: (await uploadGoogleDriveImage({ source: reference.src, name: reference.name })).url }))).then((results) => {

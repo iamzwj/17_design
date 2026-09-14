@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createVideoTask, generateImage, generateText, getVideoTask, uploadGoogleDriveImage, uploadVideoReference } from './api.js'
 import { Icon } from './icons.jsx'
+import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 import ImagePreview from './ImagePreview.jsx'
 import { IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageResolutionForModel } from './imageModels.js'
 
@@ -439,9 +440,12 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
   }
 
   async function addReferences(event, setter, limit) {
-    const selected = Array.from(event.target.files || []).slice(0, limit)
+    const selected = Array.from(event.target.files || []).filter(isSupportedImageFile).slice(0, limit)
     try {
-      const references = await Promise.all(selected.map(async (file) => ({ source: await fileToDataUrl(file), name: file.name })))
+      const references = await Promise.all(selected.map(async (file) => {
+        const prepared = await compressImageForUpload(file)
+        return { source: await fileToDataUrl(prepared), name: prepared.name }
+      }))
       // References are usable the moment the local file is read. Drive sync is
       // deliberately background-only so selecting an image never waits on I/O.
       const localSources = references.map((reference) => reference.source)
