@@ -347,45 +347,44 @@ function getApiKey() {
   return key
 }
 
-function getArkApiKey() {
-  const key = process.env.ARK_API_KEY
+function getVibbitApiKey() {
+  const key = process.env.VIBBIT_OPENAPI_KEY
   if (!key) {
-    const error = new Error('服务端尚未配置 ARK_API_KEY')
+    const error = new Error('服务端尚未配置 VIBBIT_OPENAPI_KEY')
     error.status = 500
     throw error
   }
   return key
 }
 
-const arkApiBase = (process.env.ARK_API_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3/contents/generations').replace(/\/$/, '')
+const vibbitApiBase = (process.env.VIBBIT_OPENAPI_BASE_URL || 'https://openapi.vibbit.cn/openapi/v1').replace(/\/$/, '')
 const seedanceModels = new Map([
   ['doubao-seedance-2-0-260128', { resolutions: ['480p', '720p', '1080p', '4k'], maxDuration: 15 }],
   ['doubao-seedance-2-5-260628', { resolutions: ['480p', '720p', '1080p'], maxDuration: 30 }],
 ])
 const seedanceAspectRatios = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'])
 
-async function arkRequest(pathname, options = {}) {
-  const response = await fetch(`${arkApiBase}${pathname}`, {
+async function vibbitRequest(pathname, options = {}) {
+  const response = await fetch(`${vibbitApiBase}${pathname}`, {
     ...options,
-    headers: { Authorization: `Bearer ${getArkApiKey()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+    headers: { Authorization: `Bearer ${getVibbitApiKey()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
     signal: AbortSignal.timeout(50_000),
   })
   const raw = await response.text()
   let data
   try { data = JSON.parse(raw) } catch { data = { message: raw } }
-  if (!response.ok) {
-    const message = data?.error?.message || data?.error || data?.message || `Seedance 接口返回 HTTP ${response.status}`
-    const error = new Error(typeof message === 'string' ? message : JSON.stringify(message))
+  if (!response.ok || data?.code !== 200) {
+    const error = new Error(data?.message || `Seedance 接口返回 HTTP ${response.status}`)
     error.status = response.status >= 400 ? response.status : 502
     throw error
   }
-  return data?.data || data || {}
+  return data.data || {}
 }
 
 function publicVideoAssetUrl(assetPath) {
-  const publicBase = String(process.env.VIDEO_PUBLIC_BASE_URL || 'https://17design.fun').trim().replace(/\/$/, '')
+  const publicBase = String(process.env.VIBBIT_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '')
   if (!publicBase) {
-    const error = new Error('上传参考图需要配置 VIDEO_PUBLIC_BASE_URL（可被公网访问的本站地址）')
+    const error = new Error('上传参考图需要配置 VIBBIT_PUBLIC_BASE_URL（可被公网访问的本站地址）')
     error.status = 503
     throw error
   }
@@ -1007,36 +1006,34 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
     if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
     if (!modelInfo.resolutions.includes(resolution)) return res.status(400).json({ error: '该模型不支持所选分辨率' })
     if (!seedanceAspectRatios.has(aspectRatio)) return res.status(400).json({ error: '画幅参数不支持' })
-    const taskInput = { model, prompt: String(prompt).trim().slice(0, 30_000), duration: Number(durationSeconds), resolution, ratio: aspectRatio }
+    const taskInput = { model, prompt: String(prompt).trim().slice(0, 30_000), duration_seconds: Number(durationSeconds), resolution, aspect_ratio: aspectRatio }
     const is25 = model.includes('2-5')
-    if (taskInput.duration !== -1 && (!Number.isInteger(taskInput.duration) || taskInput.duration < 4 || taskInput.duration > modelInfo.maxDuration)) return res.status(400).json({ error: `该模型时长应为 4–${modelInfo.maxDuration} 秒，或自动` })
-    const content = [{ type: 'text', text: taskInput.prompt }]
-    if (referenceMode === 'single' && imageUrl) content.push({ type: 'image_url', image_url: { url: imageUrl }, role: 'first_frame' })
+    if (taskInput.duration_seconds !== -1 && (!Number.isInteger(taskInput.duration_seconds) || taskInput.duration_seconds < 4 || taskInput.duration_seconds > modelInfo.maxDuration)) return res.status(400).json({ error: `该模型时长应为 4–${modelInfo.maxDuration} 秒，或自动` })
+    if (referenceMode === 'single' && imageUrl) taskInput.image_url = imageUrl
     if (referenceMode === 'frames') {
       if (!firstFrameImageUrl) return res.status(400).json({ error: '首帧模式至少需要一张参考图' })
-      content.push({ type: 'image_url', image_url: { url: firstFrameImageUrl }, role: 'first_frame' })
-      if (lastFrameImageUrl) content.push({ type: 'image_url', image_url: { url: lastFrameImageUrl }, role: 'last_frame' })
+      taskInput.first_frame_image_url = firstFrameImageUrl
+      if (lastFrameImageUrl) taskInput.last_frame_image_url = lastFrameImageUrl
     }
     if (referenceMode === 'multi') {
       if (!is25 && referenceImageUrls.length > 9) return res.status(400).json({ error: 'Seedance 2.0 最多支持 9 张参考图' })
       if (is25 && referenceImageUrls.length > 30) return res.status(400).json({ error: 'Seedance 2.5 最多支持 30 张参考图' })
-      content.push(...referenceImageUrls.map((url) => ({ type: 'image_url', image_url: { url }, role: 'reference_image' })))
+      if (referenceImageUrls.length) taskInput.reference_image_urls = referenceImageUrls
     }
-    if (is25 && referenceMode === 'multi' && omniReferenceTaskType) {
+    if (is25 && omniReferenceTaskType) {
       if (!['auto', 'reference', 'edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: '2.5 任务类型不支持' })
       taskInput.omni_reference_task_type = omniReferenceTaskType
       if (omniReferenceTaskType === 'auto') {
-        if (!referenceImageUrls.length) return res.status(400).json({ error: 'auto 模式需要至少一张全模态参考图' })
-        taskInput.duration = -1
-        taskInput.ratio = 'adaptive'
+        if (!taskInput.reference_image_urls?.length) return res.status(400).json({ error: 'auto 模式需要至少一张全模态参考图' })
+        taskInput.duration_seconds = -1
+        taskInput.aspect_ratio = 'adaptive'
       }
       if (['edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: '当前工作台仅支持参考图片；2.5 的 edit / extend 还需要参考视频 URL' })
     }
-    const created = await arkRequest('/tasks', { method: 'POST', body: JSON.stringify({ model: taskInput.model, content, resolution: taskInput.resolution, ratio: taskInput.ratio, duration: taskInput.duration, watermark: false, ...(taskInput.omni_reference_task_type ? { omni_reference_task_type: taskInput.omni_reference_task_type } : {}) }) })
-    const taskId = created.id || created.task_id
-    if (!taskId) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(taskId, { userId: req.user.id, createdAt: Date.now() })
-    res.status(202).json({ taskId, status: 'PENDING' })
+    const created = await vibbitRequest('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(taskInput) } }) })
+    if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
+    videoTasks.set(created.task_id, { userId: req.user.id, createdAt: Date.now() })
+    res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
   } catch (error) { next(error) }
 })
 
@@ -1044,15 +1041,13 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
-    const task = await arkRequest(`/tasks/${encodeURIComponent(req.params.id)}`)
-    const result = task.content || task.metadata || {}
+    const task = await vibbitRequest(`/tasks/${encodeURIComponent(req.params.id)}`)
+    let result = {}
+    try { result = JSON.parse(task.task_result?.result || '{}') } catch { result = {} }
     const progressCandidates = [task.progress_percentage, task.progress_percent, task.progress, task.task_result?.progress_percentage, task.task_result?.progress_percent, task.task_result?.progress, result.progress_percentage, result.progress_percent, result.progress]
     const progress = progressCandidates.find((value) => Number.isInteger(value) && value >= 0 && value <= 100)
-    const statusMap = { queued: 'PENDING', running: 'RUNNING', succeeded: 'COMPLETED', failed: 'FAILED', cancelled: 'FAILED', expired: 'FAILED' }
-    const status = statusMap[String(task.status || '').toLowerCase()] || task.status || 'RUNNING'
-    if (['COMPLETED', 'FAILED'].includes(status)) videoTasks.delete(req.params.id)
-    const upstreamError = task.error?.message || task.error || result.error_message || ''
-    res.json({ taskId: task.id || task.task_id || req.params.id, status, videoUrl: result.video_url || task.video_url || '', error: typeof upstreamError === 'string' ? upstreamError : JSON.stringify(upstreamError), progress: progress ?? null })
+    if (['COMPLETED', 'FAILED'].includes(task.status)) videoTasks.delete(req.params.id)
+    res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '', progress: progress ?? null })
   } catch (error) { next(error) }
 })
 
