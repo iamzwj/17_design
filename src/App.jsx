@@ -158,6 +158,12 @@ function plainText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
+function validTextMessages(value) {
+  return Array.isArray(value)
+    ? value.filter((message) => ['user', 'assistant', 'error'].includes(message?.role) && typeof message.content === 'string')
+    : []
+}
+
 function complianceFileKind(file) {
   if (file.type.startsWith('image/')) return 'image'
   return COMPLIANCE_FILE_EXTENSIONS.test(file.name) || file.type.startsWith('text/') ? 'text' : ''
@@ -1378,7 +1384,7 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
 function TextStudio({ type, conversation, onSave }) {
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
-  const [messages, setMessages] = useState(conversation?.messages || [])
+  const [messages, setMessages] = useState(() => validTextMessages(conversation?.messages))
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
@@ -1408,7 +1414,7 @@ function TextStudio({ type, conversation, onSave }) {
 
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
-    setMessages(conversation.messages || [])
+    setMessages(validTextMessages(conversation.messages))
     setLoading(conversation.status === 'running')
     setRunningStartedAt(conversation.runningStartedAt || null)
     if (conversation.brand) setBrand(conversation.brand)
