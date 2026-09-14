@@ -36,9 +36,9 @@ jobs:
             printf '%s\n' 'DIEFA_DATA_DIR=/home/ubuntu/17_design/data'
             printf '%s\n' "GRSAI_BASE_URL=${{ secrets.GRSAI_BASE_URL }}"
             printf '%s\n' "GRSAI_API_KEY=${{ secrets.GRSAI_API_KEY }}"
-            printf '%s\n' "VIBBIT_OPENAPI_KEY=${{ secrets.VIBBIT_OPENAPI_KEY }}"
-            printf '%s\n' "VIBBIT_OPENAPI_BASE_URL=${{ secrets.VIBBIT_OPENAPI_BASE_URL }}"
-            printf '%s\n' 'VIBBIT_PUBLIC_BASE_URL=https://app.17design.fun'
+            printf '%s\n' "ARK_API_KEY=${{ secrets.ARK_API_KEY }}"
+            printf '%s\n' "ARK_API_BASE_URL=${{ secrets.ARK_API_BASE_URL }}"
+            printf '%s\n' 'VIDEO_PUBLIC_BASE_URL=https://17design.fun'
             printf '%s\n' "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}"
             printf '%s\n' "SMTP_HOST=${{ secrets.SMTP_HOST }}"
             printf '%s\n' "SMTP_PORT=${{ secrets.SMTP_PORT }}"
