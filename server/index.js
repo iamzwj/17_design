@@ -396,7 +396,16 @@ async function persistVideoReference(source) {
   const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/)
   let mimeType
   let buffer
-  if (match) {
+  if (value.startsWith('/api/waterfall/assets/')) {
+    const fileName = path.basename(new URL(value, 'http://localhost').pathname)
+    if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效，请重新上传'), { status: 400 })
+    try {
+      buffer = await fs.promises.readFile(path.join(waterfallAssetsDir, fileName))
+    } catch {
+      throw Object.assign(new Error('参考图已不可用，请重新上传'), { status: 422 })
+    }
+    mimeType = imageMimeFromFileName(fileName)
+  } else if (match) {
     mimeType = match[1].toLowerCase()
     buffer = Buffer.from(match[2], 'base64')
   } else {
