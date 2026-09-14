@@ -47,6 +47,25 @@ jobs:
             printf '%s\n' 'SMTP_HELO=onewo.com'
           } > .deployment.env
 
+      - name: Validate Vibbit OpenAPI credentials
+        run: |
+          set -euo pipefail
+          # Reading a deliberately nonexistent task validates the deployed
+          # credential without submitting a generation or consuming credits.
+          status=$(curl --silent --show-error --output /tmp/vibbit-auth-check.json --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 20 \
+            --header "Authorization: Bearer ${{ secrets.VIBBIT_OPENAPI_KEY }}" \
+            'https://openapi.vibbit.cn/openapi/v1/tasks/credential-check')
+          if [ "$status" = '401' ] || [ "$status" = '403' ]; then
+            echo 'Vibbit authentication failed. Update VIBBIT_OPENAPI_KEY with a tenant API key that has active credits.' >&2
+            exit 1
+          fi
+          if [ "$status" -ge 500 ]; then
+            echo "Vibbit OpenAPI is unavailable (HTTP $status)." >&2
+            exit 1
+          fi
+          echo "Vibbit credential preflight passed (HTTP $status; nonexistent task expected)."
+
       - name: Upload server environment
         run: |
           scp -i ~/.ssh/id_ed25519 .deployment.env "$SERVER_USER@$SERVER_HOST:$SERVER_APP_DIR/.env.next"
