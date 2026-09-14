@@ -819,16 +819,12 @@ function searchQueryFromMessages(messages, requestedQuery) {
 
 async function searchWeb(query) {
   const apiKey = process.env.TAVILY_API_KEY
-  if (!apiKey) {
-    const error = new Error('联网搜索尚未配置 TAVILY_API_KEY，请在服务端添加 Tavily 密钥后重试')
-    error.status = 503
-    throw error
-  }
   if (!query) {
     const error = new Error('未找到可用于联网搜索的问题')
     error.status = 400
     throw error
   }
+  if (!apiKey) return weatherFallbackSearch(query)
   const response = await fetch('https://api.tavily.com/search', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -842,14 +838,51 @@ async function searchWeb(query) {
     throw error
   }
   const seen = new Set()
-  return (data.results || []).filter((item) => item?.url && !seen.has(item.url) && seen.add(item.url)).slice(0, 5).map((item) => ({
+  return {
+    available: true,
+    sources: (data.results || []).filter((item) => item?.url && !seen.has(item.url) && seen.add(item.url)).slice(0, 5).map((item) => ({
     title: String(item.title || item.url).slice(0, 200),
     url: item.url,
     content: String(item.content || '').slice(0, 1_200),
-  }))
+    })),
+  }
 }
 
-function webSourcesPrompt(sources) {
+function weatherCityFromQuery(query) {
+  const matched = String(query || '').match(/([\u4e00-\u9fff]{2,12})(?:的)?(?:天气|气温|温度|降雨|下雨|风力|湿度)/)
+  return matched?.[1]?.replace(/^(?:请问|请帮我|帮我|查询|查看|看一下)/, '') || ''
+}
+
+function weatherDescription(code) {
+  const labels = { 0: '晴', 1: '大部晴朗', 2: '局部多云', 3: '阴', 45: '雾', 48: '雾凇', 51: '小毛毛雨', 53: '毛毛雨', 55: '强毛毛雨', 61: '小雨', 63: '中雨', 65: '大雨', 71: '小雪', 73: '中雪', 75: '大雪', 80: '阵雨', 81: '较强阵雨', 82: '强阵雨', 95: '雷暴', 96: '冰雹雷暴', 99: '强冰雹雷暴' }
+  return labels[code] || '未知'
+}
+
+async function weatherFallbackSearch(query) {
+  const city = weatherCityFromQuery(query)
+  if (!city) return { available: false, sources: [] }
+  try {
+    const geocoding = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`, { signal: AbortSignal.timeout(10_000) })
+    const place = (await geocoding.json().catch(() => ({}))).results?.[0]
+    if (!geocoding.ok || !place) return { available: false, sources: [] }
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Asia%2FShanghai`
+    const weatherResponse = await fetch(weatherUrl, { signal: AbortSignal.timeout(10_000) })
+    const weather = await weatherResponse.json().catch(() => ({}))
+    const current = weather.current
+    if (!weatherResponse.ok || !current) return { available: false, sources: [] }
+    return {
+      available: true,
+      sources: [{
+        title: `${place.name}实时天气（Open-Meteo）`,
+        url: weatherUrl,
+        content: `观测时间：${current.time}；天气：${weatherDescription(current.weather_code)}；气温：${current.temperature_2m}°C；体感：${current.apparent_temperature}°C；相对湿度：${current.relative_humidity_2m}%；降水：${current.precipitation}mm；风速：${current.wind_speed_10m}km/h。`,
+      }],
+    }
+  } catch { return { available: false, sources: [] } }
+}
+
+function webSourcesPrompt(sources, available = true) {
+  if (!available) return '当前未配置通用联网搜索，无法获取实时网页资料。若用户询问时效性信息，请明确说明目前不能完成实时检索，不要猜测或编造。'
   if (!sources.length) return '已执行联网检索，但没有找到足够可靠的结果。请明确说“联网检索未找到可靠结果”，不要说自己没有联网搜索工具，也不要编造实时信息。'
   return `已完成联网检索。以下是本次检索到的实时资料，必须优先基于这些资料作答；不要声称自己无法联网搜索或没有实时搜索工具。若资料之间有差异，请说明差异。不要捏造来源中没有的信息。不要输出 URL、来源编号或 Markdown 符号（例如 **、#、-）。使用可直接复制的简洁中文自然段；如有多个要点，以“要点名：内容”的短句呈现。\n\n${sources.map((source, index) => `[${index + 1}] ${source.title}\n${source.url}\n${source.content}`).join('\n\n')}`
 }
@@ -890,8 +923,9 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
       .filter((message) => ['user', 'assistant'].includes(message.role))
       .map(normalizeTextMessage)))
       .filter(Boolean)
-    const sources = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : []
-    const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources) : ''].filter(Boolean).join('\n\n')
+    const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
+    const sources = webResult.sources
+    const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
     const data = await requestUpstream('/v1/chat/completions', {
       model: 'gpt-5.6-terra',
       stream: false,
