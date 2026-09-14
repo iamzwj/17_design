@@ -16,6 +16,7 @@ const quickStarts = [
   { type: 'image', title: '角色 / 场景生图', description: '生成可连入视频节点的视觉素材', tag: 'Image 2' },
   { type: 'video', title: '全能参考生视频', description: '用文字与参考图生成最终视频', tag: 'SD 2.5' },
 ]
+const ACTIVE_VIDEO_STATUSES = new Set(['submitting', 'running', 'PENDING', 'RUNNING'])
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -157,7 +158,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
 
   function persistHub(snapshot = hubSnapshotRef.current) {
     if (!snapshot || !onSaveRef.current) return
-    const isRunning = ['submitting', 'running', 'PENDING', 'RUNNING'].includes(snapshot.videoState.status)
+    const isRunning = ACTIVE_VIDEO_STATUSES.has(snapshot.videoState.status)
     onSaveRef.current({
       id: conversationId.current,
       type: 'video',
@@ -229,6 +230,12 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
 
   useEffect(() => () => window.clearTimeout(timerRef.current), [])
 
+  useEffect(() => {
+    if (!videoState.taskId || !ACTIVE_VIDEO_STATUSES.has(videoState.status)) return undefined
+    pollVideo(videoState.taskId)
+    return () => window.clearTimeout(timerRef.current)
+  }, [videoState.taskId])
+
   function recordTask(title, status = 'running', overrides = {}) {
     if (!onSave) return
     if (title) historyTitleRef.current = title
@@ -256,7 +263,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
     setWorkspaceName(nextName)
     setIsEditingWorkspaceName(false)
     if (!onSave) return
-    const isRunning = ['submitting', 'running', 'PENDING', 'RUNNING'].includes(videoState.status)
+    const isRunning = ACTIVE_VIDEO_STATUSES.has(videoState.status)
     onSave({
       id: conversationId.current,
       type: 'video',
@@ -494,7 +501,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
   async function makeVideo(targetId) {
     const textPrompt = mergeText(videoPrompt, ...linkedText(targetId))
     const refs = [...new Set([...videoRefs, ...linkedImages(targetId)])]
-    if (!textPrompt || videoState.status === 'running') return
+    if (!textPrompt || ACTIVE_VIDEO_STATUSES.has(videoState.status)) return
     const submittingState = { status: 'submitting', taskId: '', url: '', error: '' }
     recordTask(`视频生成：${textPrompt.slice(0, 22)}`, 'running', { videoState: submittingState })
     setVideoState(submittingState)
@@ -505,7 +512,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
       if (referenceMode === 'frames') { payload.firstFrameImageUrl = urls[0]; payload.lastFrameImageUrl = urls[1] }
       if (referenceMode === 'multi') payload.referenceImageUrls = urls
       const task = await createVideoTask(payload)
-      const nextVideoState = { status: task.status || 'running', taskId: task.taskId, url: '', error: '' }
+      const nextVideoState = { status: task.status || 'running', taskId: task.taskId, url: '', error: '', submittedAt: Date.now() }
       setVideoState(nextVideoState)
       recordTask('', 'running', { videoState: nextVideoState })
       pollVideo(task.taskId)
@@ -521,7 +528,11 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
         if (task.status === 'FAILED') { const failedState = { status: 'failed', taskId, url: '', error: friendlyVideoError(task.error) }; setVideoState(failedState); recordTask('', 'idle', { videoState: failedState }); return }
         const nextVideoState = { status: task.status || 'running', taskId, url: '', error: '', progress: task.progress }
         setVideoState(nextVideoState); recordTask('', 'running', { videoState: nextVideoState }); pollVideo(taskId)
-      } catch (error) { const failedState = { status: 'failed', taskId, url: '', error: error.message || '视频任务查询失败' }; setVideoState(failedState); recordTask('', 'idle', { videoState: failedState }) }
+      } catch (error) {
+        const errorMessage = error.status === 404 ? '任务状态已失效，请重新生成视频' : (error.message || '视频任务查询失败')
+        const failedState = { status: 'failed', taskId, url: '', error: errorMessage }
+        setVideoState(failedState); recordTask('', 'idle', { videoState: failedState })
+      }
     }, 5_000)
   }
 
@@ -568,7 +579,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
             <select aria-label="视频分辨率" value={resolution} onChange={(event) => setResolution(event.target.value)}>{resolutions.map((item) => <option key={item}>{item}</option>)}</select>
             <select aria-label="视频时长" value={duration} onChange={(event) => setDuration(event.target.value)}>{Array.from({ length: maxDuration - 3 }, (_, i) => i + 4).map((second) => <option key={second} value={second}>{second}s</option>)}</select>
             {model.includes('2-5') && <select aria-label="Seedance 2.5 任务类型" value={omniType} onChange={(event) => setOmniType(event.target.value)}><option value="reference">参考</option><option value="auto">自动</option><option value="edit">编辑</option><option value="extend">延长</option></select>}
-            <button type="button" aria-label="生成视频" title="生成视频" onClick={() => makeVideo(node.id)} disabled={!mergeText(videoPrompt, ...linkedText(node.id)) || ['submitting', 'running', 'PENDING', 'RUNNING'].includes(videoState.status)}><Icon name="arrowUp" size={16}/></button>
+          <button type="button" aria-label="生成视频" title="生成视频" onClick={() => makeVideo(node.id)} disabled={!mergeText(videoPrompt, ...linkedText(node.id)) || ACTIVE_VIDEO_STATUSES.has(videoState.status)}><Icon name="arrowUp" size={16}/></button>
           </div>
           {videoState.error && <p className="hub-error">{videoState.error}</p>}
         </div>

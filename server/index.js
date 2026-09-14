@@ -135,10 +135,12 @@ const waterfallDataDir = process.env.DIEFA_DATA_DIR || path.join(rootDir, 'data'
 const waterfallAssetsDir = path.join(waterfallDataDir, 'waterfall-assets')
 const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
 const waterfallStoreFile = path.join(waterfallDataDir, 'waterfall-tasks.json')
+const videoTaskStoreFile = path.join(waterfallDataDir, 'video-tasks.json')
 const avatarDownloadStoreFile = path.join(waterfallDataDir, 'please-day-avatar-downloads.json')
 const waterfallControllers = new Map()
-const videoTasks = new Map()
 const FAILED_TASK_TTL = 5 * 60 * 1000
+const VIDEO_TASK_MAX_WAIT_MS = 20 * 60 * 1000
+const VIDEO_TASK_STORE_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_BATCH_IMAGE_BYTES = 12 * 1024 * 1024
 
 function isPrivateAddress(address) {
@@ -284,6 +286,27 @@ function saveWaterfallTasks() {
   fs.writeFileSync(waterfallStoreFile, JSON.stringify(waterfallTasks.slice(0, 300), null, 2))
 }
 
+function loadVideoTasks() {
+  try {
+    const tasks = JSON.parse(fs.readFileSync(videoTaskStoreFile, 'utf8'))
+    if (!Array.isArray(tasks)) return new Map()
+    return new Map(tasks.filter((task) => task?.id && task?.userId && Number.isFinite(task.createdAt)).map((task) => [task.id, task]))
+  } catch { return new Map() }
+}
+
+const videoTasks = loadVideoTasks()
+
+function saveVideoTasks() {
+  const minimumCreatedAt = Date.now() - VIDEO_TASK_STORE_TTL_MS
+  const entries = [...videoTasks.values()].filter((task) => task.createdAt >= minimumCreatedAt).slice(-300)
+  fs.writeFileSync(videoTaskStoreFile, JSON.stringify(entries, null, 2), { mode: 0o600 })
+}
+
+function removeVideoTask(taskId) {
+  videoTasks.delete(taskId)
+  saveVideoTasks()
+}
+
 function isExpiredFailedTask(task, now = Date.now()) {
   if (!['failed', 'timeout', 'cancelled'].includes(task.status)) return false
   const completedAt = new Date(task.completedAt || task.updatedAt || task.createdAt).getTime()
@@ -311,6 +334,7 @@ function cleanupExpiredFailedTasks() {
 saveWaterfallTasks()
 cleanupExpiredFailedTasks()
 setInterval(cleanupExpiredFailedTasks, 60_000).unref()
+setInterval(saveVideoTasks, 60 * 60 * 1000).unref()
 
 app.use(express.json({ limit: '50mb' }))
 const { requireAuth, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
@@ -1032,7 +1056,8 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
     }
     const created = await vibbitRequest('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(taskInput) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(created.task_id, { userId: req.user.id, createdAt: Date.now() })
+    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, createdAt: Date.now() })
+    saveVideoTasks()
     res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
   } catch (error) { next(error) }
 })
@@ -1041,12 +1066,16 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
+    if (Date.now() - localTask.createdAt > VIDEO_TASK_MAX_WAIT_MS) {
+      removeVideoTask(req.params.id)
+      return res.json({ taskId: req.params.id, status: 'FAILED', videoUrl: '', error: '视频生成超过 20 分钟仍未完成，任务已停止，请重新生成', progress: null })
+    }
     const task = await vibbitRequest(`/tasks/${encodeURIComponent(req.params.id)}`)
     let result = {}
     try { result = JSON.parse(task.task_result?.result || '{}') } catch { result = {} }
     const progressCandidates = [task.progress_percentage, task.progress_percent, task.progress, task.task_result?.progress_percentage, task.task_result?.progress_percent, task.task_result?.progress, result.progress_percentage, result.progress_percent, result.progress]
     const progress = progressCandidates.find((value) => Number.isInteger(value) && value >= 0 && value <= 100)
-    if (['COMPLETED', 'FAILED'].includes(task.status)) videoTasks.delete(req.params.id)
+    if (['COMPLETED', 'FAILED'].includes(task.status)) removeVideoTask(req.params.id)
     res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '', progress: progress ?? null })
   } catch (error) { next(error) }
 })
