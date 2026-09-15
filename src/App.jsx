@@ -826,7 +826,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const promptRef = useRef(null)
   const ratioPickerRef = useRef(null)
   const dragDepth = useRef(0)
-  const scrolledAway = useRef(false)
+  const historyLoadingMore = useRef(false)
   const resultsRef = useRef(null)
   const historyHeight = useRef(0)
   const sessionReferenceImages = useRef(new Map())
@@ -890,6 +890,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         // generic transport message such as “Load failed” in the composer.
         console.warn('瀑布流历史刷新失败', err)
     } finally {
+      historyLoadingMore.current = false
       if (active) {
         setInitialLoading(false)
         setServerLoaded(true)
@@ -1094,12 +1095,10 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
 
   function handleScroll(event) {
     const top = event.currentTarget.scrollTop
-    if (top > 100) scrolledAway.current = true
-    if (top < 24 && scrolledAway.current && tasks.length < total) {
-      scrolledAway.current = false
-      historyHeight.current = event.currentTarget.scrollHeight
-      setVisibleLimit((current) => Math.min(current + WATERFALL_HISTORY_PAGE_SIZE, total))
-    }
+    if (top > 240 || tasks.length >= total || historyLoadingMore.current) return
+    historyLoadingMore.current = true
+    historyHeight.current = event.currentTarget.scrollHeight
+    setVisibleLimit((current) => Math.min(current + WATERFALL_HISTORY_PAGE_SIZE, total))
   }
 
   async function handleDrop(event) {
