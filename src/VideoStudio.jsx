@@ -115,10 +115,18 @@ export default function VideoStudio() {
     if (!activeTaskIds.length) return undefined
     const timer = window.setTimeout(async () => {
       const updates = await Promise.all(activeTaskIds.map(async (id) => {
-        try { return [id, { ...await getVideoTask(id) }] } catch (requestError) { return [id, { status: 'FAILED', error: requestError.message }] }
+        try {
+          return [id, { ...await getVideoTask(id) }]
+        } catch (requestError) {
+          // A provider status request can occasionally time out while the
+          // generation continues upstream. Keep polling in that case instead
+          // of incorrectly marking an otherwise live task as failed.
+          if ([0, 502, 503, 504].includes(requestError.status)) return [id, null]
+          return [id, { status: 'FAILED', error: requestError.message }]
+        }
       }))
       const byId = new Map(updates)
-      setTasks((current) => current.map((task) => byId.has(task.id) ? { ...task, ...byId.get(task.id) } : task))
+      setTasks((current) => current.map((task) => byId.get(task.id) ? { ...task, ...byId.get(task.id) } : task))
     }, 3000)
     return () => window.clearTimeout(timer)
   }, [tasks])
