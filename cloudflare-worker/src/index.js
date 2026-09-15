@@ -1409,7 +1409,7 @@ export default {
       if (pathname === '/api/waterfall/tasks' && request.method === 'POST') return reply(await createTask(request, env, auth.user, ctx), request, env, 202)
       if (pathname === '/api/waterfall/tasks' && request.method === 'GET') {
         const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0)
-        const limit = Math.min(24, Math.max(6, Number(url.searchParams.get('limit')) || 8))
+        const limit = Math.min(MAX_TASKS, Math.max(6, Number(url.searchParams.get('limit')) || 8))
         let tasks = (await listTasks(env)).filter((task) => task.userEmail === auth.user.email)
         tasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         const total = tasks.length

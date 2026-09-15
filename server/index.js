@@ -1177,7 +1177,7 @@ app.use('/api/waterfall/assets', express.static(waterfallAssetsDir, { fallthroug
 app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
   cleanupExpiredFailedTasks()
   const offset = Math.max(0, Number(req.query.offset) || 0)
-  const limit = Math.min(24, Math.max(6, Number(req.query.limit) || 8))
+  const limit = Math.min(300, Math.max(6, Number(req.query.limit) || 8))
   const ordered = waterfallTasks.filter((task) => task.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   res.json({ tasks: ordered.slice(offset, offset + limit), total: ordered.length, hasMore: offset + limit < ordered.length, user: req.user })
 })

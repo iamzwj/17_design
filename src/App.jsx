@@ -1095,7 +1095,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
 
   function handleScroll(event) {
     const top = event.currentTarget.scrollTop
-    if (top > 240 || tasks.length >= total || historyLoadingMore.current) return
+    if (top > 240 || visibleLimit >= total || historyLoadingMore.current) return
     historyLoadingMore.current = true
     historyHeight.current = event.currentTarget.scrollHeight
     setVisibleLimit((current) => Math.min(current + WATERFALL_HISTORY_PAGE_SIZE, total))
