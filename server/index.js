@@ -911,6 +911,16 @@ function webSourcesPrompt(sources, available = true) {
   return `已完成联网检索。以下是本次检索到的实时资料，必须优先基于这些资料作答；不要声称自己无法联网搜索或没有实时搜索工具。若资料之间有差异，请说明差异。不要捏造来源中没有的信息。不要输出 URL、来源编号或 Markdown 符号（例如 **、#、-）。使用可直接复制的简洁中文自然段；如有多个要点，以“要点名：内容”的短句呈现。\n\n${sources.map((source, index) => `[${index + 1}] ${source.title}\n${source.url}\n${source.content}`).join('\n\n')}`
 }
 
+function completionText(data) {
+  const message = data?.choices?.[0]?.message || {}
+  const asText = (value) => {
+    if (typeof value === 'string') return value.trim()
+    if (Array.isArray(value)) return value.map((part) => asText(part?.text ?? part?.content ?? '')).filter(Boolean).join('\n').trim()
+    return ''
+  }
+  return asText(message.content) || asText(message.reasoning_content) || asText(message.reasoning) || asText(data?.output_text)
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, apiConfigured: Boolean(process.env.GRSAI_API_KEY), baseUrl: apiBase })
 })
@@ -950,15 +960,26 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
     const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
     const sources = webResult.sources
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
-    const data = await requestUpstream('/v1/chat/completions', {
+    const upstreamRequest = {
       model: 'gpt-5.6-terra',
       stream: false,
       messages: [
         ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
         ...safeMessages,
       ],
-    })
-    const content = data?.choices?.[0]?.message?.content
+    }
+    let data = await requestUpstream('/v1/chat/completions', upstreamRequest)
+    let content = completionText(data)
+    // Some compatible reasoning endpoints occasionally return an empty content
+    // field on the first completion. Retry once with an explicit answer request
+    // so the UI never renders sources without a response.
+    if (!content) {
+      data = await requestUpstream('/v1/chat/completions', {
+        ...upstreamRequest,
+        messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
+      })
+      content = completionText(data)
+    }
     if (!content) throw new Error('接口未返回有效文本')
     res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-5.6-terra' })
   } catch (error) {
