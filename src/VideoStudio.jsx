@@ -53,6 +53,25 @@ function referenceLabel(mode, item, index) {
   return item.kind === 'video' ? `视频 ${index + 1}` : `图片 ${index + 1}`
 }
 
+function VideoSelect({ value, options, onChange, label }) {
+  const [open, setOpen] = useState(false)
+  const selectRef = useRef(null)
+  const selected = options.find((item) => item.value === value) || options[0]
+
+  useEffect(() => {
+    function closeIfOutside(event) {
+      if (!selectRef.current?.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeIfOutside)
+    return () => document.removeEventListener('pointerdown', closeIfOutside)
+  }, [])
+
+  return <div className={`video-select${open ? ' is-open' : ''}`} ref={selectRef}>
+    <button type="button" className="video-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><span>{selected?.label}</span><i/></button>
+    {open && <div className="video-select-menu" role="listbox" aria-label={label}>{options.map((item) => <button type="button" role="option" aria-selected={item.value === value} className={item.value === value ? 'selected' : ''} key={item.value} onClick={() => { onChange(item.value); setOpen(false) }}>{item.label}</button>)}</div>}
+  </div>
+}
+
 export default function VideoStudio() {
   const [tasks, setTasks] = useState([])
   const [loadingTasks, setLoadingTasks] = useState(true)
@@ -92,15 +111,14 @@ export default function VideoStudio() {
   }, [aspectRatio, aspectRatios, duration, durationMax, durationMin, locksAspectRatio, locksDuration, modes, referenceMode, resolution, selectedModel])
 
   useEffect(() => {
-    const activeTask = tasks.find((task) => ACTIVE.has(task.status) && !String(task.id).startsWith('local-'))
-    if (!activeTask) return undefined
+    const activeTaskIds = tasks.filter((task) => ACTIVE.has(task.status) && !String(task.id).startsWith('local-')).map((task) => task.id)
+    if (!activeTaskIds.length) return undefined
     const timer = window.setTimeout(async () => {
-      try {
-        const next = await getVideoTask(activeTask.id)
-        setTasks((current) => current.map((task) => task.id === activeTask.id ? { ...task, ...next } : task))
-      } catch (requestError) {
-        setTasks((current) => current.map((task) => task.id === activeTask.id ? { ...task, status: 'FAILED', error: requestError.message } : task))
-      }
+      const updates = await Promise.all(activeTaskIds.map(async (id) => {
+        try { return [id, { ...await getVideoTask(id) }] } catch (requestError) { return [id, { status: 'FAILED', error: requestError.message }] }
+      }))
+      const byId = new Map(updates)
+      setTasks((current) => current.map((task) => byId.has(task.id) ? { ...task, ...byId.get(task.id) } : task))
     }, 3000)
     return () => window.clearTimeout(timer)
   }, [tasks])
@@ -169,7 +187,7 @@ export default function VideoStudio() {
       <div className="composer waterfall-composer glass-strong">
         {references.length > 0 && <div className="reference-strip sortable-reference-strip video-reference-strip" aria-label="视频参考素材，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview">{item.kind === 'video' ? <video muted preload="metadata" src={item.src}/> : <img src={item.src} alt="参考图"/>}</button><span className="reference-order">{referenceLabel(referenceMode, item, index)}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考素材"><Icon name="x" size={13}/></button></div>)}</div>}
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder={referenceMode === 'edit' ? '描述要怎样编辑源视频，例如：将背景换成雨夜，同时保留人物动作和运镜…' : referenceMode === 'extend' ? '描述接下来的视频内容，例如：从视频 1 的结尾继续，人物走进车站…' : '描述你想生成的视频…'} rows="2"/>
-        <div className="composer-tools"><div className="tool-group">{mediaLimit(selectedModel, referenceMode, 'image') > images.length && <><button className="tool-button reference-add" type="button" onClick={() => imageRef.current?.click()} aria-label="添加图片参考"><Icon name="image" size={17}/></button><input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void appendImages(event.target.files); event.target.value = '' }}/></>}{mediaLimit(selectedModel, referenceMode, 'video') > videos.length && <><button className="tool-button reference-add video-reference-add" type="button" onClick={() => videoRef.current?.click()} aria-label="添加视频参考"><Icon name="video" size={17}/></button><input ref={videoRef} hidden type="file" accept="video/mp4,video/quicktime,video/webm" multiple onChange={(event) => { void appendVideos(event.target.files); event.target.value = '' }}/></>}<select className="image-model-select video-model-select" value={model} onChange={(event) => setModel(event.target.value)}>{MODELS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>{locksAspectRatio ? <span className="video-locked-setting">自适应画幅</span> : <select className="image-model-select" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>{aspectRatios.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}<select className="image-model-select" value={resolution} onChange={(event) => setResolution(event.target.value)}>{selectedModel.resolutions.map((item) => <option key={item}>{item}</option>)}</select>{locksDuration ? <span className="video-locked-setting">自动时长</span> : <label className="video-duration-control"><input type="range" min={durationMin} max={durationMax} step="1" value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="视频时长"/><output>{duration}秒</output></label>}</div><button className="send-button" type="button" onClick={() => void submit()} disabled={!prompt.trim() || submitting} aria-label="生成视频"><Icon name="arrowUp" size={18}/></button></div>
+        <div className="composer-tools"><div className="tool-group">{mediaLimit(selectedModel, referenceMode, 'image') > images.length && <><button className="tool-button reference-add" type="button" onClick={() => imageRef.current?.click()} aria-label="添加图片参考"><Icon name="image" size={17}/></button><input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void appendImages(event.target.files); event.target.value = '' }}/></>}{mediaLimit(selectedModel, referenceMode, 'video') > videos.length && <><button className="tool-button reference-add video-reference-add" type="button" onClick={() => videoRef.current?.click()} aria-label="添加视频参考"><Icon name="video" size={17}/></button><input ref={videoRef} hidden type="file" accept="video/mp4,video/quicktime,video/webm" multiple onChange={(event) => { void appendVideos(event.target.files); event.target.value = '' }}/></>}<VideoSelect label="视频模型" value={model} onChange={setModel} options={MODELS.map((item) => ({ value: item.value, label: item.label }))}/>{locksAspectRatio ? <span className="video-locked-setting">自适应画幅</span> : <VideoSelect label="视频画幅" value={aspectRatio} onChange={setAspectRatio} options={aspectRatios}/>}<VideoSelect label="视频清晰度" value={resolution} onChange={setResolution} options={selectedModel.resolutions.map((item) => ({ value: item, label: item }))}/>{locksDuration ? <span className="video-locked-setting">自动时长</span> : <label className="video-duration-control"><input type="range" min={durationMin} max={durationMax} step="1" value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="视频时长"/><output>{duration}秒</output></label>}</div><button className="send-button" type="button" onClick={() => void submit()} disabled={!prompt.trim() || submitting} aria-label="生成视频"><Icon name="arrowUp" size={18}/></button></div>
       </div>{error && <small className="composer-note error">{error}</small>}
     </div>
   </section>
