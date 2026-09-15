@@ -1009,6 +1009,30 @@ app.post('/api/video/references', requireAuth, async (req, res, next) => {
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
   try {
     const { model, prompt, durationSeconds, resolution, aspectRatio, referenceImageUrls = [] } = req.body || {}
+    if (model === 'minimax-h3') {
+      if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
+      if (!['portrait', 'landscape', 'square'].includes(aspectRatio)) return res.status(400).json({ error: 'MiniMax H3 仅支持横屏、竖屏或方屏' })
+      if (!['480p', '768p', '1080p'].includes(resolution)) return res.status(400).json({ error: 'MiniMax H3 仅支持 480p、768p 或 1080p' })
+      const seconds = Number(durationSeconds)
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 15 || (resolution === '1080p' && seconds > 10)) return res.status(400).json({ error: resolution === '1080p' ? 'MiniMax H3 1080p 最长 10 秒' : 'MiniMax H3 时长应为 1–15 秒' })
+      if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > 9) return res.status(400).json({ error: 'MiniMax H3 最多支持 9 张参考图' })
+      const generated = await requestUpstream('/v1/api/generate', {
+        model: 'minimax-h3',
+        prompt: String(prompt).trim().slice(0, 30_000),
+        aspectRatio,
+        images: referenceImageUrls,
+        audios: [],
+        seed: -1,
+        resolution,
+        duration: seconds,
+        replyType: 'json',
+      })
+      const statusMap = { succeeded: 'COMPLETED', running: 'RUNNING', failed: 'FAILED', violation: 'FAILED' }
+      const status = statusMap[String(generated.status || '').toLowerCase()] || 'FAILED'
+      const record = { id: generated.id || randomUUID(), userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceImages: referenceImageUrls, status, videoUrl: generated.results?.[0]?.url || '', error: generated.error || (status === 'FAILED' ? 'MiniMax H3 未返回视频结果' : ''), createdAt: Date.now() }
+      videoTasks.set(record.id, record); saveVideoTasks()
+      return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error })
+    }
     const modelInfo = {
       'doubao-seedance-2-0-fast-260128': { resolutions: ['480p', '720p'], maximum: 15 },
       'doubao-seedance-2-0-260128': { resolutions: ['480p', '720p', '1080p', '4k'], maximum: 15 },
@@ -1045,6 +1069,7 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
+    if (localTask.provider === 'minimax') return res.json({ ...localTask, taskId: req.params.id })
     if (Date.now() - localTask.createdAt > 20 * 60 * 1000 && ['PENDING', 'RUNNING'].includes(localTask.status)) {
       const failed = { ...localTask, status: 'FAILED', error: '视频生成超时，请重新生成' }
       videoTasks.set(req.params.id, failed); saveVideoTasks()
