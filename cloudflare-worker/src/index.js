@@ -34,6 +34,15 @@ function imageModelSettings(model, resolution) {
   return { model: selectedModel, resolution: selectedResolution }
 }
 
+function imageCreditCost(model, count = 1) {
+  const creditsPerImage = {
+    'gpt-image-2-vip': 4,
+    'gpt-image-2.5-flare': 4,
+    'gpt-image-2.5-sunburst': 5,
+  }[model] || 1
+  return creditsPerImage * Math.max(1, Number(count) || 1)
+}
+
 function generationSize(model, resolution, ratio) {
   const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? VIP_SIZES[resolution] : SIZES
   return sizes[ratio] || sizes['1:1']
@@ -804,6 +813,11 @@ async function refundTaskCredits(env, task, amount) {
   task.refundedCredits = Number(task.refundedCredits || 0) + refundable
   return refundCredits(env, task.userEmail, refundable)
 }
+function taskCreditCostPerImage(task) {
+  const count = Math.max(1, Number(task?.count) || task?.slots?.length || 1)
+  const charged = Number(task?.chargedCredits || 0)
+  return charged > 0 ? charged / count : imageCreditCost(task?.model, 1)
+}
 async function listTasks(env) {
   const savedIds = await env.XIAODIE_TASKS.get(TASK_INDEX_KEY, 'json')
   const indexedIds = Array.isArray(savedIds) ? savedIds.filter((id) => typeof id === 'string') : []
@@ -1107,7 +1121,7 @@ async function refreshTask(env, task, ctx) {
     task.slots = task.slots.map((slot) => slot.status === 'running' ? { ...slot, status: 'timeout', error: '生成超过 10 分钟，已自动结束' } : slot)
     const timedOut = task.slots.filter((slot) => slot.status === 'timeout').length
     task.refundedCount = Number(task.refundedCount || 0) + timedOut
-    await refundTaskCredits(env, task, timedOut)
+    await refundTaskCredits(env, task, timedOut * taskCreditCostPerImage(task))
     return putTask(env, task)
   }
 
@@ -1156,7 +1170,7 @@ async function refreshTask(env, task, ctx) {
   if (!changed) return latest
   if (failedCount) {
     latest.refundedCount = Number(latest.refundedCount || 0) + failedCount
-    await refundTaskCredits(env, latest, failedCount)
+    await refundTaskCredits(env, latest, failedCount * taskCreditCostPerImage(latest))
   }
   settle(latest)
   await putTask(env, latest)
@@ -1169,7 +1183,8 @@ async function generateImage(request, env, user) {
   if (!prompt || typeof prompt !== 'string') throw new Error('prompt 不能为空')
   if (!Array.isArray(images) || images.length > 4) throw new Error('参考图最多 4 张')
   const settings = imageModelSettings(model, resolution)
-  const chargedUser = await spendCredits(env, user, 1)
+  const creditCost = imageCreditCost(settings.model)
+  const chargedUser = await spendCredits(env, user, creditCost)
   try {
     const upstreamImages = await Promise.all(images.map((source) => driveReferenceForUpstream(env, source)))
     const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : SIZES[aspectRatio] ? aspectRatio : '1:1'
@@ -1184,7 +1199,7 @@ async function generateImage(request, env, user) {
     if (data.status !== 'succeeded' || !urls.length) throw new Error(data.error || '图片生成未成功')
     return { id: data.id, status: data.status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: await Promise.all(urls.map((url, index) => persistGoogleDriveImage(env, url, `image-${data.id || 'result'}-${index + 1}`))), user: publicUser(chargedUser) }
   } catch (error) {
-    await refundCredits(env, chargedUser.email, 1)
+    await refundCredits(env, chargedUser.email, creditCost)
     throw error
   }
 }
@@ -1242,7 +1257,7 @@ async function submitPendingWaterfallSlots(env, taskId) {
     }
     if (refunded) {
       task.refundedCount = Number(task.refundedCount || 0) + refunded
-      await refundTaskCredits(env, task, refunded)
+      await refundTaskCredits(env, task, refunded * taskCreditCostPerImage(task))
     }
     settle(task)
     await putTask(env, task)
@@ -1302,7 +1317,7 @@ async function submitPendingWaterfallSlots(env, taskId) {
   if (!changed) return
   if (failedCount) {
     latest.refundedCount = Number(latest.refundedCount || 0) + failedCount
-    await refundTaskCredits(env, latest, failedCount)
+    await refundTaskCredits(env, latest, failedCount * taskCreditCostPerImage(latest))
   }
   settle(latest)
   await putTask(env, latest)
@@ -1327,11 +1342,13 @@ async function createTask(request, env, user, ctx) {
     const driveFileId = driveReferenceFileId(source)
     return driveFileId ? driveImageUrl(driveFileId) : persistGoogleDriveImage(env, source, `waterfall-reference-${id}-${index + 1}`, 'uploads')
   }))
-  const chargedUser = await spendCredits(env, user, imageCount)
+  const creditCostPerImage = imageCreditCost(settings.model)
+  const chargedCredits = imageCreditCost(settings.model, imageCount)
+  const chargedUser = await spendCredits(env, user, chargedCredits)
   const task = {
     id, userEmail: chargedUser.email, prompt: prompt.trim().slice(0, 30_000), aspectRatio, resolvedAspectRatio, model: settings.model, resolution: settings.resolution, generationSize: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
     count: imageCount, referenceCount: images.length, referenceImages, status: 'running', clientRequestId: typeof clientRequestId === 'string' ? clientRequestId.slice(0, 96) : null,
-    createdAt: time(), updatedAt: time(), completedAt: null, chargedCredits: imageCount, refundedCredits: 0, refundedCount: 0,
+    createdAt: time(), updatedAt: time(), completedAt: null, chargedCredits, creditCostPerImage, refundedCredits: 0, refundedCount: 0,
     slots: Array.from({ length: imageCount }, (_, index) => ({ index, status: 'running', url: null, error: null, upstreamId: null })),
   }
   task.submissionStartedAt = time()
@@ -1429,7 +1446,7 @@ export default {
           const unfinished = task.slots.filter((slot) => slot.status === 'running').length
           task.status = 'cancelled'; task.completedAt = time(); task.refundedCount += unfinished
           task.slots = task.slots.map((slot) => slot.status === 'running' ? { ...slot, status: 'cancelled', error: '任务已停止' } : slot)
-          await refundTaskCredits(env, task, unfinished)
+          await refundTaskCredits(env, task, unfinished * taskCreditCostPerImage(task))
           await putTask(env, task)
         }
         const latestUser = await env.XIAODIE_TASKS.get(`${AUTH_USER_PREFIX}${auth.user.email}`, 'json')

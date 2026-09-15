@@ -8,7 +8,12 @@ export function supportsImageResolution(model) {
 }
 
 export function imageCreditCost(model, count = 1) {
-  return (model === VIP_IMAGE_MODEL ? 4 : 1) * Math.max(1, Number(count) || 1)
+  const creditsPerImage = {
+    [VIP_IMAGE_MODEL]: 4,
+    'gpt-image-2.5-flare': 4,
+    'gpt-image-2.5-sunburst': 5,
+  }[model] || 1
+  return creditsPerImage * Math.max(1, Number(count) || 1)
 }
 
 export const IMAGE_MODEL_OPTIONS = [
