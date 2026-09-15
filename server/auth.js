@@ -9,6 +9,15 @@ const CODE_TTL = 10 * 60 * 1000
 const SHORT_SESSION_TTL = 12 * 60 * 60 * 1000
 const REMEMBER_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CREDITS = 50
+// This account is seeded once so it can log in without the registration flow.
+// Store only a slow password hash here; a user-selected password is never reset on restart.
+const BUILTIN_USERS = [
+  {
+    id: 'built-in-richart-onewo',
+    email: 'richart@onewo.com',
+    passwordHash: 'ab9775ffe94a6e842ac61a3fb5640542:0a833b747110d9471a5e6f3ebb16e396fe5605065618bcd403b340c09326fc519bb18653c1436e29bac674c366799737b6038a561c5e9b3d11269fae5234b715',
+  },
+]
 const DAILY_CREDIT_OVERRIDES = new Map([
   ['zhangwj159@onewo.com', 999],
 ])
@@ -46,17 +55,29 @@ export function installAuth(app, { dataDir }) {
   try { store = { ...store, ...JSON.parse(fs.readFileSync(storeFile, 'utf8')) } } catch { /* first run */ }
 
   function save() { fs.writeFileSync(storeFile, JSON.stringify(store, null, 2), { mode: 0o600 }) }
-  let migratedCredits = false
+  let storeChanged = false
+  for (const builtInUser of BUILTIN_USERS) {
+    if (store.users.some((user) => user.email === builtInUser.email)) continue
+    const creditLimit = dailyCreditLimit(builtInUser.email)
+    store.users.push({
+      ...builtInUser,
+      credits: creditLimit,
+      creditLimit,
+      creditsUpdatedOn: currentCreditDay(),
+      createdAt: new Date().toISOString(),
+    })
+    storeChanged = true
+  }
   for (const user of store.users) {
     const limit = dailyCreditLimit(user.email)
     if (!Number.isInteger(user.credits) || user.credits < 0 || user.creditsUpdatedOn !== currentCreditDay() || user.creditLimit !== limit) {
       user.credits = limit
       user.creditsUpdatedOn = currentCreditDay()
       user.creditLimit = limit
-      migratedCredits = true
+      storeChanged = true
     }
   }
-  if (migratedCredits) save()
+  if (storeChanged) save()
   function cleanup() {
     const now = Date.now()
     store.codes = store.codes.filter((item) => item.expiresAt > now)
