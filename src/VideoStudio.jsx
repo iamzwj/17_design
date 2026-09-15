@@ -86,6 +86,7 @@ export default function VideoStudio() {
   const [error, setError] = useState('')
   const imageRef = useRef(null)
   const videoRef = useRef(null)
+  const resultsRef = useRef(null)
   const selectedModel = MODELS.find((item) => item.value === model) || MODELS[0]
   const modes = availableModes(selectedModel)
   const aspectRatios = useMemo(() => selectedModel.aspectRatios || STANDARD_ASPECT_RATIOS, [selectedModel])
@@ -97,7 +98,12 @@ export default function VideoStudio() {
   const videos = references.filter((item) => item.kind === 'video')
 
   useEffect(() => {
-    void listVideoTasks().then((result) => setTasks(result.tasks || [])).catch((requestError) => setError(requestError.message)).finally(() => setLoadingTasks(false))
+    void listVideoTasks().then((result) => {
+      setTasks([...(result.tasks || [])].reverse())
+      window.requestAnimationFrame(() => {
+        if (resultsRef.current) resultsRef.current.scrollTop = resultsRef.current.scrollHeight
+      })
+    }).catch((requestError) => setError(requestError.message)).finally(() => setLoadingTasks(false))
   }, [])
 
   useEffect(() => {
@@ -158,6 +164,12 @@ export default function VideoStudio() {
 
   function selectMode(nextMode) { setReferenceMode((current) => current === nextMode ? 'text' : nextMode); setReferences([]); setError('') }
 
+  function scrollToLatestTask() {
+    window.requestAnimationFrame(() => {
+      if (resultsRef.current) resultsRef.current.scrollTo({ top: resultsRef.current.scrollHeight, behavior: 'smooth' })
+    })
+  }
+
   async function submit() {
     if (!prompt.trim() || submitting) return
     if (referenceMode === 'image' && images.length !== 1) { setError('请添加一张首帧图片'); return }
@@ -166,7 +178,7 @@ export default function VideoStudio() {
     if (referenceMode === 'reference' && !references.length) { setError('请至少添加一项参考素材，或切换为纯文本'); return }
     const request = { prompt: prompt.trim(), model, resolution, duration, aspectRatio: locksAspectRatio ? 'adaptive' : aspectRatio, referenceMode, references: [...references] }
     const optimistic = { id: `local-${Date.now()}`, prompt: request.prompt, model, resolution, durationSeconds: request.duration, aspectRatio: request.aspectRatio, referenceMode, referenceImages: images.map((item) => item.src), referenceVideos: videos.map((item) => item.src), status: 'PENDING', createdAt: Date.now() }
-    setTasks((current) => [optimistic, ...current]); setSubmitting(true); setError(''); setPrompt(''); setReferences([])
+    setTasks((current) => [...current, optimistic]); scrollToLatestTask(); setSubmitting(true); setError(''); setPrompt(''); setReferences([])
     try {
       const uploaded = await Promise.all(request.references.map(async (reference) => ({ ...reference, url: (await uploadVideoReference({ source: reference.src })).url })))
       const uploadedImages = uploaded.filter((item) => item.kind === 'image').map((item) => item.url)
@@ -187,7 +199,7 @@ export default function VideoStudio() {
   }
 
   return <section className="workspace video-waterfall-workspace">
-    <div className="video-waterfall-results">
+    <div className="video-waterfall-results" ref={resultsRef}>
       {loadingTasks ? <div className="waterfall-initial-loading" aria-label="加载视频任务"><i/><i/><i/></div> : tasks.length === 0 ? <div className="waterfall-empty"><b>开始你的第一段视频创作</b><span>选择参考方式，添加素材后生成任务会显示在这里。</span></div> : <div className="video-waterfall-list">{tasks.map((task) => <article className="video-waterfall-task" key={task.id}><header><div className="video-waterfall-task-info"><b>{task.prompt}</b><small>{task.model ? `${MODELS.find((item) => item.value === task.model)?.label || task.model} · ${REFERENCE_MODES[task.referenceMode]?.label || '纯文本'} · ${task.aspectRatio} · ${task.resolution} · ${task.durationSeconds === -1 ? '自动时长' : `${task.durationSeconds}秒`}` : '正在提交任务'}</small></div><span className={task.status === 'FAILED' ? 'failed' : ACTIVE.has(task.status) ? 'running' : ''}>{taskStatus(task)}</span></header>{(task.referenceImages?.length > 0 || task.referenceVideos?.length > 0) && <div className="video-waterfall-references">{task.referenceImages?.map((url, index) => <img src={url} alt={`参考图 ${index + 1}`} key={`${url}-${index}`}/>)}{task.referenceVideos?.map((url, index) => <video muted preload="metadata" src={url} aria-label={`参考视频 ${index + 1}`} key={`${url}-${index}`}/>)}</div>}{ACTIVE.has(task.status) && <div className="video-waterfall-pending"><div className="bubble-loader" aria-label="视频生成中"><i/><i/><i/></div></div>}{task.videoUrl && <video controls src={task.videoUrl}/>}</article>)}</div>}
     </div>
     <div className="waterfall-composer-wrap">
