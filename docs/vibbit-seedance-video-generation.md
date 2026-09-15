@@ -46,5 +46,14 @@
 - 单图：`image_url`
 - 首尾帧：`first_frame_image_url`、`last_frame_image_url`
 - 多图：`reference_image_urls`
+- 参考视频：`reference_video_urls`
 
 Seedance 2.0 最多 9 张参考图，Seedance 2.5 最多 30 张。Seedance 2.5 还支持 `omni_reference_task_type`：`auto`、`reference`、`edit`、`extend`。
+
+## Seedance 2.5 全模态方式
+
+- `reference`：基于参考图片和/或参考视频重新生成视频。
+- `edit`：至少提供一段 4–30 秒的 `reference_video_urls` 源视频；画幅必须为 `adaptive`，时长必须为 `-1`（自动跟随源视频）。
+- `extend`：至少提供一段 `reference_video_urls` 源视频；画幅必须为 `adaptive`，时长可选自动或 4–30 秒。
+
+首帧和首尾帧也应使用 `adaptive` 画幅，让成片跟随首帧比例。参考图片需要公网 HTTPS 地址；参考视频同样需要可公开访问的地址。

@@ -102,6 +102,11 @@ jobs:
             # directory is not readable by the Nginx worker on this server.
             # Restore the timestamped config backup before serving traffic.
             nginx_site=/etc/nginx/sites-available/app.17design.fun
+            # The API persists source clips and only then sends public URLs to
+            # video providers. Permit the documented 200 MB clip limit at the
+            # reverse proxy too, otherwise Nginx rejects it before Node can
+            # process the upload.
+            printf '%s\n' 'client_max_body_size 280m;' | sudo tee /etc/nginx/conf.d/17design-video-upload.conf >/dev/null
             if sudo grep -q '17design-static-shell' "$nginx_site"; then
               backup_site=$(sudo find /etc/nginx/sites-available -maxdepth 1 -type f -name 'app.17design.fun.before-static-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
               test -n "$backup_site"

@@ -327,7 +327,9 @@ saveWaterfallTasks()
 cleanupExpiredFailedTasks()
 setInterval(cleanupExpiredFailedTasks, 60_000).unref()
 
-app.use(express.json({ limit: '50mb' }))
+// Video references may be up to 200 MB. They are immediately persisted and
+// then sent to the provider as public URLs, never forwarded as base64.
+app.use(express.json({ limit: '280mb' }))
 const { requireAuth, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 
 async function refundWaterfallCredits(taskId, amount) {
@@ -391,12 +393,15 @@ function publicVideoUrl(assetPath) {
 
 async function saveVideoReference(source) {
   const value = String(source || '')
-  const dataMatch = value.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/i)
+  const dataMatch = value.match(/^data:((?:image\/(?:jpeg|png|webp))|(?:video\/(?:mp4|quicktime|webm)));base64,([\s\S]+)$/i)
   let buffer
   let extension
+  let kind = 'image'
   if (dataMatch) {
     buffer = Buffer.from(dataMatch[2], 'base64')
-    extension = dataMatch[1].toLowerCase() === 'image/jpeg' ? 'jpg' : dataMatch[1].toLowerCase().split('/')[1]
+    const mimeType = dataMatch[1].toLowerCase()
+    kind = mimeType.startsWith('video/') ? 'video' : 'image'
+    extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'video/quicktime' ? 'mov' : mimeType.split('/')[1]
   } else if (value.startsWith('/api/waterfall/assets/')) {
     const fileName = path.basename(value)
     if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效'), { status: 400 })
@@ -404,9 +409,10 @@ async function saveVideoReference(source) {
     if (!buffer) throw Object.assign(new Error('参考图已不可用，请重新上传'), { status: 422 })
     extension = path.extname(fileName).slice(1).toLowerCase()
   } else {
-    throw Object.assign(new Error('请上传 JPG、PNG 或 WebP 参考图'), { status: 400 })
+    throw Object.assign(new Error('请上传 JPG、PNG、WebP、MP4、MOV 或 WebM 参考素材'), { status: 400 })
   }
-  if (!buffer.length || buffer.length > 30 * 1024 * 1024) throw Object.assign(new Error('参考图必须小于 30MB'), { status: 413 })
+  const sizeLimit = kind === 'video' ? 200 : 30
+  if (!buffer.length || buffer.length > sizeLimit * 1024 * 1024) throw Object.assign(new Error(`${kind === 'video' ? '参考视频' : '参考图'}必须小于 ${sizeLimit}MB`), { status: 413 })
   const fileName = `${randomUUID()}.${extension}`
   await fs.promises.writeFile(path.join(videoAssetsDir, fileName), buffer)
   return `/api/video/assets/${fileName}`
@@ -1008,19 +1014,22 @@ app.post('/api/video/references', requireAuth, async (req, res, next) => {
 
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { model, prompt, durationSeconds, resolution, aspectRatio, referenceImageUrls = [] } = req.body || {}
+    const { model, prompt, durationSeconds, resolution, aspectRatio, referenceMode = 'text', imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], referenceVideoUrls = [], omniReferenceTaskType } = req.body || {}
     if (model === 'minimax-h3') {
       if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
       if (!['portrait', 'landscape', 'square'].includes(aspectRatio)) return res.status(400).json({ error: 'MiniMax H3 仅支持横屏、竖屏或方屏' })
       if (!['480p', '768p', '1080p'].includes(resolution)) return res.status(400).json({ error: 'MiniMax H3 仅支持 480p、768p 或 1080p' })
       const seconds = Number(durationSeconds)
       if (!Number.isInteger(seconds) || seconds < 1 || seconds > 15 || (resolution === '1080p' && seconds > 10)) return res.status(400).json({ error: resolution === '1080p' ? 'MiniMax H3 1080p 最长 10 秒' : 'MiniMax H3 时长应为 1–15 秒' })
+      if (!['text', 'image', 'reference'].includes(referenceMode)) return res.status(400).json({ error: 'MiniMax H3 目前支持纯文本、首帧图片和多图参考' })
       if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > 9) return res.status(400).json({ error: 'MiniMax H3 最多支持 9 张参考图' })
+      if (referenceVideoUrls.length) return res.status(400).json({ error: 'MiniMax H3 接口只支持图片参考，不支持视频参考' })
+      if (referenceMode === 'image' && !imageUrl) return res.status(400).json({ error: '请添加一张首帧图片' })
       const generated = await requestUpstream('/v1/api/generate', {
         model: 'minimax-h3',
         prompt: String(prompt).trim().slice(0, 30_000),
         aspectRatio,
-        images: referenceImageUrls,
+        images: referenceMode === 'image' ? [imageUrl] : referenceImageUrls,
         audios: [],
         seed: -1,
         resolution,
@@ -1029,7 +1038,7 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       })
       const statusMap = { succeeded: 'COMPLETED', running: 'RUNNING', failed: 'FAILED', violation: 'FAILED' }
       const status = statusMap[String(generated.status || '').toLowerCase()] || 'FAILED'
-      const record = { id: generated.id || randomUUID(), userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceImages: referenceImageUrls, status, videoUrl: generated.results?.[0]?.url || '', error: generated.error || (status === 'FAILED' ? 'MiniMax H3 未返回视频结果' : ''), createdAt: Date.now() }
+      const record = { id: generated.id || randomUUID(), userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, videoUrl: generated.results?.[0]?.url || '', error: generated.error || (status === 'FAILED' ? 'MiniMax H3 未返回视频结果' : ''), createdAt: Date.now() }
       videoTasks.set(record.id, record); saveVideoTasks()
       return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error })
     }
@@ -1042,15 +1051,45 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
     if (!modelInfo) return res.status(400).json({ error: '不支持的视频模型' })
     if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
     if (!modelInfo.resolutions.includes(resolution)) return res.status(400).json({ error: '该模型不支持所选分辨率' })
-    if (!['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].includes(aspectRatio)) return res.status(400).json({ error: '画幅参数不支持' })
+    const is25 = model === 'doubao-seedance-2-5-260628'
+    if (!['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'].includes(aspectRatio)) return res.status(400).json({ error: '画幅参数不支持' })
     const seconds = Number(durationSeconds)
-    if (!Number.isInteger(seconds) || seconds < 4 || seconds > modelInfo.maximum) return res.status(400).json({ error: `时长应为 4–${modelInfo.maximum} 秒` })
-    if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > (model.includes('2-5') ? 30 : 9)) return res.status(400).json({ error: '参考图数量超出该模型限制' })
+    if (!Number.isInteger(seconds) || (seconds !== -1 && (seconds < 4 || seconds > modelInfo.maximum))) return res.status(400).json({ error: `时长应为自动或 4–${modelInfo.maximum} 秒` })
+    if (!['text', 'image', 'frames', 'reference', 'edit', 'extend'].includes(referenceMode)) return res.status(400).json({ error: '参考方式不支持' })
+    if (!is25 && ['edit', 'extend'].includes(referenceMode)) return res.status(400).json({ error: '视频编辑和视频延长仅支持 Seedance 2.5' })
+    if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > (is25 ? 30 : 9)) return res.status(400).json({ error: '参考图数量超出该模型限制' })
+    if (!Array.isArray(referenceVideoUrls) || referenceVideoUrls.length > (is25 ? 10 : 0)) return res.status(400).json({ error: is25 ? '参考视频最多 10 段' : 'Seedance 2.0 当前不支持视频参考' })
     const input = { model, prompt: String(prompt).trim().slice(0, 30_000), duration_seconds: seconds, resolution, aspect_ratio: aspectRatio }
-    if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
+    if (referenceMode === 'image') {
+      if (!imageUrl) return res.status(400).json({ error: '请添加一张首帧图片' })
+      input.image_url = imageUrl
+      input.aspect_ratio = 'adaptive'
+    }
+    if (referenceMode === 'frames') {
+      if (!firstFrameImageUrl) return res.status(400).json({ error: '首尾帧模式至少需要一张首帧图片' })
+      input.first_frame_image_url = firstFrameImageUrl
+      if (lastFrameImageUrl) input.last_frame_image_url = lastFrameImageUrl
+      input.aspect_ratio = 'adaptive'
+    }
+    if (referenceMode === 'reference') {
+      if (!referenceImageUrls.length && !referenceVideoUrls.length) return res.status(400).json({ error: '请至少添加一项参考素材' })
+      if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
+      if (referenceVideoUrls.length) input.reference_video_urls = referenceVideoUrls
+    }
+    if (['edit', 'extend'].includes(referenceMode)) {
+      if (!referenceVideoUrls.length) return res.status(400).json({ error: '视频编辑和视频延长都需要上传一段源视频' })
+      input.reference_video_urls = referenceVideoUrls
+      if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
+      input.aspect_ratio = 'adaptive'
+      if (referenceMode === 'edit') input.duration_seconds = -1
+    }
+    if (is25 && omniReferenceTaskType) {
+      if (!['auto', 'reference', 'edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: 'Seedance 2.5 任务类型不支持' })
+      input.omni_reference_task_type = omniReferenceTaskType
+    }
     const created = await vibbitApi('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(input) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, prompt: input.prompt, model, resolution, durationSeconds: seconds, aspectRatio, referenceImages: referenceImageUrls, status: 'PENDING', createdAt: Date.now() })
+    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, prompt: input.prompt, model, resolution, durationSeconds: input.duration_seconds, aspectRatio: input.aspect_ratio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceMode === 'frames' ? [firstFrameImageUrl, lastFrameImageUrl].filter(Boolean) : referenceImageUrls, referenceVideos: referenceVideoUrls, status: 'PENDING', createdAt: Date.now() })
     saveVideoTasks()
     res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
   } catch (error) { next(error) }
