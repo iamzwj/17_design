@@ -1026,25 +1026,36 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
     if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
     const created = await vibbitApi('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(input) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, createdAt: Date.now() })
+    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, prompt: input.prompt, model, resolution, durationSeconds: seconds, aspectRatio, referenceImages: referenceImageUrls, status: 'PENDING', createdAt: Date.now() })
     saveVideoTasks()
     res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
   } catch (error) { next(error) }
+})
+
+app.get('/api/video/tasks', requireAuth, (req, res) => {
+  const tasks = [...videoTasks.values()]
+    .filter((task) => task.userId === req.user.id)
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 30)
+    .map(({ userId: _userId, ...task }) => task)
+  res.json({ tasks })
 })
 
 app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
-    if (Date.now() - localTask.createdAt > 20 * 60 * 1000) {
-      videoTasks.delete(req.params.id); saveVideoTasks()
-      return res.json({ taskId: req.params.id, status: 'FAILED', videoUrl: '', error: '视频生成超时，请重新生成' })
+    if (Date.now() - localTask.createdAt > 20 * 60 * 1000 && ['PENDING', 'RUNNING'].includes(localTask.status)) {
+      const failed = { ...localTask, status: 'FAILED', error: '视频生成超时，请重新生成' }
+      videoTasks.set(req.params.id, failed); saveVideoTasks()
+      return res.json({ ...failed, taskId: req.params.id, videoUrl: '' })
     }
     const task = await vibbitApi(`/tasks/${encodeURIComponent(req.params.id)}`)
     let result = {}
     try { result = JSON.parse(task.task_result?.result || '{}') } catch { result = {} }
-    if (['COMPLETED', 'FAILED'].includes(task.status)) { videoTasks.delete(req.params.id); saveVideoTasks() }
-    res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '' })
+    const nextTask = { ...localTask, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '' }
+    videoTasks.set(req.params.id, nextTask); saveVideoTasks()
+    res.json({ ...nextTask, taskId: task.task_id || req.params.id })
   } catch (error) { next(error) }
 })
 

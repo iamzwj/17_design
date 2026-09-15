@@ -1,114 +1,96 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createVideoTask, fileToDataUrl, generateImage, generateText, getVideoTask, uploadVideoReference } from './api.js'
+import { useEffect, useRef, useState } from 'react'
+import { createVideoTask, fileToDataUrl, getVideoTask, listVideoTasks, uploadVideoReference } from './api.js'
 import { Icon } from './icons.jsx'
-import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
-const VIDEO_MODELS = [
+const MODELS = [
   { value: 'doubao-seedance-2-0-fast-260128', label: 'Seedance 2.0 Fast', resolutions: ['480p', '720p'], maximum: 15 },
   { value: 'doubao-seedance-2-0-260128', label: 'Seedance 2.0', resolutions: ['480p', '720p', '1080p', '4k'], maximum: 15 },
   { value: 'doubao-seedance-2-0-mini-260615', label: 'Seedance 2.0 Mini', resolutions: ['480p', '720p'], maximum: 15 },
   { value: 'doubao-seedance-2-5-260628', label: 'Seedance 2.5', resolutions: ['480p', '720p', '1080p'], maximum: 30 },
 ]
 
-function statusText(status) {
-  return ({ PENDING: '已提交，等待生成', RUNNING: '正在生成视频', COMPLETED: '视频已生成', FAILED: '生成失败' })[status] || ''
+const ACTIVE = new Set(['PENDING', 'RUNNING'])
+
+function taskStatus(task) {
+  if (task.status === 'PENDING') return '等待视频服务响应…'
+  if (task.status === 'RUNNING') return '正在生成视频…'
+  if (task.status === 'COMPLETED') return '视频已生成'
+  return task.error || '视频生成失败'
 }
 
 export default function VideoStudio() {
-  const [scriptPrompt, setScriptPrompt] = useState('')
-  const [script, setScript] = useState('')
-  const [scriptLoading, setScriptLoading] = useState(false)
-  const [imagePrompt, setImagePrompt] = useState('')
-  const [imageReferences, setImageReferences] = useState([])
-  const [imageUrls, setImageUrls] = useState([])
-  const [imageLoading, setImageLoading] = useState(false)
-  const [imageError, setImageError] = useState('')
-  const [model, setModel] = useState(VIDEO_MODELS[0].value)
+  const [tasks, setTasks] = useState([])
+  const [loadingTasks, setLoadingTasks] = useState(true)
+  const [prompt, setPrompt] = useState('')
+  const [references, setReferences] = useState([])
+  const [model, setModel] = useState(MODELS[0].value)
   const [resolution, setResolution] = useState('720p')
   const [duration, setDuration] = useState(4)
   const [aspectRatio, setAspectRatio] = useState('16:9')
-  const [videoPrompt, setVideoPrompt] = useState('')
-  const [videoReferences, setVideoReferences] = useState([])
-  const [task, setTask] = useState({ status: 'idle', id: '', url: '', error: '' })
-  const scriptFileRef = useRef(null)
-  const videoFileRef = useRef(null)
-  const selectedModel = useMemo(() => VIDEO_MODELS.find((item) => item.value === model) || VIDEO_MODELS[0], [model])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const fileRef = useRef(null)
+  const selectedModel = MODELS.find((item) => item.value === model) || MODELS[0]
 
   useEffect(() => {
-    const nextResolution = selectedModel.resolutions.includes(resolution) ? resolution : selectedModel.resolutions.at(-1)
-    setResolution(nextResolution)
+    void listVideoTasks().then((result) => setTasks(result.tasks || [])).catch((requestError) => setError(requestError.message)).finally(() => setLoadingTasks(false))
+  }, [])
+
+  useEffect(() => {
+    if (!selectedModel.resolutions.includes(resolution)) setResolution(selectedModel.resolutions.at(-1))
     if (duration > selectedModel.maximum) setDuration(selectedModel.maximum)
-  }, [selectedModel, resolution, duration])
+  }, [duration, resolution, selectedModel])
 
   useEffect(() => {
-    if (!task.id || !['PENDING', 'RUNNING'].includes(task.status)) return undefined
+    const activeTask = tasks.find((task) => ACTIVE.has(task.status) && !String(task.id).startsWith('local-'))
+    if (!activeTask) return undefined
     const timer = window.setTimeout(async () => {
       try {
-        const next = await getVideoTask(task.id)
-        setTask({ status: next.status, id: task.id, url: next.videoUrl || '', error: next.error || '' })
-      } catch (error) {
-        setTask((current) => ({ ...current, status: 'FAILED', error: error.message || '视频状态读取失败' }))
+        const next = await getVideoTask(activeTask.id)
+        setTasks((current) => current.map((task) => task.id === activeTask.id ? { ...task, ...next } : task))
+      } catch (requestError) {
+        setTasks((current) => current.map((task) => task.id === activeTask.id ? { ...task, status: 'FAILED', error: requestError.message } : task))
       }
     }, 3000)
     return () => window.clearTimeout(timer)
-  }, [task.id, task.status])
+  }, [tasks])
 
-  async function addReferences(files, setReferences) {
-    const supported = Array.from(files || []).filter(isSupportedImageFile).slice(0, 4)
-    if (!supported.length) return
-    const next = await Promise.all(supported.map(async (file) => {
-      const prepared = await compressImageForUpload(file)
-      return { name: prepared.name, src: await fileToDataUrl(prepared) }
-    }))
-    setReferences((current) => [...current, ...next].slice(0, 4))
-  }
-
-  async function createScript() {
-    if (!scriptPrompt.trim() || scriptLoading) return
-    setScriptLoading(true)
+  async function appendReferences(files) {
+    const valid = Array.from(files || []).filter(isSupportedImageFile).slice(0, 4 - references.length)
+    if (!valid.length) return
     try {
-      const result = await generateText({
-        systemPrompt: '你是专业视频创作策划。基于用户的灵感，输出可直接用于视频生成的中文脚本：剧情梗概、人物角色、场景描述、分镜动作和一段精炼的视频提示词。使用清晰的小标题。',
-        messages: [{ role: 'user', content: scriptPrompt.trim() }],
-        webSearch: false,
-      })
-      setScript(result.content || '')
-      setImagePrompt((current) => current || result.content || '')
-      setVideoPrompt((current) => current || result.content || '')
-    } catch (error) { setScript(`生成失败：${error.message}`) } finally { setScriptLoading(false) }
+      const next = await Promise.all(valid.map(async (file) => {
+        const prepared = await compressImageForUpload(file)
+        return { name: prepared.name, src: await fileToDataUrl(prepared) }
+      }))
+      setReferences((current) => [...current, ...next].slice(0, 4)); setError('')
+    } catch (uploadError) { setError(uploadError.message || '图片读取失败') }
   }
 
-  async function createImages() {
-    if (!imagePrompt.trim() || imageLoading) return
-    setImageLoading(true); setImageError('')
+  async function submit() {
+    if (!prompt.trim() || submitting) return
+    const request = { prompt: prompt.trim(), model, resolution, duration, aspectRatio, references: [...references] }
+    const optimistic = { id: `local-${Date.now()}`, prompt: request.prompt, model, resolution, durationSeconds: duration, aspectRatio, referenceImages: request.references.map((item) => item.src), status: 'PENDING', createdAt: Date.now() }
+    setTasks((current) => [optimistic, ...current]); setSubmitting(true); setError(''); setPrompt(''); setReferences([])
     try {
-      const result = await generateImage({ prompt: imagePrompt.trim(), images: imageReferences.map((item) => item.src), aspectRatio, model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION })
-      setImageUrls(result.urls || [])
-    } catch (error) { setImageUrls([]); setImageError(`图片生成失败：${error.message}`) } finally { setImageLoading(false) }
+      const uploaded = await Promise.all(request.references.map(async (reference) => (await uploadVideoReference({ source: reference.src })).url))
+      const created = await createVideoTask({ model: request.model, prompt: request.prompt, resolution: request.resolution, durationSeconds: request.duration, aspectRatio: request.aspectRatio, referenceImageUrls: uploaded })
+      setTasks((current) => current.map((task) => task.id === optimistic.id ? { ...optimistic, id: created.taskId, status: created.status || 'PENDING', referenceImages: uploaded } : task))
+    } catch (requestError) {
+      setTasks((current) => current.map((task) => task.id === optimistic.id ? { ...task, status: 'FAILED', error: requestError.message } : task))
+    } finally { setSubmitting(false) }
   }
 
-  async function submitVideo() {
-    const prompt = videoPrompt.trim()
-    if (!prompt || ['PENDING', 'RUNNING'].includes(task.status)) return
-    setTask({ status: 'submitting', id: '', url: '', error: '' })
-    try {
-      const uploaded = await Promise.all(videoReferences.map(async (reference) => (await uploadVideoReference({ source: reference.src })).url))
-      const created = await createVideoTask({ model, prompt, durationSeconds: duration, resolution, aspectRatio, referenceImageUrls: uploaded })
-      setTask({ status: created.status || 'PENDING', id: created.taskId, url: '', error: '' })
-    } catch (error) { setTask({ status: 'FAILED', id: '', url: '', error: error.message || '视频任务提交失败' }) }
+  function reorderReferences(from, to) {
+    setReferences((current) => { const next = [...current]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); return next })
   }
 
-  function ReferenceRow({ items, setItems, inputRef, label }) {
-    return <div className="video-studio-references"><span>{label}</span>{items.map((item, index) => <figure key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (!Number.isInteger(from) || from === index) return; setItems((current) => { const next = [...current]; const [moved] = next.splice(from, 1); next.splice(index, 0, moved); return next }) }}><img src={item.src} alt=""/><button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考图">×</button></figure>)}<button type="button" className="video-studio-add-reference" onClick={() => inputRef.current?.click()} aria-label="添加参考图"><Icon name="plus" size={16}/></button><input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void addReferences(event.target.files, setItems); event.target.value = '' }}/></div>
-  }
-
-  return <section className="video-studio workspace">
-    <header className="video-studio-heading"><span>VIDEO CREATION</span><h1>视频生成</h1><p>从灵感、画面到成片，按顺序完成三个创作步骤。</p></header>
-    <div className="video-studio-flow" aria-label="视频创作流程">
-      <article className="video-studio-card"><div className="video-studio-card-title"><span><Icon name="spark" size={17}/></span><div><b>视频脚本</b><small>GPT-6 Astra</small></div></div><textarea value={scriptPrompt} onChange={(event) => setScriptPrompt(event.target.value)} placeholder="写下一句灵感，例如：雨夜里一只蝴蝶飞进城市…"/><button type="button" className="video-studio-primary" onClick={createScript} disabled={!scriptPrompt.trim() || scriptLoading}>{scriptLoading ? '正在编写…' : '生成脚本'}</button>{script && <div className="video-studio-output">{script}</div>}</article>
-      <article className="video-studio-card"><div className="video-studio-card-title"><span className="image"><Icon name="image" size={17}/></span><div><b>图片生成</b><small>GPT Image 2.5 Sunburst · 2K</small></div></div><textarea value={imagePrompt} onChange={(event) => setImagePrompt(event.target.value)} placeholder="描述需要生成的角色或场景"/><ReferenceRow items={imageReferences} setItems={setImageReferences} inputRef={scriptFileRef} label="参考图"/><button type="button" className="video-studio-primary" onClick={createImages} disabled={!imagePrompt.trim() || imageLoading}>{imageLoading ? '正在生成…' : '生成图片'}</button>{imageError && <p className="video-studio-error">{imageError}</p>}{imageUrls.length > 0 && <div className="video-studio-images">{imageUrls.map((url) => <button type="button" key={url} onClick={() => setVideoReferences((current) => current.some((item) => item.src === url) ? current : [...current, { name: '生成图片', src: url }].slice(0, 4))}><img src={url} alt="生成图片"/></button>)}</div>}</article>
-      <article className="video-studio-card"><div className="video-studio-card-title"><span className="video"><Icon name="video" size={17}/></span><div><b>视频生成</b><small>Vibbit Seedance</small></div></div><textarea value={videoPrompt} onChange={(event) => setVideoPrompt(event.target.value)} placeholder="描述视频的主体、动作、镜头和氛围"/><ReferenceRow items={videoReferences} setItems={setVideoReferences} inputRef={videoFileRef} label="参考图"/><div className="video-studio-controls"><select value={model} onChange={(event) => setModel(event.target.value)}>{VIDEO_MODELS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select><select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>{['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map((item) => <option key={item}>{item}</option>)}</select><select value={resolution} onChange={(event) => setResolution(event.target.value)}>{selectedModel.resolutions.map((item) => <option key={item}>{item}</option>)}</select><select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[4, 8, 12, 15, 20, 30].filter((item) => item <= selectedModel.maximum).map((item) => <option value={item} key={item}>{item}秒</option>)}</select></div><button type="button" className="video-studio-primary video" onClick={submitVideo} disabled={!videoPrompt.trim() || ['submitting', 'PENDING', 'RUNNING'].includes(task.status)}>{task.status === 'submitting' ? '正在提交…' : ['PENDING', 'RUNNING'].includes(task.status) ? '正在生成…' : '生成视频'}</button>{task.status !== 'idle' && <p className={task.status === 'FAILED' ? 'video-studio-error' : 'video-studio-status'}>{task.error || statusText(task.status)}</p>}{task.url && <video controls src={task.url}/>}</article>
+  return <section className="workspace video-waterfall-workspace">
+    <div className="video-waterfall-results">
+      {loadingTasks ? <div className="waterfall-initial-loading" aria-label="加载视频任务"><i/><i/><i/></div> : tasks.length === 0 ? <div className="waterfall-empty"><b>开始你的第一段视频创作</b><span>输入提示词并添加参考图，生成任务会显示在这里。</span></div> : <div className="video-waterfall-list">{tasks.map((task) => <article className="video-waterfall-task" key={task.id}><header><div className="video-waterfall-task-info"><b>{task.prompt}</b><small>{task.model ? `${MODELS.find((item) => item.value === task.model)?.label || task.model} · ${task.aspectRatio} · ${task.resolution} · ${task.durationSeconds}秒` : '正在提交任务'}</small></div><span className={task.status === 'FAILED' ? 'failed' : ACTIVE.has(task.status) ? 'running' : ''}>{taskStatus(task)}</span></header>{task.referenceImages?.length > 0 && <div className="video-waterfall-references">{task.referenceImages.map((url, index) => <img src={url} alt={`参考图 ${index + 1}`} key={`${url}-${index}`}/>)}</div>}{ACTIVE.has(task.status) && <div className="video-waterfall-pending"><div className="bubble-loader" aria-label="视频生成中"><i/><i/><i/></div></div>}{task.videoUrl && <video controls src={task.videoUrl}/>}</article>)}</div>}
     </div>
+    <div className="waterfall-composer-wrap">
+      <div className="composer waterfall-composer glass-strong"><div className="video-waterfall-composer-title"><Icon name="video" size={16}/><b>视频生成</b></div>{references.length > 0 && <div className="reference-strip sortable-reference-strip" aria-label="视频参考图，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview"><img src={item.src} alt="参考图"/></button><span className="reference-order">{index + 1}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考图"><Icon name="x" size={13}/></button></div>)}</div>}<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder="描述你想生成的视频…" rows="2"/><div className="composer-tools"><div className="tool-group"><button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= 4}><Icon name="plus" size={18}/></button><input ref={fileRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void appendReferences(event.target.files); event.target.value = '' }}/><select className="image-model-select video-model-select" value={model} onChange={(event) => setModel(event.target.value)}>{MODELS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><select className="image-model-select" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>{['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map((item) => <option key={item}>{item}</option>)}</select><select className="image-model-select" value={resolution} onChange={(event) => setResolution(event.target.value)}>{selectedModel.resolutions.map((item) => <option key={item}>{item}</option>)}</select><select className="image-model-select" value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[4, 8, 12, 15, 20, 30].filter((item) => item <= selectedModel.maximum).map((item) => <option key={item} value={item}>{item}秒</option>)}</select></div><button className="send-button" type="button" onClick={() => void submit()} disabled={!prompt.trim() || submitting} aria-label="生成视频"><Icon name="arrowUp" size={18}/></button></div></div>{error && <small className="composer-note error">{error}</small>}</div>
   </section>
 }

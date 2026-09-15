@@ -118,6 +118,12 @@ export async function reconnectGoogleDrive() {
 }
 export const uploadVideoReference = (payload) => post('/api/video/references', payload)
 export const createVideoTask = (payload) => post('/api/video/tasks', payload)
+export async function listVideoTasks() {
+  const response = await fetch(apiUrl('/api/video/tasks'), { headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || `加载视频任务失败 (${response.status})`)
+  return data
+}
 export async function getVideoTask(id) {
   const response = await fetch(apiUrl(`/api/video/tasks/${encodeURIComponent(id)}`), { headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
   const data = await response.json().catch(() => ({}))
