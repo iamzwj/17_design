@@ -961,7 +961,7 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
     const sources = webResult.sources
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
     const upstreamRequest = {
-      model: 'gpt-5.6-terra',
+      model: 'gpt-6-astra',
       stream: false,
       messages: [
         ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
@@ -981,7 +981,7 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
-    res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-5.6-terra' })
+    res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-6-astra' })
   } catch (error) {
     next(error)
   }

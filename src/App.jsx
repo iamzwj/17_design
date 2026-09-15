@@ -16,8 +16,8 @@ import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, sup
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
+  { id: 'strategy', label: '新聊天', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
-  { id: 'strategy', label: '文案编撰', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'video', label: '视频生成', caption: '节点式视频工作台', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
@@ -1561,7 +1561,7 @@ function TextStudio({ type, conversation, onSave }) {
             <button className="brand-trigger" type="button" aria-haspopup="menu" aria-expanded={brandOpen} onClick={() => setBrandOpen((open) => !open)}><span>品牌</span><b>{COMPLIANCE_BRANDS.find((item) => item.value === brand)?.label || '通用合规'}</b><Icon name="chevron" size={14}/></button>
             {brandOpen && <div className="brand-menu glass-strong" role="menu" aria-label="选择审核品牌"><div className="brand-menu-title">选择品牌</div><div className="brand-grid">{COMPLIANCE_BRANDS.map((item) => <button key={item.value} type="button" role="menuitem" className={brand === item.value ? 'active' : ''} onClick={() => { setBrand(item.value); setBrandOpen(false) }}><b>{item.label}</b></button>)}</div></div>}
           </div>
-        </div> : <div className="text-tools"><span className="model-chip">GPT-5.6 Terra</span></div>}
+        </div> : <div className="text-tools"><span className="model-chip">GPT-6 Astra</span></div>}
         <button className="send-button" onClick={() => submit()} disabled={(!input.trim() && attachments.length === 0) || loading}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 

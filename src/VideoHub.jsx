@@ -12,7 +12,7 @@ const defaultNodes = []
 const HUB_WORLD_WIDTH = 15_000
 const HUB_WORLD_HEIGHT = 9_000
 const quickStarts = [
-  { type: 'script', title: '故事脚本生成', description: '把一句灵感拆成剧情、角色与场景', tag: 'GPT-5.6 Terra' },
+  { type: 'script', title: '故事脚本生成', description: '把一句灵感拆成剧情、角色与场景', tag: 'GPT-6 Astra' },
   { type: 'image', title: '角色 / 场景生图', description: '生成可连入视频节点的视觉素材', tag: 'Image 2' },
   { type: 'video', title: '全能参考生视频', description: '用文字与参考图生成最终视频', tag: 'SD 2.5' },
 ]
@@ -597,7 +597,7 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
       <div className="hub-canvas-world" style={worldStyle}><div className="hub-canvas-layer" style={layerStyle}>
       <svg className="hub-links" aria-hidden="true">{links.map((link, index) => { const start = portPoint(`${link.from}:${link.output}`); const end = portPoint(`${link.to}:in`); if (!start || !end) return null; return <path key={`${link.from}-${link.to}-${link.output}-${index}`} d={`M ${start.x} ${start.y} C ${start.x + 54} ${start.y}, ${end.x - 54} ${end.y}, ${end.x} ${end.y}`}/> })}{linking && (() => { const start = portPoint(`${linking.from}:${linking.output}`); if (!start) return null; return <path className="draft" d={`M ${start.x} ${start.y} C ${start.x + 54} ${start.y}, ${pointer.x - 54} ${pointer.y}, ${pointer.x} ${pointer.y}`}/> })()}</svg>
       {nodes.map(card)}
-      {nodeMenuPosition && <div className="hub-canvas-menu" style={{ transform: `translate(${nodeMenuPosition.x}px, ${nodeMenuPosition.y}px)` }}><b>添加创作节点</b><button onClick={() => addNode('script', nodeMenuPosition)}>视频脚本 <small>GPT-5.6 Terra</small></button><button onClick={() => addNode('image', nodeMenuPosition)}>图片生成 <small>Image 2</small></button><button onClick={() => addNode('video', nodeMenuPosition)}>视频生成 <small>Seedance</small></button></div>}
+      {nodeMenuPosition && <div className="hub-canvas-menu" style={{ transform: `translate(${nodeMenuPosition.x}px, ${nodeMenuPosition.y}px)` }}><b>添加创作节点</b><button onClick={() => addNode('script', nodeMenuPosition)}>视频脚本 <small>GPT-6 Astra</small></button><button onClick={() => addNode('image', nodeMenuPosition)}>图片生成 <small>Image 2</small></button><button onClick={() => addNode('video', nodeMenuPosition)}>视频生成 <small>Seedance</small></button></div>}
       </div></div>
       {nodes.length === 0 && <div className="hub-empty-start"><p><Icon name="spark" size={17}/> 选择一个节点，开始创建</p><div className="hub-quick-starts">{quickStarts.map((item) => <button type="button" title={item.description} className={`hub-quick-start hub-quick-${item.type}`} key={item.type} onClick={() => addNode(item.type)}><span><Icon name={nodeTitles[item.type][1]} size={19}/></span><b>{item.title}</b></button>)}</div><small>双击画布也可以添加节点</small></div>}
       <div className="hub-bottom-tools">{[['script', '文案'], ['image', '图片'], ['video', '视频']].map(([type, label]) => <button type="button" className={`hub-node-shortcut hub-node-shortcut-${type}`} key={type} onClick={() => addNode(type)}><Icon name="plus" size={15}/><span>{label}</span></button>)}</div>
