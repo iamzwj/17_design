@@ -1072,7 +1072,6 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       input.aspect_ratio = 'adaptive'
     }
     if (referenceMode === 'reference') {
-      if (!referenceImageUrls.length && !referenceVideoUrls.length) return res.status(400).json({ error: '请至少添加一项参考素材' })
       if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
       if (referenceVideoUrls.length) input.reference_video_urls = referenceVideoUrls
     }

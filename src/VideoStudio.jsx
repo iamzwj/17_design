@@ -78,7 +78,7 @@ export default function VideoStudio() {
   const [prompt, setPrompt] = useState('')
   const [references, setReferences] = useState([])
   const [model, setModel] = useState(MODELS[0].value)
-  const [referenceMode, setReferenceMode] = useState('text')
+  const [referenceMode, setReferenceMode] = useState('reference')
   const [resolution, setResolution] = useState('720p')
   const [duration, setDuration] = useState(4)
   const [aspectRatio, setAspectRatio] = useState('16:9')
@@ -107,7 +107,7 @@ export default function VideoStudio() {
   }, [])
 
   useEffect(() => {
-    if (referenceMode !== 'text' && !modes.includes(referenceMode)) { setReferenceMode('text'); setReferences([]) }
+    if (!modes.includes(referenceMode)) { setReferenceMode('reference'); setReferences([]) }
     if (!selectedModel.resolutions.includes(resolution)) setResolution(selectedModel.resolutions.includes('720p') ? '720p' : selectedModel.resolutions[0])
     if (!aspectRatios.some((item) => item.value === aspectRatio)) setAspectRatio(aspectRatios[0].value)
     if (duration < durationMin) setDuration(durationMin)
@@ -162,7 +162,7 @@ export default function VideoStudio() {
     } catch (uploadError) { setError(uploadError.message || '视频读取失败') }
   }
 
-  function selectMode(nextMode) { setReferenceMode((current) => current === nextMode ? 'text' : nextMode); setReferences([]); setError('') }
+  function selectMode(nextMode) { setReferenceMode(nextMode); setReferences([]); setError('') }
 
   function scrollToLatestTask() {
     window.requestAnimationFrame(() => {
@@ -175,7 +175,6 @@ export default function VideoStudio() {
     if (referenceMode === 'image' && images.length !== 1) { setError('请添加一张首帧图片'); return }
     if (referenceMode === 'frames' && !images.length) { setError('请至少添加一张首帧图片'); return }
     if (['edit', 'extend'].includes(referenceMode) && !videos.length) { setError('视频编辑和视频延长都需要上传一段源视频'); return }
-    if (referenceMode === 'reference' && !references.length) { setError('请至少添加一项参考素材，或切换为纯文本'); return }
     const request = { prompt: prompt.trim(), model, resolution, duration, aspectRatio: locksAspectRatio ? 'adaptive' : aspectRatio, referenceMode, references: [...references] }
     const optimistic = { id: `local-${Date.now()}`, prompt: request.prompt, model, resolution, durationSeconds: request.duration, aspectRatio: request.aspectRatio, referenceMode, referenceImages: images.map((item) => item.src), referenceVideos: videos.map((item) => item.src), status: 'PENDING', createdAt: Date.now() }
     setTasks((current) => [...current, optimistic]); scrollToLatestTask(); setSubmitting(true); setError(''); setPrompt(''); setReferences([])
@@ -186,7 +185,7 @@ export default function VideoStudio() {
       const payload = { model: request.model, prompt: request.prompt, resolution: request.resolution, durationSeconds: request.duration, aspectRatio: request.aspectRatio, referenceMode: request.referenceMode, referenceImageUrls: uploadedImages, referenceVideoUrls: uploadedVideos }
       if (request.referenceMode === 'image') payload.imageUrl = uploadedImages[0]
       if (request.referenceMode === 'frames') { payload.firstFrameImageUrl = uploadedImages[0]; payload.lastFrameImageUrl = uploadedImages[1] }
-      if (['reference', 'edit', 'extend'].includes(request.referenceMode) && selectedModel.seedance25) payload.omniReferenceTaskType = request.referenceMode === 'reference' ? 'reference' : request.referenceMode
+      if (selectedModel.seedance25 && (request.referenceMode !== 'reference' || request.references.length)) payload.omniReferenceTaskType = request.referenceMode === 'reference' ? 'reference' : request.referenceMode
       const created = await createVideoTask(payload)
       setTasks((current) => current.map((task) => task.id === optimistic.id ? { ...optimistic, id: created.taskId, status: created.status || 'PENDING', referenceImages: uploadedImages, referenceVideos: uploadedVideos, videoUrl: created.videoUrl || '', error: created.error || '' } : task))
     } catch (requestError) {
