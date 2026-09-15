@@ -36,6 +36,7 @@ const RATIO_OPTIONS = [
   { value: '16:9', label: '16:9' },
   { value: '21:9', label: '21:9' },
 ]
+const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 
 const MODULE_COPY = {
   strategy: {
@@ -105,7 +106,7 @@ async function automaticReferenceAspect(source, prompt) {
   })
 }
 
-function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = 'auto', count = 2, model = DEFAULT_IMAGE_MODEL, resolution = DEFAULT_IMAGE_RESOLUTION, resolvedAspectRatio, clientRequestId }) {
+function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model = DEFAULT_IMAGE_MODEL, resolution = DEFAULT_IMAGE_RESOLUTION, resolvedAspectRatio, clientRequestId }) {
   const now = new Date().toISOString()
   return {
     id: clientRequestId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -656,7 +657,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   const restoredEditImage = conversation && Object.hasOwn(conversation, 'editImage') ? conversation.editImage : lastGeneratedImage
   const [messages, setMessages] = useState(conversation?.messages || [])
   const [prompt, setPrompt] = useState('')
-  const [ratio, setRatio] = useState(conversation?.ratio || 'auto')
+  const [ratio, setRatio] = useState(conversation?.ratio || DEFAULT_IMAGE_ASPECT_RATIO)
   const [model, setModel] = useState(conversation?.imageModel || DEFAULT_IMAGE_MODEL)
   const [resolution, setResolution] = useState(() => imageResolutionForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageResolution || DEFAULT_IMAGE_RESOLUTION))
   const [references, setReferences] = useState([])
@@ -816,7 +817,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   // batches as the user scrolls upward.
   const [visibleLimit, setVisibleLimit] = useState(20)
   const [prompt, setPrompt] = useState('')
-  const [ratio, setRatio] = useState('auto')
+  const [ratio, setRatio] = useState(DEFAULT_IMAGE_ASPECT_RATIO)
   const [model, setModel] = useState(DEFAULT_IMAGE_MODEL)
   const [resolution, setResolution] = useState(DEFAULT_IMAGE_RESOLUTION)
   const [count, setCount] = useState(2)

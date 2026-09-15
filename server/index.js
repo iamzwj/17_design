@@ -66,6 +66,7 @@ const vipImageSizes = {
 const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
+const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 
 function upstreamImageModel(model) {
   return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
@@ -975,7 +976,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0
   try {
-    const { prompt, images = [], aspectRatio = 'auto', model, resolution } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution } = req.body
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt 不能为空' })
     }
@@ -1156,7 +1157,7 @@ app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
 
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { prompt, images = [], aspectRatio = 'auto', count = 2, model, resolution, clientRequestId } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, clientRequestId } = req.body
     const requestedCount = Number(count)
     if (!prompt || typeof prompt !== 'string') return res.status(400).json({ error: '提示词不能为空' })
     if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })

@@ -7,6 +7,7 @@ const SIZES = {
 }
 const IMAGE_MODELS = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
 const IMAGE_RESOLUTIONS = new Set(['1k', '2k', '4k'])
+const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 const VIP_SIZES = {
   '1k': SIZES,
   '2k': {
@@ -1179,7 +1180,7 @@ async function refreshTask(env, task, ctx) {
 }
 
 async function generateImage(request, env, user) {
-  const { prompt, images = [], aspectRatio = 'auto', model, resolution } = await request.json()
+  const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution } = await request.json()
   if (!prompt || typeof prompt !== 'string') throw new Error('prompt 不能为空')
   if (!Array.isArray(images) || images.length > 4) throw new Error('参考图最多 4 张')
   const settings = imageModelSettings(model, resolution)
@@ -1327,7 +1328,7 @@ async function submitPendingWaterfallSlots(env, taskId) {
 }
 
 async function createTask(request, env, user, ctx) {
-  const { prompt, images = [], aspectRatio = 'auto', count = 2, model, resolution, clientRequestId } = await request.json()
+  const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, clientRequestId } = await request.json()
   const imageCount = Number(count)
   if (!prompt || typeof prompt !== 'string') throw new Error('提示词不能为空')
   if (!Array.isArray(images) || images.length > 9) throw new Error('参考图最多 9 张')
