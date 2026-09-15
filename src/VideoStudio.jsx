@@ -31,9 +31,9 @@ function taskStatus(task) {
 }
 
 function availableModes(model) {
-  if (model.minimax) return ['text', 'image', 'reference']
-  if (model.seedance25) return ['text', 'image', 'frames', 'reference', 'edit', 'extend']
-  return ['text', 'image', 'frames', 'reference']
+  if (model.minimax) return ['reference']
+  if (model.seedance25) return ['frames', 'reference', 'edit', 'extend']
+  return ['frames', 'reference']
 }
 
 function mediaLimit(model, mode, kind) {
@@ -80,7 +80,7 @@ export default function VideoStudio() {
   }, [])
 
   useEffect(() => {
-    if (!modes.includes(referenceMode)) { setReferenceMode('text'); setReferences([]) }
+    if (referenceMode !== 'text' && !modes.includes(referenceMode)) { setReferenceMode('text'); setReferences([]) }
     if (!selectedModel.resolutions.includes(resolution)) setResolution(selectedModel.resolutions.includes('720p') ? '720p' : selectedModel.resolutions[0])
     if (!aspectRatios.some((item) => item.value === aspectRatio)) setAspectRatio(aspectRatios[0].value)
     if (duration > selectedModel.maximum) setDuration(selectedModel.maximum)
@@ -128,7 +128,7 @@ export default function VideoStudio() {
     } catch (uploadError) { setError(uploadError.message || '视频读取失败') }
   }
 
-  function selectMode(nextMode) { setReferenceMode(nextMode); setReferences([]); setError('') }
+  function selectMode(nextMode) { setReferenceMode((current) => current === nextMode ? 'text' : nextMode); setReferences([]); setError('') }
 
   async function submit() {
     if (!prompt.trim() || submitting) return
@@ -165,10 +165,9 @@ export default function VideoStudio() {
       {loadingTasks ? <div className="waterfall-initial-loading" aria-label="加载视频任务"><i/><i/><i/></div> : tasks.length === 0 ? <div className="waterfall-empty"><b>开始你的第一段视频创作</b><span>选择参考方式，添加素材后生成任务会显示在这里。</span></div> : <div className="video-waterfall-list">{tasks.map((task) => <article className="video-waterfall-task" key={task.id}><header><div className="video-waterfall-task-info"><b>{task.prompt}</b><small>{task.model ? `${MODELS.find((item) => item.value === task.model)?.label || task.model} · ${REFERENCE_MODES[task.referenceMode]?.label || '纯文本'} · ${task.aspectRatio} · ${task.resolution} · ${task.durationSeconds === -1 ? '自动时长' : `${task.durationSeconds}秒`}` : '正在提交任务'}</small></div><span className={task.status === 'FAILED' ? 'failed' : ACTIVE.has(task.status) ? 'running' : ''}>{taskStatus(task)}</span></header>{(task.referenceImages?.length > 0 || task.referenceVideos?.length > 0) && <div className="video-waterfall-references">{task.referenceImages?.map((url, index) => <img src={url} alt={`参考图 ${index + 1}`} key={`${url}-${index}`}/>)}{task.referenceVideos?.map((url, index) => <video muted preload="metadata" src={url} aria-label={`参考视频 ${index + 1}`} key={`${url}-${index}`}/>)}</div>}{ACTIVE.has(task.status) && <div className="video-waterfall-pending"><div className="bubble-loader" aria-label="视频生成中"><i/><i/><i/></div></div>}{task.videoUrl && <video controls src={task.videoUrl}/>}</article>)}</div>}
     </div>
     <div className="waterfall-composer-wrap">
+      {modes.length > 0 && <div className="reference-mode-picker" aria-label="参考方式">{modes.map((mode) => <button type="button" key={mode} className={referenceMode === mode ? 'selected' : ''} onClick={() => selectMode(mode)}>{REFERENCE_MODES[mode].label}</button>)}</div>}
       <div className="composer waterfall-composer glass-strong">
         <div className="video-waterfall-composer-title"><Icon name="video" size={16}/><b>视频生成</b></div>
-        <div className="reference-mode-picker" aria-label="参考方式">{modes.map((mode) => <button type="button" key={mode} className={referenceMode === mode ? 'selected' : ''} onClick={() => selectMode(mode)}><b>{REFERENCE_MODES[mode].label}</b><small>{REFERENCE_MODES[mode].hint}</small></button>)}</div>
-        {referenceMode !== 'text' && <div className="reference-mode-help">{referenceMode === 'frames' ? '第一张是首帧，第二张可作为尾帧；输出画幅会跟随首帧。' : referenceMode === 'edit' ? '上传 4–30 秒源视频。编辑会保持原视频的时长和画幅。' : referenceMode === 'extend' ? '上传源视频，提示词说明“向前”或“向后”延长的内容。' : referenceMode === 'reference' ? '素材顺序会一并提交。用提示词写明“图片 1”“视频 1”分别要参考什么。' : '上传一张图片作为首帧，描述后续动作、镜头和场景。'}</div>}
         {references.length > 0 && <div className="reference-strip sortable-reference-strip video-reference-strip" aria-label="视频参考素材，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview">{item.kind === 'video' ? <video muted preload="metadata" src={item.src}/> : <img src={item.src} alt="参考图"/>}</button><span className="reference-order">{referenceLabel(referenceMode, item, index)}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考素材"><Icon name="x" size={13}/></button></div>)}</div>}
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder={referenceMode === 'edit' ? '描述要怎样编辑源视频，例如：将背景换成雨夜，同时保留人物动作和运镜…' : referenceMode === 'extend' ? '描述接下来的视频内容，例如：从视频 1 的结尾继续，人物走进车站…' : '描述你想生成的视频…'} rows="2"/>
         <div className="composer-tools"><div className="tool-group">{mediaLimit(selectedModel, referenceMode, 'image') > images.length && <><button className="tool-button reference-add" type="button" onClick={() => imageRef.current?.click()} aria-label="添加图片参考"><Icon name="image" size={17}/></button><input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void appendImages(event.target.files); event.target.value = '' }}/></>}{mediaLimit(selectedModel, referenceMode, 'video') > videos.length && <><button className="tool-button reference-add video-reference-add" type="button" onClick={() => videoRef.current?.click()} aria-label="添加视频参考"><Icon name="video" size={17}/></button><input ref={videoRef} hidden type="file" accept="video/mp4,video/quicktime,video/webm" multiple onChange={(event) => { void appendVideos(event.target.files); event.target.value = '' }}/></>}<select className="image-model-select video-model-select" value={model} onChange={(event) => setModel(event.target.value)}>{MODELS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>{locksAspectRatio ? <span className="video-locked-setting">自适应画幅</span> : <select className="image-model-select" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>{aspectRatios.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>}<select className="image-model-select" value={resolution} onChange={(event) => setResolution(event.target.value)}>{selectedModel.resolutions.map((item) => <option key={item}>{item}</option>)}</select>{locksDuration ? <span className="video-locked-setting">自动时长</span> : <select className="image-model-select" value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{durationOptions.map((item) => <option key={item} value={item}>{item === -1 ? '自动时长' : `${item}秒`}</option>)}</select>}</div><button className="send-button" type="button" onClick={() => void submit()} disabled={!prompt.trim() || submitting} aria-label="生成视频"><Icon name="arrowUp" size={18}/></button></div>
