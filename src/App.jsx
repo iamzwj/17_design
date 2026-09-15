@@ -39,10 +39,10 @@ const RATIO_OPTIONS = [
 
 const MODULE_COPY = {
   strategy: {
-    eyebrow: 'AI STRATEGY',
-    title: '一起把想法，变成清晰的策略。',
-    subtitle: '输入你的目标、背景与限制，AI 会与你逐步梳理洞察、定位和执行方案。',
-    placeholder: '告诉我你正在解决的问题，例如：为新品制定一份小红书上市策略…',
+    eyebrow: 'NEW CHAT',
+    title: '有什么可以帮你的吗？',
+    subtitle: '告诉我你的想法、任务或问题，我会帮你梳理并完成它。',
+    placeholder: '告诉我你想做什么…',
   },
   compliance: {
     eyebrow: 'COMPLIANCE REVIEW',
