@@ -12,7 +12,7 @@ import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import VideoHub from './VideoHub.jsx'
 import ImagePreview from './ImagePreview.jsx'
-import { IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
@@ -105,7 +105,7 @@ async function automaticReferenceAspect(source, prompt) {
   })
 }
 
-function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = 'auto', count = 2, model = VIP_IMAGE_MODEL, resolution = '2k', resolvedAspectRatio, clientRequestId }) {
+function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = 'auto', count = 2, model = DEFAULT_IMAGE_MODEL, resolution = DEFAULT_IMAGE_RESOLUTION, resolvedAspectRatio, clientRequestId }) {
   const now = new Date().toISOString()
   return {
     id: clientRequestId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -673,8 +673,8 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   const [messages, setMessages] = useState(conversation?.messages || [])
   const [prompt, setPrompt] = useState('')
   const [ratio, setRatio] = useState(conversation?.ratio || 'auto')
-  const [model, setModel] = useState(conversation?.imageModel || VIP_IMAGE_MODEL)
-  const [resolution, setResolution] = useState(() => imageResolutionForModel(conversation?.imageModel || VIP_IMAGE_MODEL, conversation?.imageResolution))
+  const [model, setModel] = useState(conversation?.imageModel || DEFAULT_IMAGE_MODEL)
+  const [resolution, setResolution] = useState(() => imageResolutionForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageResolution || DEFAULT_IMAGE_RESOLUTION))
   const [references, setReferences] = useState([])
   const [editImage, setEditImage] = useState(restoredEditImage)
   const [previewImage, setPreviewImage] = useState(null)
@@ -701,7 +701,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     setMessages(conversation.messages || [])
     setLoading(conversation.status === 'running')
     setRunningStartedAt(conversation.runningStartedAt || null)
-    const nextModel = conversation.imageModel || VIP_IMAGE_MODEL
+    const nextModel = conversation.imageModel || DEFAULT_IMAGE_MODEL
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, conversation.imageResolution))
     if (Object.hasOwn(conversation, 'editImage')) setEditImage(conversation.editImage)
@@ -833,8 +833,8 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const [visibleLimit, setVisibleLimit] = useState(20)
   const [prompt, setPrompt] = useState('')
   const [ratio, setRatio] = useState('auto')
-  const [model, setModel] = useState(VIP_IMAGE_MODEL)
-  const [resolution, setResolution] = useState('2k')
+  const [model, setModel] = useState(DEFAULT_IMAGE_MODEL)
+  const [resolution, setResolution] = useState(DEFAULT_IMAGE_RESOLUTION)
   const [count, setCount] = useState(2)
   const [references, setReferences] = useState([])
   const [ratioOpen, setRatioOpen] = useState(false)
@@ -1063,7 +1063,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   function editTask(task) {
     setPrompt(task.prompt || '')
     setRatio(task.aspectRatio || 'auto')
-    const nextModel = task.model || VIP_IMAGE_MODEL
+    const nextModel = task.model || DEFAULT_IMAGE_MODEL
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, task.resolution))
     setCount(task.count || 2)
@@ -1079,8 +1079,8 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
       images: (task.referenceImages || []).map(waterfallReferenceForRequest),
       aspectRatio: task.aspectRatio || 'auto',
       count: task.count || 2,
-      model: task.model || VIP_IMAGE_MODEL,
-      resolution: imageResolutionForModel(task.model || VIP_IMAGE_MODEL, task.resolution),
+      model: task.model || DEFAULT_IMAGE_MODEL,
+      resolution: imageResolutionForModel(task.model || DEFAULT_IMAGE_MODEL, task.resolution || DEFAULT_IMAGE_RESOLUTION),
     }
     const optimisticTask = createOptimisticWaterfallTask({ ...request, resolvedAspectRatio: task.resolvedAspectRatio })
     setError(''); setInitialLoading(false)

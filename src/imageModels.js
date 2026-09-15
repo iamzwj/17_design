@@ -1,5 +1,7 @@
 export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
+export const DEFAULT_IMAGE_RESOLUTION = '2k'
 
 export function supportsImageResolution(model) {
   return [VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)

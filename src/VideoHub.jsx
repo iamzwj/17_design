@@ -3,7 +3,7 @@ import { createVideoTask, generateImage, generateText, getVideoTask, uploadGoogl
 import { Icon } from './icons.jsx'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 import ImagePreview from './ImagePreview.jsx'
-import { IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_MODEL, VIP_IMAGE_RESOLUTION_OPTIONS, imageResolutionForModel } from './imageModels.js'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageResolutionForModel } from './imageModels.js'
 
 const SCRIPT_PROMPT = `你是影视分镜与提示词策划师。根据用户给出的原文，输出严格 JSON（不要 Markdown、不要解释）：{"script":"详细剧情，按镜头写明人物动作、场景、氛围、景别、运镜和时长建议","characters":"提取每个角色，并给出可直接用于生图的外貌、服饰、年龄气质、表情与动作提示词","scenes":"提取场景，并给出可直接用于生图/生视频的空间、时间、光线、风格和镜头提示词"}。使用中文，描述具体、有电影感。`
 
@@ -131,8 +131,8 @@ function VideoHub({ floatingSidebar = false, conversation, onSave, createHistory
   const [imageResultPrompt, setImageResultPrompt] = useState(savedHub.imageResultPrompt || '')
   const [imageLoading, setImageLoading] = useState(false)
   const [imageAspectRatio, setImageAspectRatio] = useState(savedHub.imageAspectRatio || '16:9')
-  const [imageModel, setImageModel] = useState(savedHub.imageModel || VIP_IMAGE_MODEL)
-  const [imageResolution, setImageResolution] = useState(() => imageResolutionForModel(savedHub.imageModel || VIP_IMAGE_MODEL, savedHub.imageResolution))
+  const [imageModel, setImageModel] = useState(savedHub.imageModel || DEFAULT_IMAGE_MODEL)
+  const [imageResolution, setImageResolution] = useState(() => imageResolutionForModel(savedHub.imageModel || DEFAULT_IMAGE_MODEL, savedHub.imageResolution || DEFAULT_IMAGE_RESOLUTION))
   const [imageResultAspect, setImageResultAspect] = useState(null)
   const [previewImage, setPreviewImage] = useState(null)
   const [videoPrompt, setVideoPrompt] = useState(savedHub.videoPrompt || '')

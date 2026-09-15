@@ -72,7 +72,7 @@ function upstreamImageModel(model) {
 }
 
 function imageModelSettings(model, resolution) {
-  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2-vip'))
+  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5-sunburst'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
   if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
   const selectedResolution = String(resolution || '2k').toLowerCase()
@@ -698,10 +698,10 @@ async function runWaterfallTask(task, images) {
   try {
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
-      model: task.model || 'gpt-image-2-vip',
+      model: task.model || 'gpt-image-2.5-sunburst',
       prompt: task.prompt,
       images: upstreamImages,
-      aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2-vip', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
+      aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5-sunburst', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
     }
     await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
   } catch (error) {
