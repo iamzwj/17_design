@@ -305,6 +305,32 @@ function saveWaterfallTasks() {
   fs.writeFileSync(waterfallStoreFile, JSON.stringify(waterfallTasks.slice(0, 300), null, 2))
 }
 
+async function createWaterfallThumbnail(sourcePath, thumbnailPath) {
+  await sharp(sourcePath, { failOn: 'none' }).rotate().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 78 }).toFile(thumbnailPath)
+}
+
+async function backfillWaterfallThumbnails() {
+  for (const task of waterfallTasks) {
+    for (const slot of task.slots || []) {
+      if (slot.thumbnailUrl || !String(slot.url || '').startsWith('/api/waterfall/assets/')) continue
+      const fileName = path.basename(slot.url)
+      if (!fileName || fileName !== path.basename(fileName)) continue
+      const sourcePath = path.join(waterfallAssetsDir, fileName)
+      const thumbnailPath = path.join(waterfallAssetsDir, `${fileName}.thumb.webp`)
+      try {
+        await fs.promises.access(thumbnailPath)
+      } catch {
+        try {
+          await fs.promises.access(sourcePath)
+          await createWaterfallThumbnail(sourcePath, thumbnailPath)
+        } catch (error) {
+          console.warn('Unable to backfill generated-image thumbnail:', error?.message || error)
+        }
+      }
+    }
+  }
+}
+
 function isExpiredFailedTask(task, now = Date.now()) {
   if (!['failed', 'timeout', 'cancelled'].includes(task.status)) return false
   const completedAt = new Date(task.completedAt || task.updatedAt || task.createdAt).getTime()
@@ -331,6 +357,7 @@ function cleanupExpiredFailedTasks() {
 
 saveWaterfallTasks()
 cleanupExpiredFailedTasks()
+setImmediate(() => { void backfillWaterfallThumbnails() })
 setInterval(cleanupExpiredFailedTasks, 60_000).unref()
 
 // Video references may be up to 200 MB. They are immediately persisted and
@@ -1138,7 +1165,7 @@ app.get('/api/waterfall/thumbnails/:fileName', async (req, res, next) => {
     try {
       await fs.promises.access(thumbnailPath)
     } catch {
-      await sharp(sourcePath, { failOn: 'none' }).rotate().resize({ width: 640, withoutEnlargement: true }).webp({ quality: 78 }).toFile(thumbnailPath)
+      await createWaterfallThumbnail(sourcePath, thumbnailPath)
     }
     res.set('Cache-Control', 'public, max-age=31536000, immutable')
     res.type('image/webp').sendFile(thumbnailPath)
@@ -1150,7 +1177,7 @@ app.use('/api/waterfall/assets', express.static(waterfallAssetsDir, { fallthroug
 app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
   cleanupExpiredFailedTasks()
   const offset = Math.max(0, Number(req.query.offset) || 0)
-  const limit = Math.min(30, Math.max(20, Number(req.query.limit) || 20))
+  const limit = Math.min(24, Math.max(6, Number(req.query.limit) || 8))
   const ordered = waterfallTasks.filter((task) => task.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   res.json({ tasks: ordered.slice(offset, offset + limit), total: ordered.length, hasMore: offset + limit < ordered.length, user: req.user })
 })

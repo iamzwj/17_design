@@ -135,7 +135,7 @@ export const createWaterfallTask = async (payload) => {
   return { ...data, task: hydrateWaterfallTask(data.task) }
 }
 
-export async function listWaterfallTasks(offset = 0, limit = 12) {
+export async function listWaterfallTasks(offset = 0, limit = 8) {
   const response = await fetch(apiUrl(`/api/waterfall/tasks?offset=${offset}&limit=${limit}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载任务失败 (${response.status})`)

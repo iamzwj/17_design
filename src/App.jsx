@@ -58,6 +58,7 @@ const STORAGE_KEY = 'diefa-conversations-v1'
 const THEME_KEY = 'diefa-display-mode-v1'
 const IMAGE_MODE_KEY = 'diefa-image-mode-v1'
 const WATERFALL_CACHE_PREFIX = 'diefa-waterfall-cache-v1:'
+const WATERFALL_HISTORY_PAGE_SIZE = 8
 const GENERATED_IMAGE_DRAG_TYPE = 'application/x-diefa-generated-image'
 const COMPLIANCE_FILE_EXTENSIONS = /\.(txt|md|csv|json|html|xml|pdf|doc|docx|xlsx|xls|ppt|pptx)$/i
 const MAX_COMPLIANCE_TEXT_LENGTH = 60_000
@@ -259,14 +260,6 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
   const [imageState, setImageState] = useState('loading')
   const previewUrl = waterfallThumbnailUrl(slot.url)
   const thumbnailUrl = waterfallDisplayUrl(slot)
-  useEffect(() => {
-    if (imageState !== 'ready' || !previewUrl || previewUrl === thumbnailUrl) return undefined
-    // Keep list rendering fast: load the 640px image first, then warm the
-    // browser cache for the full-resolution preview in the background.
-    const preview = new Image()
-    preview.src = previewUrl
-    return () => { preview.src = '' }
-  }, [imageState, previewUrl, thumbnailUrl])
   if (imageState === 'failed') return <div className="waterfall-asset-unavailable" role="status"><b>加载失败</b></div>
   return <>
     <button type="button" disabled={imageState !== 'ready'} onClick={() => onPreview({ url: previewUrl, urls, prompt })}>
@@ -815,7 +808,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const [total, setTotal] = useState(0)
   // Start with the latest history, then fetch earlier records in predictable
   // batches as the user scrolls upward.
-  const [visibleLimit, setVisibleLimit] = useState(20)
+  const [visibleLimit, setVisibleLimit] = useState(WATERFALL_HISTORY_PAGE_SIZE)
   const [prompt, setPrompt] = useState('')
   const [ratio, setRatio] = useState(DEFAULT_IMAGE_ASPECT_RATIO)
   const [model, setModel] = useState(DEFAULT_IMAGE_MODEL)
@@ -1105,7 +1098,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     if (top < 24 && scrolledAway.current && tasks.length < total) {
       scrolledAway.current = false
       historyHeight.current = event.currentTarget.scrollHeight
-      setVisibleLimit((current) => Math.min(current + 20, total))
+      setVisibleLimit((current) => Math.min(current + WATERFALL_HISTORY_PAGE_SIZE, total))
     }
   }
 
