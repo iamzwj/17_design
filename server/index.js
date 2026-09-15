@@ -139,8 +139,6 @@ const videoTaskStoreFile = path.join(waterfallDataDir, 'video-tasks.json')
 const avatarDownloadStoreFile = path.join(waterfallDataDir, 'please-day-avatar-downloads.json')
 const waterfallControllers = new Map()
 const FAILED_TASK_TTL = 5 * 60 * 1000
-const VIDEO_TASK_MAX_WAIT_MS = 20 * 60 * 1000
-const VIDEO_TASK_STORE_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_BATCH_IMAGE_BYTES = 12 * 1024 * 1024
 
 function isPrivateAddress(address) {
@@ -282,29 +280,23 @@ function loadWaterfallTasks() {
 
 let waterfallTasks = loadWaterfallTasks()
 
-function saveWaterfallTasks() {
-  fs.writeFileSync(waterfallStoreFile, JSON.stringify(waterfallTasks.slice(0, 300), null, 2))
-}
-
-function loadVideoTasks() {
+function loadVideoTaskRecords() {
   try {
-    const tasks = JSON.parse(fs.readFileSync(videoTaskStoreFile, 'utf8'))
-    if (!Array.isArray(tasks)) return new Map()
-    return new Map(tasks.filter((task) => task?.id && task?.userId && Number.isFinite(task.createdAt)).map((task) => [task.id, task]))
-  } catch { return new Map() }
+    const records = JSON.parse(fs.readFileSync(videoTaskStoreFile, 'utf8'))
+    return Array.isArray(records) ? records.filter((record) => record?.id && record?.userId) : []
+  } catch { return [] }
 }
 
-const videoTasks = loadVideoTasks()
+const videoTasks = new Map(loadVideoTaskRecords().map((record) => [record.id, record]))
 
 function saveVideoTasks() {
-  const minimumCreatedAt = Date.now() - VIDEO_TASK_STORE_TTL_MS
-  const entries = [...videoTasks.values()].filter((task) => task.createdAt >= minimumCreatedAt).slice(-300)
-  fs.writeFileSync(videoTaskStoreFile, JSON.stringify(entries, null, 2), { mode: 0o600 })
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  const records = [...videoTasks.values()].filter((record) => record.createdAt >= cutoff).slice(-300)
+  fs.writeFileSync(videoTaskStoreFile, JSON.stringify(records, null, 2), { mode: 0o600 })
 }
 
-function removeVideoTask(taskId) {
-  videoTasks.delete(taskId)
-  saveVideoTasks()
+function saveWaterfallTasks() {
+  fs.writeFileSync(waterfallStoreFile, JSON.stringify(waterfallTasks.slice(0, 300), null, 2))
 }
 
 function isExpiredFailedTask(task, now = Date.now()) {
@@ -334,7 +326,6 @@ function cleanupExpiredFailedTasks() {
 saveWaterfallTasks()
 cleanupExpiredFailedTasks()
 setInterval(cleanupExpiredFailedTasks, 60_000).unref()
-setInterval(saveVideoTasks, 60 * 60 * 1000).unref()
 
 app.use(express.json({ limit: '50mb' }))
 const { requireAuth, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
@@ -371,81 +362,53 @@ function getApiKey() {
   return key
 }
 
-function getVibbitApiKey() {
-  const key = process.env.VIBBIT_OPENAPI_KEY
-  if (!key) {
-    const error = new Error('服务端尚未配置 VIBBIT_OPENAPI_KEY')
-    error.status = 500
-    throw error
-  }
+function vibbitBaseUrl() {
+  return (process.env.VIBBIT_OPENAPI_BASE_URL || 'https://openapi.vibbit.cn/openapi/v1').replace(/\/$/, '')
+}
+
+function vibbitApiKey() {
+  const key = String(process.env.VIBBIT_OPENAPI_KEY || '').trim()
+  if (!key) throw Object.assign(new Error('服务端尚未配置 VIBBIT_OPENAPI_KEY'), { status: 500 })
   return key
 }
 
-const vibbitApiBase = (process.env.VIBBIT_OPENAPI_BASE_URL || 'https://openapi.vibbit.cn/openapi/v1').replace(/\/$/, '')
-const seedanceModels = new Map([
-  ['doubao-seedance-2-0-260128', { resolutions: ['480p', '720p', '1080p', '4k'], maxDuration: 15 }],
-  ['doubao-seedance-2-5-260628', { resolutions: ['480p', '720p', '1080p'], maxDuration: 30 }],
-])
-const seedanceAspectRatios = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'])
-
-async function vibbitRequest(pathname, options = {}) {
-  const response = await fetch(`${vibbitApiBase}${pathname}`, {
+async function vibbitApi(pathname, options = {}) {
+  const response = await fetch(`${vibbitBaseUrl()}${pathname}`, {
     ...options,
-    headers: { Authorization: `Bearer ${getVibbitApiKey()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+    headers: { Authorization: `Bearer ${vibbitApiKey()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
     signal: AbortSignal.timeout(50_000),
   })
-  const raw = await response.text()
-  let data
-  try { data = JSON.parse(raw) } catch { data = { message: raw } }
-  if (!response.ok || data?.code !== 200) {
-    const error = new Error(data?.message || `Seedance 接口返回 HTTP ${response.status}`)
-    error.status = response.status >= 400 ? response.status : 502
-    throw error
-  }
-  return data.data || {}
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok || body.code !== 200) throw Object.assign(new Error(body.message || `视频服务返回 HTTP ${response.status}`), { status: response.status >= 400 ? response.status : 502 })
+  return body.data || {}
 }
 
-function publicVideoAssetUrl(assetPath) {
-  const publicBase = String(process.env.VIBBIT_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '')
-  if (!publicBase) {
-    const error = new Error('上传参考图需要配置 VIBBIT_PUBLIC_BASE_URL（可被公网访问的本站地址）')
-    error.status = 503
-    throw error
-  }
-  return `${publicBase}${assetPath}`
+function publicVideoUrl(assetPath) {
+  const base = String(process.env.VIBBIT_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '')
+  if (!base) throw Object.assign(new Error('服务端尚未配置 VIBBIT_PUBLIC_BASE_URL'), { status: 500 })
+  return `${base}${assetPath}`
 }
 
-async function persistVideoReference(source) {
+async function saveVideoReference(source) {
   const value = String(source || '')
-  const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/)
-  let mimeType
+  const dataMatch = value.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/i)
   let buffer
-  if (value.startsWith('/api/waterfall/assets/')) {
-    const fileName = path.basename(new URL(value, 'http://localhost').pathname)
-    if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效，请重新上传'), { status: 400 })
-    try {
-      buffer = await fs.promises.readFile(path.join(waterfallAssetsDir, fileName))
-    } catch {
-      throw Object.assign(new Error('参考图已不可用，请重新上传'), { status: 422 })
-    }
-    mimeType = imageMimeFromFileName(fileName)
-  } else if (match) {
-    mimeType = match[1].toLowerCase()
-    buffer = Buffer.from(match[2], 'base64')
+  let extension
+  if (dataMatch) {
+    buffer = Buffer.from(dataMatch[2], 'base64')
+    extension = dataMatch[1].toLowerCase() === 'image/jpeg' ? 'jpg' : dataMatch[1].toLowerCase().split('/')[1]
+  } else if (value.startsWith('/api/waterfall/assets/')) {
+    const fileName = path.basename(value)
+    if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效'), { status: 400 })
+    buffer = await fs.promises.readFile(path.join(waterfallAssetsDir, fileName)).catch(() => null)
+    if (!buffer) throw Object.assign(new Error('参考图已不可用，请重新上传'), { status: 422 })
+    extension = path.extname(fileName).slice(1).toLowerCase()
   } else {
-    let sourceUrl
-    try { sourceUrl = new URL(value) } catch { throw Object.assign(new Error('参考图格式无效'), { status: 400 }) }
-    if (sourceUrl.protocol !== 'https:') throw Object.assign(new Error('参考图地址必须使用 HTTPS'), { status: 400 })
-    const response = await fetch(sourceUrl, { redirect: 'follow' })
-    if (!response.ok) throw Object.assign(new Error('参考图下载失败'), { status: 400 })
-    mimeType = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
-    buffer = Buffer.from(await response.arrayBuffer())
+    throw Object.assign(new Error('请上传 JPG、PNG 或 WebP 参考图'), { status: 400 })
   }
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) throw Object.assign(new Error('参考图仅支持 JPG、PNG 或 WebP'), { status: 400 })
   if (!buffer.length || buffer.length > 30 * 1024 * 1024) throw Object.assign(new Error('参考图必须小于 30MB'), { status: 413 })
-  const extension = mimeType.includes('jpeg') ? 'jpg' : mimeType.includes('webp') ? 'webp' : 'png'
   const fileName = `${randomUUID()}.${extension}`
-  fs.writeFileSync(path.join(videoAssetsDir, fileName), buffer)
+  await fs.promises.writeFile(path.join(videoAssetsDir, fileName), buffer)
   return `/api/video/assets/${fileName}`
 }
 
@@ -1038,44 +1001,30 @@ app.use('/api/video/assets', express.static(videoAssetsDir, { fallthrough: false
 
 app.post('/api/video/references', requireAuth, async (req, res, next) => {
   try {
-    const assetPath = await persistVideoReference(req.body?.source)
-    res.status(201).json({ url: publicVideoAssetUrl(assetPath) })
+    const assetPath = await saveVideoReference(req.body?.source)
+    res.status(201).json({ url: publicVideoUrl(assetPath) })
   } catch (error) { next(error) }
 })
 
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { model, prompt, durationSeconds, resolution, aspectRatio, referenceMode, imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], omniReferenceTaskType } = req.body || {}
-    const modelInfo = seedanceModels.get(model)
-    if (!modelInfo) return res.status(400).json({ error: '仅支持 Seedance 2.0 和 Seedance 2.5' })
+    const { model, prompt, durationSeconds, resolution, aspectRatio, referenceImageUrls = [] } = req.body || {}
+    const modelInfo = {
+      'doubao-seedance-2-0-fast-260128': { resolutions: ['480p', '720p'], maximum: 15 },
+      'doubao-seedance-2-0-260128': { resolutions: ['480p', '720p', '1080p', '4k'], maximum: 15 },
+      'doubao-seedance-2-0-mini-260615': { resolutions: ['480p', '720p'], maximum: 15 },
+      'doubao-seedance-2-5-260628': { resolutions: ['480p', '720p', '1080p'], maximum: 30 },
+    }[model]
+    if (!modelInfo) return res.status(400).json({ error: '不支持的视频模型' })
     if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
     if (!modelInfo.resolutions.includes(resolution)) return res.status(400).json({ error: '该模型不支持所选分辨率' })
-    if (!seedanceAspectRatios.has(aspectRatio)) return res.status(400).json({ error: '画幅参数不支持' })
-    const taskInput = { model, prompt: String(prompt).trim().slice(0, 30_000), duration_seconds: Number(durationSeconds), resolution, aspect_ratio: aspectRatio }
-    const is25 = model.includes('2-5')
-    if (taskInput.duration_seconds !== -1 && (!Number.isInteger(taskInput.duration_seconds) || taskInput.duration_seconds < 4 || taskInput.duration_seconds > modelInfo.maxDuration)) return res.status(400).json({ error: `该模型时长应为 4–${modelInfo.maxDuration} 秒，或自动` })
-    if (referenceMode === 'single' && imageUrl) taskInput.image_url = imageUrl
-    if (referenceMode === 'frames') {
-      if (!firstFrameImageUrl) return res.status(400).json({ error: '首帧模式至少需要一张参考图' })
-      taskInput.first_frame_image_url = firstFrameImageUrl
-      if (lastFrameImageUrl) taskInput.last_frame_image_url = lastFrameImageUrl
-    }
-    if (referenceMode === 'multi') {
-      if (!is25 && referenceImageUrls.length > 9) return res.status(400).json({ error: 'Seedance 2.0 最多支持 9 张参考图' })
-      if (is25 && referenceImageUrls.length > 30) return res.status(400).json({ error: 'Seedance 2.5 最多支持 30 张参考图' })
-      if (referenceImageUrls.length) taskInput.reference_image_urls = referenceImageUrls
-    }
-    if (is25 && omniReferenceTaskType) {
-      if (!['auto', 'reference', 'edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: '2.5 任务类型不支持' })
-      taskInput.omni_reference_task_type = omniReferenceTaskType
-      if (omniReferenceTaskType === 'auto') {
-        if (!taskInput.reference_image_urls?.length) return res.status(400).json({ error: 'auto 模式需要至少一张全模态参考图' })
-        taskInput.duration_seconds = -1
-        taskInput.aspect_ratio = 'adaptive'
-      }
-      if (['edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: '当前工作台仅支持参考图片；2.5 的 edit / extend 还需要参考视频 URL' })
-    }
-    const created = await vibbitRequest('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(taskInput) } }) })
+    if (!['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].includes(aspectRatio)) return res.status(400).json({ error: '画幅参数不支持' })
+    const seconds = Number(durationSeconds)
+    if (!Number.isInteger(seconds) || seconds < 4 || seconds > modelInfo.maximum) return res.status(400).json({ error: `时长应为 4–${modelInfo.maximum} 秒` })
+    if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > (model.includes('2-5') ? 30 : 9)) return res.status(400).json({ error: '参考图数量超出该模型限制' })
+    const input = { model, prompt: String(prompt).trim().slice(0, 30_000), duration_seconds: seconds, resolution, aspect_ratio: aspectRatio }
+    if (referenceImageUrls.length) input.reference_image_urls = referenceImageUrls
+    const created = await vibbitApi('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(input) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
     videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, createdAt: Date.now() })
     saveVideoTasks()
@@ -1087,17 +1036,15 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
-    if (Date.now() - localTask.createdAt > VIDEO_TASK_MAX_WAIT_MS) {
-      removeVideoTask(req.params.id)
-      return res.json({ taskId: req.params.id, status: 'FAILED', videoUrl: '', error: '视频生成超过 20 分钟仍未完成，任务已停止，请重新生成', progress: null })
+    if (Date.now() - localTask.createdAt > 20 * 60 * 1000) {
+      videoTasks.delete(req.params.id); saveVideoTasks()
+      return res.json({ taskId: req.params.id, status: 'FAILED', videoUrl: '', error: '视频生成超时，请重新生成' })
     }
-    const task = await vibbitRequest(`/tasks/${encodeURIComponent(req.params.id)}`)
+    const task = await vibbitApi(`/tasks/${encodeURIComponent(req.params.id)}`)
     let result = {}
     try { result = JSON.parse(task.task_result?.result || '{}') } catch { result = {} }
-    const progressCandidates = [task.progress_percentage, task.progress_percent, task.progress, task.task_result?.progress_percentage, task.task_result?.progress_percent, task.task_result?.progress, result.progress_percentage, result.progress_percent, result.progress]
-    const progress = progressCandidates.find((value) => Number.isInteger(value) && value >= 0 && value <= 100)
-    if (['COMPLETED', 'FAILED'].includes(task.status)) removeVideoTask(req.params.id)
-    res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '', progress: progress ?? null })
+    if (['COMPLETED', 'FAILED'].includes(task.status)) { videoTasks.delete(req.params.id); saveVideoTasks() }
+    res.json({ taskId: task.task_id || req.params.id, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '' })
   } catch (error) { next(error) }
 })
 

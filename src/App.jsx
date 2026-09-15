@@ -10,7 +10,7 @@ import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
 import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
-import VideoHub from './VideoHub.jsx'
+import VideoStudio from './VideoStudio.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
@@ -18,7 +18,7 @@ import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 const MODULES = [
   { id: 'strategy', label: '新聊天', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
-  { id: 'video', label: '视频生成', caption: '节点式视频工作台', icon: 'video' },
+  { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
   { id: 'content', label: '内容生产', caption: '即将上线', icon: 'book', disabled: true },
@@ -282,29 +282,13 @@ function failureTaskDeadline(task) {
 }
 
 function safeConversation(conversation) {
-  const videoHub = conversation.videoHub
-  const isPersistentMediaUrl = (value) => {
-    const url = String(value || '')
-    return Boolean(url) && !url.startsWith('data:') && !url.startsWith('blob:')
-  }
   return {
     ...conversation,
     messages: (conversation.messages || []).map((message) => ({
       ...message,
-      references: message.references?.filter((item) => isPersistentMediaUrl(item.src)),
-      attachments: message.attachments?.map((item) => item.kind === 'image' ? { ...item, src: isPersistentMediaUrl(item.src) ? item.src : '' } : item),
+      references: message.references?.filter((item) => item.src && !item.src.startsWith('data:') && !item.src.startsWith('blob:')),
+      attachments: message.attachments?.map((item) => item.kind === 'image' ? { ...item, src: item.src && !item.src.startsWith('data:') && !item.src.startsWith('blob:') ? item.src : '' } : item),
     })),
-    ...(videoHub ? {
-      videoHub: {
-        ...videoHub,
-        // Local uploads are base64 data URLs. Keeping them in the conversation
-        // list can exceed localStorage and make the whole history disappear on
-        // reload. Prompts, nodes and generated public URLs remain restorable.
-        imageRefs: (videoHub.imageRefs || []).filter(isPersistentMediaUrl),
-        videoRefs: (videoHub.videoRefs || []).filter(isPersistentMediaUrl),
-        imageUrls: (videoHub.imageUrls || []).filter(isPersistentMediaUrl),
-      },
-    } : {}),
   }
 }
 
@@ -1572,7 +1556,6 @@ export default function App() {
   const localPreviewParams = new URLSearchParams(window.location.search)
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
-  const localVideoPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'video'
   const localPreviewTheme = localPreviewParams.get('theme')
   const [authState, setAuthState] = useState(() => getAuthToken() ? 'checking' : 'guest')
   const [user, setUser] = useState(null)
@@ -1581,7 +1564,6 @@ export default function App() {
   const [active, setActive] = useState('image')
   const [moreTool, setMoreTool] = useState('please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
-  const [videoHistoryRequested, setVideoHistoryRequested] = useState(false)
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => ['light', 'dark'].includes(localPreviewTheme) ? localPreviewTheme : localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -1633,10 +1615,9 @@ export default function App() {
     })
   }
 
-  function startNew(type = active, { createHistory = false } = {}) {
+  function startNew(type = active) {
     setArchiveViewOpen(false)
     setActive(type)
-    setVideoHistoryRequested(type === 'video' && createHistory)
     setActiveConversationId(null)
     setWorkspaceToken((value) => value + 1)
   }
@@ -1696,7 +1677,6 @@ export default function App() {
       localStorage.setItem(IMAGE_MODE_KEY, 'dialogue')
     }
     setActive(conversation.type)
-    setVideoHistoryRequested(false)
     setActiveConversationId(conversation.id)
     setWorkspaceToken((value) => value + 1)
   }
@@ -1734,10 +1714,10 @@ export default function App() {
     ? <ArchiveWorkspace key={workspaceToken} archived={archivedConversations} onRestore={restoreConversation} onDelete={deleteConversation} onDeleteAll={deleteAllArchived}/>
     : active === 'more'
       ? <MoreTools key={workspaceToken} tool={moreTool}/>
-      : active === 'image'
+    : active === 'image'
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'video'
-        ? <VideoHub key={workspaceToken} floatingSidebar conversation={activeConversation} onSave={saveConversation} createHistoryOnOpen={videoHistoryRequested}/>
+        ? <VideoStudio key={workspaceToken}/>
       : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
@@ -1747,7 +1727,6 @@ export default function App() {
 
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
-  if (localVideoPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Topbar onMenu={() => {}}/><VideoHub/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><MascotImage alt="小蝶"/></span><i/></div>
-  return <div className={`app-shell ${active === 'video' && !archiveViewOpen ? 'video-shell' : ''}`}><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
