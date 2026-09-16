@@ -1574,6 +1574,7 @@ function TextStudio({ type, conversation, onSave }) {
 export default function App() {
   const localPreviewParams = new URLSearchParams(window.location.search)
   const directLogoTool = localPreviewParams.get('tool') === 'logo'
+  const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
   const localPreviewTheme = localPreviewParams.get('theme')
@@ -1581,7 +1582,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directLogoTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
@@ -1660,6 +1661,7 @@ export default function App() {
     if (!user && !['please-day', 'qr', 'logo'].includes(tool)) { setLoginPromptModule('more-qr'); return }
     const url = new URL(window.location.href)
     if (tool === 'logo') url.searchParams.set('tool', 'logo')
+    else if (tool === 'please-day') url.searchParams.set('tool', 'avatar')
     else url.searchParams.delete('tool')
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setMoreTool(tool)
