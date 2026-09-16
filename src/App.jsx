@@ -475,6 +475,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           {moreExpanded && <div className="module-submenu" role="menu" aria-label="更多工具列表">
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'please-day' ? 'true' : undefined} className={active === 'more' && moreTool === 'please-day' ? 'active' : ''} onClick={() => { onSelectMoreTool('please-day'); onClose() }}>朴里节头像框</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>批处理二维码</button>
+            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'logo' ? 'true' : undefined} className={active === 'more' && moreTool === 'logo' ? 'active' : ''} onClick={() => { onSelectMoreTool('logo'); onClose() }}>Logo 处理</button>
           </div>}
         </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
       </nav>
@@ -1547,6 +1548,7 @@ function TextStudio({ type, conversation, onSave }) {
 
 export default function App() {
   const localPreviewParams = new URLSearchParams(window.location.search)
+  const directLogoTool = localPreviewParams.get('tool') === 'logo'
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
   const localPreviewTheme = localPreviewParams.get('theme')
@@ -1554,8 +1556,8 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState('image')
-  const [moreTool, setMoreTool] = useState('please-day')
+  const [active, setActive] = useState(() => directLogoTool ? 'more' : 'image')
+  const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => ['light', 'dark'].includes(localPreviewTheme) ? localPreviewTheme : localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark')
@@ -1630,7 +1632,11 @@ export default function App() {
   }
 
   function selectMoreTool(tool) {
-    if (!user && !['please-day', 'qr'].includes(tool)) { setLoginPromptModule('more-qr'); return }
+    if (!user && !['please-day', 'qr', 'logo'].includes(tool)) { setLoginPromptModule('more-qr'); return }
+    const url = new URL(window.location.href)
+    if (tool === 'logo') url.searchParams.set('tool', 'logo')
+    else url.searchParams.delete('tool')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setMoreTool(tool)
     startNew('more')
   }
