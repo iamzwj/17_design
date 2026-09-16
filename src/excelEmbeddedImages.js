@@ -34,13 +34,13 @@ function imageMimeType(path) {
   return ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' })[extension] || 'image/png'
 }
 
-export async function embeddedImagesFromWorkbook(buffer, sheetName, sheetData) {
+export async function embeddedImageAssetsFromWorkbook(buffer, sheetName, sheetData) {
   const zip = await JSZip.loadAsync(buffer)
   const readText = async (path) => {
     const entry = zip.file(path)
     return entry ? entry.async('text') : ''
   }
-  const images = new Map()
+  const images = []
   const mediaBlob = async (path) => {
     const media = path ? zip.file(path) : null
     return media ? new Blob([await media.async('uint8array')], { type: imageMimeType(path) }) : null
@@ -68,7 +68,7 @@ export async function embeddedImagesFromWorkbook(buffer, sheetName, sheetData) {
           const blip = anchor.getElementsByTagNameNS('*', 'blip')[0]
           const mediaPath = blip ? relationshipTarget(drawingRelationships, drawingPath, relationshipId(blip, 'embed')) : ''
           const blob = await mediaBlob(mediaPath)
-          if (Number.isInteger(row) && blob) images.set(row + 1, blob)
+          if (Number.isInteger(row) && blob) images.push({ row: row + 1, path: mediaPath, blob })
         }
       }
     }
@@ -90,8 +90,13 @@ export async function embeddedImagesFromWorkbook(buffer, sheetName, sheetData) {
       const blip = cellImage.getElementsByTagNameNS('*', 'blip')[0]
       const mediaPath = blip ? relationshipTarget(cellImageRelationships, 'xl/cellimages.xml', relationshipId(blip, 'embed')) : ''
       const blob = await mediaBlob(mediaPath)
-      if (Number.isInteger(row) && blob) images.set(row, blob)
+      if (Number.isInteger(row) && blob) images.push({ row, path: mediaPath, blob })
     }
   }
   return images
+}
+
+export async function embeddedImagesFromWorkbook(buffer, sheetName, sheetData) {
+  const assets = await embeddedImageAssetsFromWorkbook(buffer, sheetName, sheetData)
+  return new Map(assets.map(({ row, blob }) => [row, blob]))
 }
