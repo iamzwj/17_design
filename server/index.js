@@ -111,6 +111,19 @@ function generationSize(model, resolution, ratio) {
   return sizes[ratio] || sizes['1:1']
 }
 
+function aspectRatioValue(ratio) {
+  const [width, height] = String(ratio || '').split(':').map(Number)
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? width / height : null
+}
+
+function imageExtensionForFormat(format, fallback = 'png') {
+  if (format === 'jpeg') return 'jpg'
+  if (format === 'webp') return 'webp'
+  if (format === 'gif') return 'gif'
+  if (format === 'png') return 'png'
+  return fallback
+}
+
 const waterfallDataDir = process.env.DIEFA_DATA_DIR || path.join(rootDir, 'data')
 const waterfallAssetsDir = path.join(waterfallDataDir, 'waterfall-assets')
 const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
@@ -525,13 +538,31 @@ function updateWaterfallTask(id, transform) {
   return waterfallTasks.find((task) => task.id === id)
 }
 
-async function persistWaterfallImage(sourceUrl, taskId, slotIndex) {
+async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio) {
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`保存生成图片失败（HTTP ${response.status}）`)
   const contentType = response.headers.get('content-type') || 'image/png'
-  const extension = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png'
+  const upstreamExtension = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png'
+  let imageBuffer = await sharp(Buffer.from(await response.arrayBuffer()), { failOn: 'none' }).rotate().toBuffer()
+  let metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
+  const targetRatio = aspectRatioValue(expectedRatio)
+  const returnedRatio = metadata.width && metadata.height ? metadata.width / metadata.height : null
+
+  // Some upstream variants silently substitute an unsupported canvas (for
+  // example returning 1:3 for a requested 9:21).  Persist the image at the
+  // requested ratio instead of leaving the UI and downloaded file disagreeing.
+  if (targetRatio && returnedRatio && Math.abs(Math.log(returnedRatio / targetRatio)) > 0.005) {
+    const width = metadata.width
+    const height = Math.max(1, Math.round(width / targetRatio))
+    imageBuffer = await sharp(imageBuffer, { failOn: 'none' })
+      .resize({ width, height, fit: 'cover', position: 'attention' })
+      .png()
+      .toBuffer()
+    metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
+  }
+
+  const extension = imageExtensionForFormat(metadata.format, upstreamExtension)
   const fileName = `${taskId}-${slotIndex}.${extension}`
-  const imageBuffer = Buffer.from(await response.arrayBuffer())
   await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), imageBuffer)
   let thumbnailUrl = null
   try {
@@ -543,7 +574,8 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex) {
     // thumbnailed; do not turn a completed generation into a failed one.
     console.warn('Unable to create generated-image thumbnail:', error?.message || error)
   }
-  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl }
+  const size = metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : null
+  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl, size }
 }
 
 function imageExtension(mimeType) {
@@ -646,8 +678,9 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     const status = upstreamStatus(result)
     const sourceUrl = upstreamResultUrl(result)
     if (!succeededUpstreamStatuses.has(status) || !sourceUrl) throw new Error(upstreamError(result) || `生成失败（${status || 'unknown'}）`)
-    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex)
-    updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, completedAt: new Date().toISOString() } : slot) }))
+    const task = waterfallTasks.find((item) => item.id === taskId)
+    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio)
+    updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
     const status = task?.status === 'cancelled' ? 'cancelled' : task?.status === 'timeout' ? 'timeout' : 'failed'
@@ -1027,7 +1060,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       throw new Error(upstreamError(data) || `图片生成未成功，当前状态：${status || 'unknown'}`)
     }
     const assetPrefix = `image-${data.id || randomUUID()}`
-    const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
+    const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index, resolvedAspectRatio)))
     directImageRecords = [{
       id: randomUUID(),
       userId: req.user.id,
@@ -1035,6 +1068,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       model: settings.model,
       resolution: settings.resolution,
       aspectRatio: resolvedAspectRatio,
+      generationSize: localImages[0]?.size || generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       createdAt: new Date().toISOString(),
       images: localImages,
     }, ...directImageRecords]

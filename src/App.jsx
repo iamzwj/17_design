@@ -230,7 +230,7 @@ function isFailedWaterfallTask(task) {
 }
 
 function waterfallPixelSize(task) {
-  return task?.generationSize || '尺寸未记录'
+  return task?.actualGenerationSize || task?.generationSize || '尺寸未记录'
 }
 
 function imageModelLabel(model) {
