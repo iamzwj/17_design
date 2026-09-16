@@ -52,20 +52,23 @@ function hydrateWaterfallTask(task) {
   }
 }
 
-async function post(path, body) {
+async function post(path, body, signal) {
   let response
   try {
     response = await fetch(apiUrl(path), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}) },
       body: JSON.stringify(body),
+      signal,
     })
   } catch {
-    const error = new Error('网络连接暂时不可用，请稍后重试')
+    const error = new Error(signal?.aborted ? '回复等待超时，请稍后重试' : '网络连接暂时不可用，请稍后重试')
     error.status = 0
     throw error
   }
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => {
+    throw new Error(signal?.aborted ? '回复等待超时，请稍后重试' : '服务器返回内容不完整，请重试')
+  })
   if (!response.ok) {
     const error = new Error(data.error || `请求失败 (${response.status})`)
     error.status = response.status
@@ -110,15 +113,10 @@ export async function getAdminOverview() {
 
 export const generateImage = (payload) => post('/api/image', payload)
 export async function generateText(payload) {
-  let lastError
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try { return await post('/api/text', payload) } catch (error) {
-      lastError = error
-      if (![502, 503, 504].includes(error.status) || attempt === 2) throw error
-      await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)))
-    }
-  }
-  throw lastError
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 120_000)
+  try { return await post('/api/text', payload, controller.signal) }
+  finally { clearTimeout(timer) }
 }
 export const uploadGoogleDriveImage = (payload) => post('/api/google-drive/uploads', payload)
 export async function reconnectGoogleDrive() {

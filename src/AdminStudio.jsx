@@ -29,6 +29,7 @@ function ImageDetails({ item, onClose }) {
 export default function AdminStudio() {
   const [overview, setOverview] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
+  const [expandedUsers, setExpandedUsers] = useState(() => new Set())
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -60,9 +61,10 @@ export default function AdminStudio() {
         <div className="admin-summary"><div><span>注册用户</span><b>{users.length}</b></div><div><span>生成图片</span><b>{imageCount}</b></div></div>
         <section className="admin-user-list">{users.map((user) => {
           const images = imagesByUser.get(user.id) || []
+          const expanded = expandedUsers.has(user.id)
           return <article className="admin-user-card glass-strong" key={user.id}>
-            <header><div><b>{user.email}</b><small>注册于 {displayTime(user.createdAt)}</small></div><span><small>剩余积分</small><strong>{user.credits ?? 0}</strong></span></header>
-            {images.length ? <div className="admin-image-grid">{images.map((image) => <button type="button" key={image.id} onClick={() => setSelectedImage(image)} title="查看图片详细信息"><img src={image.thumbnailUrl || image.url} alt="生成图片" loading="lazy"/><span>{displayTime(image.createdAt)}</span></button>)}</div> : <div className="admin-images-empty">该账户暂未生成图片</div>}
+            <header><div><button className="admin-user-toggle" type="button" aria-expanded={expanded} aria-controls={`admin-images-${user.id}`} onClick={() => setExpandedUsers((current) => { const next = new Set(current); if (next.has(user.id)) next.delete(user.id); else next.add(user.id); return next })}><b>{user.email}</b><span aria-hidden="true">{expanded ? '⌄' : '›'}</span></button><small>注册于 {displayTime(user.createdAt)}</small></div><span><small>剩余积分</small><strong>{user.credits ?? 0}</strong></span></header>
+            <div id={`admin-images-${user.id}`} hidden={!expanded}>{expanded && (images.length ? <div className="admin-image-grid">{images.map((image) => <button type="button" key={image.id} onClick={() => setSelectedImage(image)} title="查看图片详细信息"><img src={image.thumbnailUrl || image.url} alt="生成图片" loading="lazy"/></button>)}</div> : <div className="admin-images-empty">该账户暂未生成图片</div>)}</div>
           </article>
         })}</section>
       </>}
