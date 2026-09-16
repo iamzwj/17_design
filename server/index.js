@@ -68,6 +68,14 @@ const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 
+function imagePromptWithCurrentDate(prompt) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date())
+  const date = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]))
+  return `日期上下文（仅供理解“今天”、天气和近期活动等即时内容；除非用户明确要求，不要把这段说明或日期本身作为画面文字）：当前中国标准日期为 ${date.year}年${date.month}月${date.day}日。若用户未指定年份，不得使用过往年份或默认年份。\n\n${String(prompt || '').trim()}`
+}
+
 function upstreamImageModel(model) {
   return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
 }
@@ -651,7 +659,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
       updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: '正在提交到生图服务' } : slot) }))
       result = await requestUpstream('/v1/api/generate', {
         model: upstreamImageModel(config.model),
-        prompt: config.prompt.slice(0, 30_000),
+        prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
         images: config.images,
         aspectRatio: config.aspectRatio,
         replyType: 'async',
@@ -1038,7 +1046,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
     const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
     const data = await requestUpstream('/v1/api/generate', {
       model: upstreamImageModel(settings.model),
-      prompt: prompt.slice(0, 30_000),
+      prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
       images: upstreamImages,
       aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       replyType: 'json',
