@@ -989,7 +989,9 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
         ...safeMessages,
       ],
     }
-    let data = await requestUpstream('/v1/chat/completions', upstreamRequest)
+    // Text replies should fail visibly instead of keeping a chat card in a
+    // running state for several minutes when the upstream stalls.
+    let data = await requestUpstream('/v1/chat/completions', upstreamRequest, undefined, 45_000)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
     // field on the first completion. Retry once with an explicit answer request
@@ -998,7 +1000,7 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
       data = await requestUpstream('/v1/chat/completions', {
         ...upstreamRequest,
         messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
-      })
+      }, undefined, 45_000)
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')

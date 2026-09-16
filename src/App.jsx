@@ -661,6 +661,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   const [previewImage, setPreviewImage] = useState(null)
   const [loading, setLoading] = useState(conversation?.status === 'running')
   const [runningStartedAt, setRunningStartedAt] = useState(conversation?.runningStartedAt || null)
+  const activeRequestRef = useRef(false)
   const [error, setError] = useState('')
   const fileRef = useRef(null)
   const focusRef = useConversationFocus()
@@ -679,6 +680,16 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
 
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
+    if (conversation.status === 'running' && !activeRequestRef.current) {
+      const failedAt = new Date().toISOString()
+      const interruptedMessages = [...(conversation.messages || []), { role: 'error', content: '上次生成请求已中断，请重新发起。', failedAt }]
+      setMessages(interruptedMessages)
+      setLoading(false)
+      setRunningStartedAt(null)
+      setError('上次生成请求已中断，请重新发起。')
+      onSave({ id: conversationId.current, type: 'image', messages: interruptedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, editImage: conversation.editImage || null, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      return
+    }
     setMessages(conversation.messages || [])
     setLoading(conversation.status === 'running')
     setRunningStartedAt(conversation.runningStartedAt || null)
@@ -737,6 +748,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     const editSnapshot = editImage
     const startedAt = new Date().toISOString()
     const userMessages = [...messages, { role: 'user', content: text, references: referenceSnapshot, editImage: editSnapshot }]
+    activeRequestRef.current = true
     setMessages(userMessages)
     scrollToLatestResult()
     onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio, imageModel: model, imageResolution: resolution, editImage: editSnapshot, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
@@ -774,7 +786,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       setMessages(failedMessages)
       scrollToLatestResult()
       onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio, imageModel: model, imageResolution: resolution, editImage: editSnapshot, status: 'idle', runningStartedAt: null, unreadComplete: false })
-    } finally { setLoading(false); setRunningStartedAt(null) }
+    } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
   }
 
   const empty = messages.length === 0
@@ -1382,6 +1394,7 @@ function TextStudio({ type, conversation, onSave }) {
   const [previewImage, setPreviewImage] = useState(null)
   const [loading, setLoading] = useState(conversation?.status === 'running')
   const [runningStartedAt, setRunningStartedAt] = useState(conversation?.runningStartedAt || null)
+  const activeRequestRef = useRef(false)
   const complianceFileRef = useRef(null)
   const brandPickerRef = useRef(null)
   const complianceDragDepth = useRef(0)
@@ -1401,6 +1414,15 @@ function TextStudio({ type, conversation, onSave }) {
 
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
+    if (conversation.status === 'running' && !activeRequestRef.current) {
+      const failedAt = new Date().toISOString()
+      const interruptedMessages = [...validTextMessages(conversation.messages), { role: 'error', content: '上次回复请求已中断，请重新发送。', failedAt }]
+      setMessages(interruptedMessages)
+      setLoading(false)
+      setRunningStartedAt(null)
+      onSave({ id: conversationId.current, type, messages: interruptedMessages, brand: conversation.brand || 'general', webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      return
+    }
     setMessages(validTextMessages(conversation.messages))
     setLoading(conversation.status === 'running')
     setRunningStartedAt(conversation.runningStartedAt || null)
@@ -1490,6 +1512,7 @@ function TextStudio({ type, conversation, onSave }) {
     if (!content || loading) return
     const startedAt = new Date().toISOString()
     const nextMessages = [...messages, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
+    activeRequestRef.current = true
     setMessages(nextMessages); setInput(''); setAttachments([]); setLoading(true); setRunningStartedAt(startedAt)
     scrollToLatestResult()
     onSave({ id: conversationId.current, type, messages: nextMessages, brand, webSearch, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
@@ -1513,7 +1536,7 @@ function TextStudio({ type, conversation, onSave }) {
       setMessages(failedMessages)
       scrollToLatestResult()
       onSave({ id: conversationId.current, type, messages: failedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
-    } finally { setLoading(false); setRunningStartedAt(null) }
+    } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
   }
 
   return <section className={`workspace text-workspace ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
