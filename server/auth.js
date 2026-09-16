@@ -9,6 +9,7 @@ const CODE_TTL = 10 * 60 * 1000
 const SHORT_SESSION_TTL = 12 * 60 * 60 * 1000
 const REMEMBER_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CREDITS = 50
+const ADMIN_EMAIL = 'zhangwj159@onewo.com'
 // This account is seeded once so it can log in without the registration flow.
 // Store only a slow password hash here; a user-selected password is never reset on restart.
 const BUILTIN_USERS = [
@@ -101,6 +102,12 @@ export function installAuth(app, { dataDir }) {
     return user ? { session, user } : null
   }
   function publicUser(user) { return { id: user.id, email: user.email, credits: user.credits, createdAt: user.createdAt } }
+  function listUsers() {
+    let changed = false
+    for (const user of store.users) if (refreshDailyCredits(user)) changed = true
+    if (changed) save()
+    return store.users.map(publicUser)
+  }
   function ensureWhitelisted(email) {
     if (!REGISTRATION_WHITELIST.has(email)) {
       const error = new Error('没有权限，请联系管理人员')
@@ -296,5 +303,13 @@ export function installAuth(app, { dataDir }) {
     next()
   }
 
-  return { requireAuth, spendCredits, refundCredits }
+  function requireAdmin(req, res, next) {
+    const auth = sessionFor(req)
+    if (!auth) return res.status(401).json({ error: '请先登录' })
+    if (normalizeEmail(auth.user.email) !== ADMIN_EMAIL) return res.status(403).json({ error: '无权访问后台管理' })
+    req.user = publicUser(auth.user)
+    next()
+  }
+
+  return { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits }
 }

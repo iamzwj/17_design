@@ -98,6 +98,16 @@ export async function getCurrentAccount() {
   return data
 }
 
+export async function getAdminOverview() {
+  const response = await fetch(apiUrl('/api/admin/overview'), {
+    cache: 'no-store',
+    headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || `加载后台数据失败 (${response.status})`)
+  return data
+}
+
 export const generateImage = (payload) => post('/api/image', payload)
 export async function generateText(payload) {
   let lastError

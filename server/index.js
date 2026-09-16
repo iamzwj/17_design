@@ -141,6 +141,7 @@ const waterfallDataDir = process.env.DIEFA_DATA_DIR || path.join(rootDir, 'data'
 const waterfallAssetsDir = path.join(waterfallDataDir, 'waterfall-assets')
 const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
 const waterfallStoreFile = path.join(waterfallDataDir, 'waterfall-tasks.json')
+const directImageStoreFile = path.join(waterfallDataDir, 'direct-image-records.json')
 const videoTaskStoreFile = path.join(waterfallDataDir, 'video-tasks.json')
 const avatarDownloadStoreFile = path.join(waterfallDataDir, 'please-day-avatar-downloads.json')
 const waterfallControllers = new Map()
@@ -286,6 +287,19 @@ function loadWaterfallTasks() {
 
 let waterfallTasks = loadWaterfallTasks()
 
+function loadDirectImageRecords() {
+  try {
+    const records = JSON.parse(fs.readFileSync(directImageStoreFile, 'utf8'))
+    return Array.isArray(records) ? records.filter((record) => record?.id && record?.userId && Array.isArray(record.images)) : []
+  } catch { return [] }
+}
+
+let directImageRecords = loadDirectImageRecords()
+
+function saveDirectImageRecords() {
+  fs.writeFileSync(directImageStoreFile, JSON.stringify(directImageRecords.slice(0, 1_000), null, 2), { mode: 0o600 })
+}
+
 function loadVideoTaskRecords() {
   try {
     const records = JSON.parse(fs.readFileSync(videoTaskStoreFile, 'utf8'))
@@ -363,7 +377,7 @@ setInterval(cleanupExpiredFailedTasks, 60_000).unref()
 // Video references may be up to 200 MB. They are immediately persisted and
 // then sent to the provider as public URLs, never forwarded as base64.
 app.use(express.json({ limit: '280mb' }))
-const { requireAuth, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
+const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 
 async function refundWaterfallCredits(taskId, amount) {
   if (!amount) return null
@@ -1034,6 +1048,17 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
     }
     const assetPrefix = `image-${data.id || randomUUID()}`
     const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index)))
+    directImageRecords = [{
+      id: randomUUID(),
+      userId: req.user.id,
+      prompt: prompt.trim().slice(0, 30_000),
+      model: settings.model,
+      resolution: settings.resolution,
+      aspectRatio: resolvedAspectRatio,
+      createdAt: new Date().toISOString(),
+      images: localImages,
+    }, ...directImageRecords]
+    saveDirectImageRecords()
     res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localImages.map((image) => image.url), user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, creditCost)
@@ -1239,6 +1264,35 @@ app.delete('/api/waterfall/tasks/:id', requireAuth, async (req, res) => {
   if (task.userId !== req.user.id) return res.status(404).json({ error: '任务不存在或无权操作' })
   const stopped = await stopWaterfallTask(task.id)
   res.json({ task: stopped, user: stopped?.userId === req.user.id ? refundCredits(req.user.id, 0) || req.user : req.user })
+})
+
+app.get('/api/admin/overview', requireAdmin, (_req, res) => {
+  const waterfallImages = waterfallTasks.flatMap((task) => (task.slots || [])
+    .filter((slot) => slot.status === 'succeeded' && slot.url)
+    .map((slot) => ({
+      id: `${task.id}-${slot.index}`,
+      userId: task.userId,
+      url: slot.url,
+      thumbnailUrl: slot.thumbnailUrl || '',
+      prompt: task.prompt,
+      model: task.model,
+      resolution: task.resolution,
+      aspectRatio: task.resolvedAspectRatio || task.aspectRatio,
+      createdAt: slot.completedAt || task.completedAt || task.createdAt,
+    })))
+  const directImages = directImageRecords.flatMap((record) => record.images.map((image, index) => ({
+    id: `${record.id}-${index}`,
+    userId: record.userId,
+    url: image.url,
+    thumbnailUrl: image.thumbnailUrl || '',
+    prompt: record.prompt,
+    model: record.model,
+    resolution: record.resolution,
+    aspectRatio: record.aspectRatio,
+    createdAt: record.createdAt,
+  })))
+  const images = [...waterfallImages, ...directImages].sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt))
+  res.json({ users: listUsers(), images })
 })
 
 const distDir = path.join(rootDir, 'dist')
