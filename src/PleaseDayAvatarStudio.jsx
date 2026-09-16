@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import './pleaseDayAvatar.css'
 
-const FRAME_URL = '/please-day-avatar-frame.png'
 const OUTPUT_SIZE = 850
+const FRAME_OPTIONS = [
+  { id: 'please-day', label: '朴里节', url: '/please-day-avatar-frame.png', downloadName: '朴里节头像.png' },
+  { id: 'research', label: '研选家', url: '/please-day-avatar-frame-research.png', downloadName: '研选家头像.png' },
+]
 
 function loadImage(source) {
   return new Promise((resolve, reject) => {
@@ -19,18 +22,22 @@ export default function PleaseDayAvatarStudio() {
   const uploadRef = useRef(null)
   const dragRef = useRef(null)
   const avatarUrlRef = useRef('')
+  const [frameId, setFrameId] = useState('please-day')
   const [frameOverlay, setFrameOverlay] = useState(null)
   const [avatar, setAvatar] = useState(null)
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [error, setError] = useState('')
+  const activeFrame = FRAME_OPTIONS.find((frame) => frame.id === frameId) || FRAME_OPTIONS[0]
+
   useEffect(() => {
     let available = true
-    loadImage(FRAME_URL).then((image) => {
-      if (available) setFrameOverlay(image)
+    setFrameOverlay(null)
+    loadImage(activeFrame.url).then((image) => {
+      if (available) { setFrameOverlay(image); setError('') }
     }).catch((loadError) => available && setError(loadError.message))
     return () => { available = false }
-  }, [])
+  }, [activeFrame.url])
 
   useEffect(() => () => {
     if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current)
@@ -107,7 +114,7 @@ export default function PleaseDayAvatarStudio() {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = '朴里节头像.png'
+      anchor.download = activeFrame.downloadName
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
@@ -122,6 +129,9 @@ export default function PleaseDayAvatarStudio() {
         <h1>朴里节头像框</h1>
         <p>上传头像，调整位置和大小，即可生成活动头像。</p>
       </header>
+      <div className="please-day-frame-tabs" role="tablist" aria-label="选择头像框版本">
+        {FRAME_OPTIONS.map((frame) => <button key={frame.id} type="button" role="tab" aria-selected={frame.id === frameId} className={frame.id === frameId ? 'active' : ''} onClick={() => setFrameId(frame.id)}>{frame.label}</button>)}
+      </div>
       <main className="please-day-preview glass-strong">
           <div className={`please-day-canvas-wrap ${avatar ? 'has-avatar' : ''}`}>
             <canvas ref={canvasRef} aria-label="朴里节头像预览" onPointerDown={beginDrag} onPointerMove={moveAvatar} onPointerUp={stopDrag} onPointerCancel={stopDrag} onWheel={(event) => { if (!avatar) return; event.preventDefault(); adjustZoom(zoom - event.deltaY * .001) }}/>
