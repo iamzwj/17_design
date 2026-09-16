@@ -1,14 +1,5 @@
 .please-day-workspace { overflow: auto; padding: 20px 28px 48px; }
-.please-day-layout { display: grid; grid-template-columns: minmax(0,490px) minmax(220px,1fr); gap: 42px; align-items: start; }
-
 .please-day-preview { width: 100%; max-width: 490px; margin: 0; padding: 16px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; }
-.please-day-stat { min-height: 168px; margin-top: 26px; padding: 14px 0 14px 24px; border-left: 2px solid rgba(107,78,255,.38); display: grid; align-content: center; gap: 7px; }
-.please-day-stat-label { color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: .02em; }
-.please-day-stat-value { display: flex; align-items: baseline; gap: 10px; color: var(--ink); }
-.please-day-stat-value strong { font-variant-numeric: tabular-nums; font-size: clamp(56px,6vw,82px); font-weight: 800; letter-spacing: -.075em; line-height: .88; }
-.please-day-stat-value em { color: var(--muted); font-size: 16px; font-style: normal; font-weight: 650; }
-.please-day-stat p { margin: 2px 0 0; display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-.please-day-stat p i { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; background: var(--accent); box-shadow: 0 0 0 3px rgba(107,78,255,.12); }
 .please-day-file-input { display: none; }
 .please-day-canvas-wrap { position: relative; width: min(100%,458px); display: grid; place-items: center; }
 .please-day-canvas-wrap canvas { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; }
@@ -38,15 +29,12 @@
 .please-day-download:disabled { opacity: .42; cursor: default; }
 
 :root[data-theme='dark'] .please-day-editor-bar,:root[data-theme='dark'] .please-day-zoom,:root[data-theme='dark'] .please-day-zoom button { background: rgba(255,255,255,.055); border-color: rgba(255,255,255,.1); }
-:root[data-theme='dark'] .please-day-stat { border-left-color: rgba(150,130,255,.62); }
 :root[data-theme='dark'] .please-day-empty { background: #7965f0; }
 :root[data-theme='dark'] .please-day-empty:hover { background: #8b79f5; }
 :root[data-theme='dark'] .please-day-error { background: rgba(184,63,77,.13); color: #e3a3aa; }
 
 @media (max-width: 820px) {
   .please-day-workspace { padding: 14px 14px 36px; }
-  .please-day-layout { grid-template-columns: minmax(0,490px); gap: 22px; }
-  .please-day-stat { width: min(100%,490px); min-height: 0; margin-top: 0; padding: 2px 0 2px 18px; }
 }
 @media (max-width: 520px) {
   .please-day-preview { padding: 10px; }

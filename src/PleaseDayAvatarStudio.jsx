@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPleaseDayAvatarDownloadCount, recordPleaseDayAvatarDownload } from './api.js'
 import { Icon } from './icons.jsx'
 import './pleaseDayAvatar.css'
 
@@ -25,21 +24,6 @@ export default function PleaseDayAvatarStudio() {
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [error, setError] = useState('')
-  const [downloadCount, setDownloadCount] = useState(null)
-
-  useEffect(() => {
-    let active = true
-    const refreshCount = async () => {
-      try {
-        const { count } = await getPleaseDayAvatarDownloadCount()
-        if (active) setDownloadCount(Number.isFinite(Number(count)) ? Number(count) : 0)
-      } catch { /* The editor remains available when the public counter is temporarily unavailable. */ }
-    }
-    void refreshCount()
-    const timer = window.setInterval(refreshCount, 15_000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [])
-
   useEffect(() => {
     let available = true
     loadImage(FRAME_URL).then((image) => {
@@ -128,9 +112,6 @@ export default function PleaseDayAvatarStudio() {
       anchor.click()
       anchor.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-      void recordPleaseDayAvatarDownload().then(({ count }) => {
-        if (Number.isFinite(Number(count))) setDownloadCount(Number(count))
-      }).catch(() => {})
     }, 'image/png')
   }
 
@@ -141,8 +122,7 @@ export default function PleaseDayAvatarStudio() {
         <h1>朴里节头像框</h1>
         <p>上传头像，调整位置和大小，即可生成活动头像。</p>
       </header>
-      <div className="please-day-layout">
-        <main className="please-day-preview glass-strong">
+      <main className="please-day-preview glass-strong">
           <div className={`please-day-canvas-wrap ${avatar ? 'has-avatar' : ''}`}>
             <canvas ref={canvasRef} aria-label="朴里节头像预览" onPointerDown={beginDrag} onPointerMove={moveAvatar} onPointerUp={stopDrag} onPointerCancel={stopDrag} onWheel={(event) => { if (!avatar) return; event.preventDefault(); adjustZoom(zoom - event.deltaY * .001) }}/>
             {!avatar && <button className="please-day-empty" type="button" onClick={() => uploadRef.current?.click()}><Icon name="upload" size={20}/><b>上传头像</b></button>}
@@ -160,12 +140,7 @@ export default function PleaseDayAvatarStudio() {
           {error && <div className="please-day-error">{error}</div>}
           <input ref={uploadRef} className="please-day-file-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={selectAvatar}/>
           <button className="please-day-download" type="button" disabled={!avatar || !frameOverlay} onClick={download}><Icon name="download" size={17}/>下载头像</button>
-        </main>
-        <aside className="please-day-stat" aria-live="polite">
-          <span className="please-day-stat-label">朴里节头像已生成</span>
-          <div className="please-day-stat-value"><strong>{downloadCount === null ? '—' : downloadCount.toLocaleString('zh-CN')}</strong><em>次</em></div>
-        </aside>
-      </div>
+      </main>
     </div>
   </section>
 }
