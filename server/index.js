@@ -45,8 +45,8 @@ const standardImageSizes = {
   '2:3': '1024x1536',
   '5:4': '1120x896',
   '4:5': '896x1120',
-  '21:9': '1456x624',
-  '9:21': '624x1456',
+  '21:9': '1792x768',
+  '9:21': '768x1792',
 }
 const vipImageSizes = {
   '1k': standardImageSizes,
@@ -54,19 +54,27 @@ const vipImageSizes = {
     '1:1': '2048x2048', '16:9': '2560x1440', '9:16': '1440x2560',
     '4:3': '2304x1728', '3:4': '1728x2304', '3:2': '2496x1664',
     '2:3': '1664x2496', '5:4': '2240x1792', '4:5': '1792x2240',
-    '21:9': '3024x1296', '9:21': '1296x3024',
+    '21:9': '2016x864', '9:21': '864x2016',
+    '3:1': '3072x1024', '1:3': '1024x3072',
   },
   '4k': {
     '1:1': '2880x2880', '16:9': '3840x2160', '9:16': '2160x3840',
     '4:3': '3264x2448', '3:4': '2448x3264', '3:2': '3504x2336',
     '2:3': '2336x3504', '5:4': '3136x2509', '4:5': '2509x3136',
     '21:9': '3696x1584', '9:21': '1584x3696',
+    '3:1': '3840x1280', '1:3': '1280x3840',
   },
 }
 const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
+const extremeImageRatios = new Set(['1:3', '3:1'])
+
+function supportsImageRatio(model, resolution, ratio) {
+  if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
+  return ['gpt-image-2-vip', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) && ['2k', '4k'].includes(String(resolution).toLowerCase())
+}
 
 function imagePromptWithCurrentDate(prompt) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -103,48 +111,6 @@ function generationSize(model, resolution, ratio) {
   return sizes[ratio] || sizes['1:1']
 }
 
-function resolvePromptAspectRatio(prompt) {
-  const match = String(prompt || '').match(/(\d{1,2})\s*[:：比x×]\s*(\d{1,2})/i)
-  if (!match) return '1:1'
-  const ratio = `${Number(match[1])}:${Number(match[2])}`
-  return supportedImageRatios.has(ratio) ? ratio : '1:1'
-}
-
-function imageDimensionsFromDataUrl(source) {
-  const match = String(source || '').match(/^data:image\/[\w.+-]+;base64,([\s\S]+)$/)
-  if (!match) return null
-  const bytes = Buffer.from(match[1], 'base64')
-  const read16 = (offset) => (bytes[offset] << 8) | bytes[offset + 1]
-  const read24 = (offset) => bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16)
-  const read32 = (offset) => bytes.readUInt32BE(offset)
-  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { width: read32(16), height: read32(20) }
-  if (bytes.length >= 30 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-    for (let offset = 2; offset + 8 < bytes.length;) {
-      if (bytes[offset] !== 0xff) { offset += 1; continue }
-      const marker = bytes[offset + 1]
-      offset += 2
-      if (marker === 0xd8 || marker === 0xd9) continue
-      const length = read16(offset)
-      if (length < 2 || offset + length > bytes.length) break
-      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) return { width: read16(offset + 5), height: read16(offset + 3) }
-      offset += length
-    }
-  }
-  if (bytes.length >= 30 && bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP') {
-    const type = bytes.subarray(12, 16).toString()
-    if (type === 'VP8X') return { width: read24(24) + 1, height: read24(27) + 1 }
-    if (type === 'VP8L' && bytes[20] === 0x2f) return { width: 1 + ((bytes[21] | (bytes[22] << 8)) & 0x3fff), height: 1 + (((bytes[22] >> 6) | (bytes[23] << 2) | ((bytes[24] & 0x0f) << 10)) & 0x3fff) }
-    if (type === 'VP8 ') return { width: read16(26) & 0x3fff, height: read16(28) & 0x3fff }
-  }
-  return null
-}
-
-function automaticImageRatio(source, prompt) {
-  const dimensions = imageDimensionsFromDataUrl(source)
-  if (!dimensions?.width || !dimensions?.height) return resolvePromptAspectRatio(prompt)
-  const target = dimensions.width / dimensions.height
-  return [...supportedImageRatios].reduce((nearest, ratio) => Math.abs(Math.log((Number(ratio.split(':')[0]) / Number(ratio.split(':')[1])) / target)) < Math.abs(Math.log((Number(nearest.split(':')[0]) / Number(nearest.split(':')[1])) / target)) ? ratio : nearest, '1:1')
-}
 const waterfallDataDir = process.env.DIEFA_DATA_DIR || path.join(rootDir, 'data')
 const waterfallAssetsDir = path.join(waterfallDataDir, 'waterfall-assets')
 const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
@@ -359,10 +325,10 @@ function isExpiredFailedTask(task, now = Date.now()) {
   return Number.isFinite(completedAt) && completedAt <= now - FAILED_TASK_TTL
 }
 
-function removeWaterfallAsset(url) {
+function removeWaterfallTaskAsset(task, url) {
   if (!String(url || '').startsWith('/api/waterfall/assets/')) return
   const fileName = path.basename(url)
-  if (!fileName || fileName !== path.basename(fileName)) return
+  if (!fileName || fileName !== path.basename(fileName) || !fileName.startsWith(`${task.id}-`)) return
   fs.rmSync(path.join(waterfallAssetsDir, fileName), { force: true })
 }
 
@@ -370,8 +336,8 @@ function cleanupExpiredFailedTasks() {
   const expired = waterfallTasks.filter((task) => isExpiredFailedTask(task))
   if (!expired.length) return
   for (const task of expired) {
-    for (const source of task.referenceImages || []) removeWaterfallAsset(source)
-    for (const slot of task.slots || []) removeWaterfallAsset(slot.url)
+    for (const source of task.referenceImages || []) removeWaterfallTaskAsset(task, source)
+    for (const slot of task.slots || []) removeWaterfallTaskAsset(task, slot.url)
   }
   waterfallTasks = waterfallTasks.filter((task) => !isExpiredFailedTask(task))
   saveWaterfallTasks()
@@ -600,14 +566,18 @@ async function persistWaterfallReference(source, taskId, index) {
     const fileName = path.basename(new URL(source, 'http://localhost').pathname)
     if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效，请重新上传'), { status: 422 })
     try {
-      await fs.promises.access(path.join(waterfallAssetsDir, fileName))
+      const sourcePath = path.join(waterfallAssetsDir, fileName)
+      await fs.promises.access(sourcePath)
+      const extension = path.extname(fileName).replace('.', '').toLowerCase() || 'png'
+      const taskFileName = `${taskId}-reference-${index}.${extension}`
+      await fs.promises.copyFile(sourcePath, path.join(waterfallAssetsDir, taskFileName))
+      return `/api/waterfall/assets/${taskFileName}`
     } catch {
       // Do this before credits are charged and before the task is created.
       // A missing local reference otherwise fails silently before any upstream
       // generation request can be made.
       throw Object.assign(new Error('参考图已不可用，请重新上传后再生成'), { status: 422 })
     }
-    return `/api/waterfall/assets/${fileName}`
   }
   const { mimeType, buffer } = await imageSourceToData(source)
   const fileName = `${taskId}-reference-${index}.${imageExtension(mimeType)}`
@@ -1043,7 +1013,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
     creditCost = imageCreditCost(settings.model)
     chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
-    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(upstreamImages[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
+    const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
     const data = await requestUpstream('/v1/api/generate', {
       model: upstreamImageModel(settings.model),
       prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
@@ -1230,7 +1200,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
     const settings = imageModelSettings(model, resolution)
-    const resolvedAspectRatio = aspectRatio === 'auto' ? automaticImageRatio(images[0], prompt) : (supportedImageRatios.has(aspectRatio) ? aspectRatio : '1:1')
+    const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
     const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
     const now = new Date().toISOString()
     const id = randomUUID()

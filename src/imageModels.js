@@ -2,9 +2,18 @@ export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 export const DEFAULT_IMAGE_RESOLUTION = '2k'
+const EXTREME_RATIO_MODELS = new Set([VIP_IMAGE_MODEL, 'gpt-image-2.5-sunburst', 'image-2.5-sunburst'])
 
 export function supportsImageResolution(model) {
   return [VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
+}
+
+// The upstream accepts the two 3:1 canvases only from the 2K tier onward.
+// Keeping this rule alongside the model metadata prevents the picker from
+// advertising a size that would be silently substituted by the provider.
+export function supportsImageRatio(model, resolution, ratio) {
+  if (!['1:3', '3:1'].includes(ratio)) return true
+  return EXTREME_RATIO_MODELS.has(model) && ['2k', '4k'].includes(String(resolution).toLowerCase())
 }
 
 export function imageCreditCost(model, count = 1) {
