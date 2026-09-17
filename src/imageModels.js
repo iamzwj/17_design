@@ -7,11 +7,11 @@ const EXTREME_RATIO_MODELS = new Set([VIP_IMAGE_MODEL, 'gpt-image-2.5-sunburst',
 const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'])
 
 export const IMAGE_QUALITY_OPTIONS = [
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'xhigh', label: '超高' },
-  { value: 'max', label: '最高' },
+  { value: 'low', label: 'low' },
+  { value: 'medium', label: 'medium' },
+  { value: 'high', label: 'high' },
+  { value: 'xhigh', label: 'xhigh' },
+  { value: 'max', label: 'max' },
 ]
 
 export function supportsImageResolution(model) {

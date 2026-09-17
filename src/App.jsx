@@ -1158,7 +1158,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           <div className="ratio-picker" ref={ratioPickerRef}><button className="ratio-trigger" type="button" onClick={() => setRatioOpen((open) => !open)}><span>比例</span><b>{imageRatioOptions(model, resolution).find((item) => item.value === ratio)?.label || DEFAULT_IMAGE_ASPECT_RATIO}</b><Icon name="chevron" size={14}/></button>{ratioOpen && <div className="ratio-menu glass-strong"><div className="ratio-menu-title">比例</div><div className="ratio-grid">{imageRatioOptions(model, resolution).map((item) => <button key={item.value} className={ratio === item.value ? 'active' : ''} onClick={() => { setRatio(item.value); setRatioOpen(false) }}><span className="ratio-shape" style={shapeStyle(item.value)}/><b>{item.label}</b></button>)}</div></div>}</div>
           <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => { const nextResolution = event.target.value; setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-          <select className="image-model-select image-quality-select" aria-label="出图质量" value={quality} onChange={(event) => setQuality(event.target.value)}>{imageQualityOptions(model).map((item) => <option key={item.value} value={item.value}>质量 {item.label}</option>)}</select>
+          <ImageQualityPicker model={model} quality={quality} onChange={setQuality}/>
           <div className="count-picker"><span>数量</span>{[1,2,3,4].map((value) => <button type="button" className={count === value ? 'active' : ''} onClick={() => setCount(value)} key={value}>{value}</button>)}</div>
         </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
@@ -1303,6 +1303,33 @@ function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src
   </div>
 }
 
+function ImageQualityPicker({ model, quality, onChange }) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef(null)
+  const options = imageQualityOptions(model)
+  const selected = options.find((item) => item.value === quality) || options.find((item) => item.value === DEFAULT_IMAGE_QUALITY) || options[0]
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (!pickerRef.current?.contains(event.target)) setOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
+
+  return <div className="quality-picker" ref={pickerRef}>
+    <button className="quality-trigger" type="button" aria-label="出图质量" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><b>{selected?.label}</b><Icon name="chevron" size={14}/></button>
+    {open && <div className="quality-menu glass-strong" role="listbox" aria-label="选择出图质量">{options.map((item) => <button type="button" role="option" aria-selected={quality === item.value} className={quality === item.value ? 'active' : ''} key={item.value} onClick={() => { onChange(item.value); setOpen(false) }}>{item.label}</button>)}</div>}
+  </div>
+}
+
 function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, resolution, setResolution, quality, setQuality, references, setReferences, editImage, fileRef, addFiles, appendFiles, submit, loading, error, onPreview }) {
   const [ratioOpen, setRatioOpen] = useState(false)
   const [draggingFiles, setDraggingFiles] = useState(false)
@@ -1377,7 +1404,7 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
           </div>
           <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => { const nextResolution = event.target.value; setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-          <select className="image-model-select image-quality-select" aria-label="出图质量" value={quality} onChange={(event) => setQuality(event.target.value)}>{imageQualityOptions(model).map((item) => <option key={item.value} value={item.value}>质量 {item.label}</option>)}</select>
+          <ImageQualityPicker model={model} quality={quality} onChange={setQuality}/>
         </div>
         <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? '生成中' : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button></div>
       </div>
