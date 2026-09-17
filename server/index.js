@@ -367,6 +367,40 @@ cleanupExpiredFailedTasks()
 setImmediate(() => { void backfillWaterfallThumbnails() })
 setInterval(cleanupExpiredFailedTasks, 60_000).unref()
 
+// Compliance review can be used without an account. Limit these public routes
+// before JSON parsing so anonymous visitors cannot use them for large uploads
+// or unbounded upstream AI calls.
+app.set('trust proxy', 1)
+const publicComplianceRequests = new Map()
+const PUBLIC_COMPLIANCE_WINDOW_MS = 10 * 60 * 1000
+
+function publicComplianceGuard(req, res, next) {
+  const isUpload = req.path === '/api/compliance/uploads'
+  const isReview = req.path === '/api/compliance/review'
+  if (!isUpload && !isReview) return next()
+  const contentLength = Number(req.headers['content-length'] || 0)
+  const maxBytes = isUpload ? 18 * 1024 * 1024 : 1024 * 1024
+  if (contentLength > maxBytes) return res.status(413).json({ error: isUpload ? '图片不能超过 12MB' : '审核请求内容过大' })
+  const limit = isUpload ? 24 : 12
+  const key = `${isUpload ? 'upload' : 'review'}:${req.ip || req.socket.remoteAddress || 'unknown'}`
+  const now = Date.now()
+  const current = publicComplianceRequests.get(key)
+  const recent = current?.resetAt > now ? current : { count: 0, resetAt: now + PUBLIC_COMPLIANCE_WINDOW_MS }
+  if (recent.count >= limit) return res.status(429).json({ error: '当前访问过于频繁，请稍后再试' })
+  publicComplianceRequests.set(key, { ...recent, count: recent.count + 1 })
+  if (publicComplianceRequests.size > 5_000) {
+    for (const [entryKey, entry] of publicComplianceRequests) {
+      if (entry.resetAt <= now) publicComplianceRequests.delete(entryKey)
+    }
+  }
+  next()
+}
+
+app.use(publicComplianceGuard)
+// Enforce streaming body limits as well. Content-Length is useful for early
+// rejection, but clients can omit it with chunked transfer encoding.
+app.use('/api/compliance/review', express.json({ limit: '1mb' }))
+app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 // Video references may be up to 200 MB. They are immediately persisted and
 // then sent to the provider as public URLs, never forwarded as base64.
 app.use(express.json({ limit: '280mb' }))
@@ -1008,7 +1042,7 @@ app.get('/api/batch-spreadsheet', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-app.post('/api/text', requireAuth, async (req, res, next) => {
+async function handleTextCompletion(req, res, next) {
   try {
     const { messages, systemPrompt, webSearch, searchQuery } = req.body
     if (!Array.isArray(messages) || messages.length === 0) {
@@ -1048,7 +1082,11 @@ app.post('/api/text', requireAuth, async (req, res, next) => {
   } catch (error) {
     next(error)
   }
-})
+}
+
+app.post('/api/text', requireAuth, handleTextCompletion)
+// Compliance review remains separate from account-only text chat.
+app.post('/api/compliance/review', handleTextCompletion)
 
 // On the server deployment, user reference images are stored on the instance
 // instead of passing through Cloudflare KV or requiring a Google Drive session.
@@ -1062,11 +1100,17 @@ app.post('/api/google-drive/uploads', requireAuth, async (req, res, next) => {
 
 // Compliance history keeps small, clickable references on the same Tencent
 // server. These uploads do not go through the Google Drive integration.
-app.post('/api/compliance/uploads', requireAuth, async (req, res, next) => {
+app.post('/api/compliance/uploads', async (req, res, next) => {
   try {
     const { source, name } = req.body || {}
     if (!String(source || '').startsWith('data:image/')) return res.status(400).json({ error: '请上传有效的图片文件' })
-    res.status(201).json({ url: await persistUploadedImage(source, name) })
+    const { mimeType, buffer } = await imageSourceToData(source)
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(mimeType)) return res.status(400).json({ error: '仅支持 JPG、PNG、WebP 或 GIF 图片' })
+    if (!buffer.length || buffer.length > 12 * 1024 * 1024) return res.status(413).json({ error: '图片不能超过 12MB' })
+    const safeName = String(name || 'upload').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'upload'
+    const fileName = `${safeName}-${Date.now()}-${randomUUID()}.${imageExtension(mimeType)}`
+    await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), buffer)
+    res.status(201).json({ url: `/api/waterfall/assets/${fileName}` })
   } catch (error) { next(error) }
 })
 

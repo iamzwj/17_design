@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createWaterfallTask, downloadGeneratedImage, generateImage, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createWaterfallTask, downloadGeneratedImage, generateComplianceReview, generateImage, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -1615,7 +1615,7 @@ function TextStudio({ type, conversation, onSave }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
-      const result = await generateText({ messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
+      const result = await (type === 'compliance' ? generateComplianceReview : generateText)({ messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
       const completedMessages = [...messagesRef.current, { role: 'assistant', content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
@@ -1673,6 +1673,7 @@ export default function App() {
   const localPreviewParams = new URLSearchParams(window.location.search)
   const directLogoTool = localPreviewParams.get('tool') === 'logo'
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
+  const directCompliance = localPreviewParams.get('module') === 'compliance'
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
   const localPreviewTheme = localPreviewParams.get('theme')
@@ -1680,7 +1681,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)

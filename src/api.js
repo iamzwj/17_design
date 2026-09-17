@@ -113,6 +113,7 @@ export async function getAdminOverview() {
 
 export const generateImage = (payload) => post('/api/image', payload)
 export const uploadComplianceImage = (payload) => post('/api/compliance/uploads', payload)
+export const generateComplianceReview = (payload) => post('/api/compliance/review', payload)
 export async function generateText(payload) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 120_000)
