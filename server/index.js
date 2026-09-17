@@ -1056,7 +1056,9 @@ async function handleTextCompletion(req, res, next) {
     const sources = webResult.sources
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
     const upstreamRequest = {
-      model: 'gpt-6-astra',
+      // GRS exposes this model through its OpenAI-compatible protocol. Do not
+      // use Codex desktop model names here: they are not upstream model IDs.
+      model: 'gpt-5.6-terra',
       stream: false,
       messages: [
         ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
@@ -1078,7 +1080,7 @@ async function handleTextCompletion(req, res, next) {
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
-    res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-6-astra' })
+    res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-5.6-terra' })
   } catch (error) {
     next(error)
   }
