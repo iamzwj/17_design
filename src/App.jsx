@@ -1425,9 +1425,10 @@ function TextStudio({ type, conversation, onSave }) {
   const [brandOpen, setBrandOpen] = useState(false)
   const [draggingComplianceFiles, setDraggingComplianceFiles] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
-  const [loading, setLoading] = useState(conversation?.status === 'running')
-  const [runningStartedAt, setRunningStartedAt] = useState(conversation?.runningStartedAt || null)
-  const activeRequestRef = useRef(false)
+  const [runningRequests, setRunningRequests] = useState([])
+  const messagesRef = useRef(messages)
+  const activeRequestsRef = useRef(new Map())
+  const uploadingImageAttachmentsRef = useRef(false)
   const complianceFileRef = useRef(null)
   const brandPickerRef = useRef(null)
   const complianceDragDepth = useRef(0)
@@ -1439,6 +1440,42 @@ function TextStudio({ type, conversation, onSave }) {
     followLatestResult.current = true
   }
 
+  function updateMessages(nextMessages) {
+    messagesRef.current = nextMessages
+    setMessages(nextMessages)
+  }
+
+  function activeTaskSnapshot() {
+    return [...activeRequestsRef.current.entries()].map(([id, startedAt]) => ({ id, startedAt }))
+  }
+
+  function startTask(id, startedAt) {
+    activeRequestsRef.current.set(id, startedAt)
+    setRunningRequests(activeTaskSnapshot())
+  }
+
+  function finishTask(id) {
+    activeRequestsRef.current.delete(id)
+    const nextTasks = activeTaskSnapshot()
+    setRunningRequests(nextTasks)
+    return nextTasks
+  }
+
+  function saveTaskState(nextMessages, { unreadComplete = false, activate = false } = {}) {
+    const activeTasks = activeTaskSnapshot()
+    onSave({
+      id: conversationId.current,
+      type,
+      messages: nextMessages,
+      brand,
+      webSearch,
+      status: activeTasks.length ? 'running' : 'idle',
+      runningStartedAt: activeTasks[0]?.startedAt || null,
+      unreadComplete,
+      activate,
+    })
+  }
+
   useLayoutEffect(() => {
     if (!followLatestResult.current || !conversationScrollRef.current) return
     conversationScrollRef.current.scrollTop = conversationScrollRef.current.scrollHeight
@@ -1447,18 +1484,21 @@ function TextStudio({ type, conversation, onSave }) {
 
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
-    if (conversation.status === 'running' && !activeRequestRef.current) {
+    if (conversation.status === 'running' && activeRequestsRef.current.size === 0) {
       const failedAt = new Date().toISOString()
       const interruptedMessages = [...validTextMessages(conversation.messages), { role: 'error', content: '上次回复请求已中断，请重新发送。', failedAt }]
-      setMessages(interruptedMessages)
-      setLoading(false)
-      setRunningStartedAt(null)
+      updateMessages(interruptedMessages)
       onSave({ id: conversationId.current, type, messages: interruptedMessages, brand: conversation.brand || 'general', webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
       return
     }
-    setMessages(validTextMessages(conversation.messages))
-    setLoading(conversation.status === 'running')
-    setRunningStartedAt(conversation.runningStartedAt || null)
+    // While this browser is running requests, parent persistence updates can
+    // arrive out of order. Keep the live message list as the source of truth.
+    if (activeRequestsRef.current.size > 0) {
+      if (conversation.brand) setBrand(conversation.brand)
+      return
+    }
+    updateMessages(validTextMessages(conversation.messages))
+    setRunningRequests([])
     if (conversation.brand) setBrand(conversation.brand)
   }, [conversation])
 
@@ -1468,8 +1508,8 @@ function TextStudio({ type, conversation, onSave }) {
     const cleanUp = () => {
       const nextMessages = withoutFailureMessages(messages)
       if (nextMessages.length === messages.length) return
-      setMessages(nextMessages)
-      onSave({ id: conversationId.current, type, messages: nextMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      updateMessages(nextMessages)
+      saveTaskState(nextMessages)
     }
     const nextDeadline = Math.min(...failedMessages.map(failureDeadline))
     if (!nextDeadline || nextDeadline <= Date.now()) { cleanUp(); return undefined }
@@ -1541,11 +1581,18 @@ function TextStudio({ type, conversation, onSave }) {
 
   async function submit(customInput) {
     const submittedAttachments = attachments
-    const content = (customInput || input).trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
-    if (!content || loading) return
+    const submittedInput = customInput || input
+    const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
+    const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
+    if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
     const startedAt = new Date().toISOString()
-    activeRequestRef.current = true
-    setLoading(true); setRunningStartedAt(startedAt)
+    const requestId = crypto.randomUUID()
+    startTask(requestId, startedAt)
+    // Clear the composer at submission time so a second task can be composed
+    // while this request uploads and is being reviewed.
+    setInput(''); setAttachments([]); setAttachmentError('')
+    if (needsImageUpload) uploadingImageAttachmentsRef.current = true
+    let completed = false
     try {
       // Local data URLs are stripped from saved conversation records. Save
       // uploaded compliance images first so the user message keeps a clickable
@@ -1555,10 +1602,10 @@ function TextStudio({ type, conversation, onSave }) {
         const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
         return { ...file, src: url }
       })) : submittedAttachments
-      const nextMessages = [...messages, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
-      setMessages(nextMessages); setInput(''); setAttachments([]); setAttachmentError('')
+      const nextMessages = [...messagesRef.current, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
+      updateMessages(nextMessages)
       scrollToLatestResult()
-      onSave({ id: conversationId.current, type, messages: nextMessages, brand, webSearch, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
+      saveTaskState(nextMessages, { activate: true })
       const requestMessages = nextMessages.filter((item) => item.role !== 'error').map((item) => {
         if (item.role !== 'user' || !item.attachments?.length) return { role: item.role, content: item.content }
         const textFiles = item.attachments.filter((file) => file.kind === 'text')
@@ -1569,20 +1616,25 @@ function TextStudio({ type, conversation, onSave }) {
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
       const result = await generateText({ messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
-      const completedMessages = [...nextMessages, { role: 'assistant', content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
-      setMessages(completedMessages)
+      const completedMessages = [...messagesRef.current, { role: 'assistant', content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
+      updateMessages(completedMessages)
       scrollToLatestResult()
-      onSave({ id: conversationId.current, type, messages: completedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: true })
+      completed = true
     } catch (err) {
-      if (submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))) {
+      if (needsImageUpload) {
         setAttachmentError(err.message || '图片保存失败，请重试')
+        setInput((current) => current || submittedInput)
+        setAttachments((current) => current.length ? current : submittedAttachments)
       } else {
-        const failedMessages = [...messages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
-        setMessages(failedMessages)
+        const failedMessages = [...messagesRef.current, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
+        updateMessages(failedMessages)
         scrollToLatestResult()
-        onSave({ id: conversationId.current, type, messages: failedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
       }
-    } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
+    } finally {
+      if (needsImageUpload) uploadingImageAttachmentsRef.current = false
+      finishTask(requestId)
+      saveTaskState(messagesRef.current, { unreadComplete: completed })
+    }
   }
 
   return <section className={`workspace text-workspace ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
@@ -1591,10 +1643,10 @@ function TextStudio({ type, conversation, onSave }) {
         <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
-        const messageRef = !loading && index === messages.length - 1 ? focusRef : null
+        const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
         return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={message.content} label={type !== 'compliance'}/></div>
       })}
-        {loading && <div ref={focusRef}><LiveTaskStatus startedAt={runningStartedAt}/></div>}
+        {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>
@@ -1611,7 +1663,7 @@ function TextStudio({ type, conversation, onSave }) {
             {brandOpen && <div className="brand-menu glass-strong" role="menu" aria-label="选择审核品牌"><div className="brand-menu-title">选择品牌</div><div className="brand-grid">{COMPLIANCE_BRANDS.map((item) => <button key={item.value} type="button" role="menuitem" className={brand === item.value ? 'active' : ''} onClick={() => { setBrand(item.value); setBrandOpen(false) }}><b>{item.label}</b></button>)}</div></div>}
           </div>
         </div> : <div className="text-tools"><span className="model-chip">GPT-6 Astra</span></div>}
-        <button className="send-button" onClick={() => submit()} disabled={(!input.trim() && attachments.length === 0) || loading}><Icon name="arrowUp" size={18}/></button>
+        <button className="send-button" onClick={() => submit()} disabled={!input.trim() && attachments.length === 0}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
   </section>

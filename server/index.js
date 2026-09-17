@@ -771,13 +771,25 @@ function ocrExecutablePath() {
 }
 
 async function imageSourceToData(source) {
-  if (source.startsWith('data:image/')) {
-    const match = source.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s)
+  const value = String(source || '')
+  if (value.startsWith('data:image/')) {
+    const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s)
     if (!match) throw new Error('图片数据格式无效')
     return { mimeType: match[1], buffer: Buffer.from(match[2], 'base64') }
   }
-  if (!/^https?:\/\//.test(source)) throw new Error('不支持的图片地址')
-  const response = await fetch(source, { signal: AbortSignal.timeout(30_000) })
+  // Compliance conversation history stores uploaded images as local asset URLs.
+  // Resolve only a filename under the controlled asset directory; never treat an
+  // arbitrary relative URL as a file path or a network target.
+  const localAsset = value.match(/^\/api\/waterfall\/assets\/([A-Za-z0-9][A-Za-z0-9._-]*)$/)
+  if (localAsset) {
+    const fileName = localAsset[1]
+    const buffer = await fs.promises.readFile(path.join(waterfallAssetsDir, fileName)).catch(() => null)
+    if (!buffer) throw new Error('上传图片已不可用，请重新上传')
+    if (buffer.length > 10 * 1024 * 1024) throw new Error('图片超过 10MB，无法识别')
+    return { mimeType: imageMimeFromFileName(fileName), buffer }
+  }
+  if (!/^https?:\/\//.test(value)) throw new Error('不支持的图片地址')
+  const response = await fetch(value, { signal: AbortSignal.timeout(30_000) })
   if (!response.ok) throw new Error(`读取图片失败（HTTP ${response.status}）`)
   const declaredSize = Number(response.headers.get('content-length') || 0)
   if (declaredSize > 10 * 1024 * 1024) throw new Error('图片超过 10MB，无法识别')
