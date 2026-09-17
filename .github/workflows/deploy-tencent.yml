@@ -66,6 +66,15 @@ jobs:
           fi
           echo "Vibbit credential preflight passed (HTTP $status; nonexistent task expected)."
 
+      - name: Inspect GRS text service models
+        run: |
+          # Diagnostic only: print the provider response, never its credential.
+          # This exposes model availability when a compatible text endpoint
+          # returns an otherwise opaque provider error.
+          curl --silent --show-error --max-time 20 \
+            --header "Authorization: Bearer ${{ secrets.GRSAI_API_KEY }}" \
+            "${{ secrets.GRSAI_BASE_URL }}/v1/models" || true
+
       - name: Upload server environment
         run: |
           scp -i ~/.ssh/id_ed25519 .deployment.env "$SERVER_USER@$SERVER_HOST:$SERVER_APP_DIR/.env.next"
