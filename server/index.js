@@ -1048,6 +1048,16 @@ app.post('/api/google-drive/uploads', requireAuth, async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// Compliance history keeps small, clickable references on the same Tencent
+// server. These uploads do not go through the Google Drive integration.
+app.post('/api/compliance/uploads', requireAuth, async (req, res, next) => {
+  try {
+    const { source, name } = req.body || {}
+    if (!String(source || '').startsWith('data:image/')) return res.status(400).json({ error: '请上传有效的图片文件' })
+    res.status(201).json({ url: await persistUploadedImage(source, name) })
+  } catch (error) { next(error) }
+})
+
 app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0

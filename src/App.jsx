@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createWaterfallTask, downloadGeneratedImage, generateImage, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadGoogleDriveImage, verifyRegisterCode, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createWaterfallTask, downloadGeneratedImage, generateImage, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -1184,7 +1184,7 @@ function ImageMessage({ message, focusRef, onPreview }) {
 function TextUserMessage({ message, messageRef, onPreview }) {
   const imageAttachments = (message.attachments || []).filter((file) => file.kind === 'image' && file.src)
   const textAttachments = (message.attachments || []).filter((file) => file.kind !== 'image')
-  return <div ref={messageRef} className="user-message">
+  return <div ref={messageRef} className={['user-message', imageAttachments.length ? 'has-image-attachments' : ''].filter(Boolean).join(' ')}>
     {imageAttachments.length > 0 && <div className="message-refs">{imageAttachments.map((file, index) => <button type="button" onClick={() => onPreview(file.src)} aria-label={`预览上传图片 ${index + 1}`} key={file.name + index}><img src={file.src} alt={file.name}/></button>)}</div>}
     {textAttachments.length > 0 && <div className="text-attachment-list">{textAttachments.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
     <div className="user-message-content">{message.content}</div>
@@ -1540,16 +1540,25 @@ function TextStudio({ type, conversation, onSave }) {
   }
 
   async function submit(customInput) {
-    const attachmentSnapshot = attachments
-    const content = (customInput || input).trim() || (attachmentSnapshot.length ? '请审核我上传的文件。' : '')
+    const submittedAttachments = attachments
+    const content = (customInput || input).trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
     if (!content || loading) return
     const startedAt = new Date().toISOString()
-    const nextMessages = [...messages, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
     activeRequestRef.current = true
-    setMessages(nextMessages); setInput(''); setAttachments([]); setLoading(true); setRunningStartedAt(startedAt)
-    scrollToLatestResult()
-    onSave({ id: conversationId.current, type, messages: nextMessages, brand, webSearch, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
+    setLoading(true); setRunningStartedAt(startedAt)
     try {
+      // Local data URLs are stripped from saved conversation records. Save
+      // uploaded compliance images first so the user message keeps a clickable
+      // thumbnail after refresh and when reopening its history.
+      const attachmentSnapshot = type === 'compliance' ? await Promise.all(submittedAttachments.map(async (file) => {
+        if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
+        const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
+        return { ...file, src: url }
+      })) : submittedAttachments
+      const nextMessages = [...messages, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
+      setMessages(nextMessages); setInput(''); setAttachments([]); setAttachmentError('')
+      scrollToLatestResult()
+      onSave({ id: conversationId.current, type, messages: nextMessages, brand, webSearch, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
       const requestMessages = nextMessages.filter((item) => item.role !== 'error').map((item) => {
         if (item.role !== 'user' || !item.attachments?.length) return { role: item.role, content: item.content }
         const textFiles = item.attachments.filter((file) => file.kind === 'text')
@@ -1565,10 +1574,14 @@ function TextStudio({ type, conversation, onSave }) {
       scrollToLatestResult()
       onSave({ id: conversationId.current, type, messages: completedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: true })
     } catch (err) {
-      const failedMessages = [...nextMessages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
-      setMessages(failedMessages)
-      scrollToLatestResult()
-      onSave({ id: conversationId.current, type, messages: failedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      if (submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))) {
+        setAttachmentError(err.message || '图片保存失败，请重试')
+      } else {
+        const failedMessages = [...messages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
+        setMessages(failedMessages)
+        scrollToLatestResult()
+        onSave({ id: conversationId.current, type, messages: failedMessages, brand, webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      }
     } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
   }
 
