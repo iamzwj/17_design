@@ -69,6 +69,8 @@ const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
+const DEFAULT_IMAGE_QUALITY = 'high'
+const imageQualities = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
 const extremeImageRatios = new Set(['1:3', '3:1'])
 
 function supportsImageRatio(model, resolution, ratio) {
@@ -88,13 +90,17 @@ function upstreamImageModel(model) {
   return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
 }
 
-function imageModelSettings(model, resolution) {
+function imageModelSettings(model, resolution, quality) {
   const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5-sunburst'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
-  if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k' }
+  const selectedQuality = String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
+  if (!imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
+  const supportsExtendedQuality = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)
+  if (!supportsExtendedQuality && ['xhigh', 'max'].includes(selectedQuality)) throw Object.assign(new Error('此模型仅支持 low、medium 或 high 质量'), { status: 400 })
+  if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
-  return { model: selectedModel, resolution: selectedResolution }
+  return { model: selectedModel, resolution: selectedResolution, quality: selectedQuality }
 }
 
 function imageCreditCost(model, count = 1) {
@@ -662,9 +668,10 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
       result = await requestUpstream('/v1/api/generate', {
         model: upstreamImageModel(config.model),
         prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
-        images: config.images,
-        aspectRatio: config.aspectRatio,
-        replyType: 'async',
+      images: config.images,
+      aspectRatio: config.aspectRatio,
+      quality: config.quality,
+      replyType: 'async',
       }, controller.signal, 45_000)
       id = upstreamId(result)
       if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
@@ -729,6 +736,7 @@ async function runWaterfallTask(task, images) {
       prompt: task.prompt,
       images: upstreamImages,
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5-sunburst', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
+      quality: task.quality || DEFAULT_IMAGE_QUALITY,
     }
     await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
   } catch (error) {
@@ -1035,14 +1043,14 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0
   try {
-    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution, quality = DEFAULT_IMAGE_QUALITY } = req.body
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt 不能为空' })
     }
     if (!Array.isArray(images) || images.length > 4) {
       return res.status(400).json({ error: '参考图最多 4 张' })
     }
-    const settings = imageModelSettings(model, resolution)
+    const settings = imageModelSettings(model, resolution, quality)
     creditCost = imageCreditCost(settings.model)
     chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
@@ -1052,6 +1060,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
       images: upstreamImages,
       aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
+      quality: settings.quality,
       replyType: 'json',
     })
     const urls = upstreamResultUrls(data)
@@ -1067,13 +1076,14 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       prompt: prompt.trim().slice(0, 30_000),
       model: settings.model,
       resolution: settings.resolution,
+      quality: settings.quality,
       aspectRatio: resolvedAspectRatio,
       generationSize: localImages[0]?.size || generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       createdAt: new Date().toISOString(),
       images: localImages,
     }, ...directImageRecords]
     saveDirectImageRecords()
-    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, urls: localImages.map((image) => image.url), user: chargedUser })
+    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, quality: settings.quality, urls: localImages.map((image) => image.url), user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, creditCost)
     next(error)
@@ -1228,12 +1238,12 @@ app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
 
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, clientRequestId } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, quality = DEFAULT_IMAGE_QUALITY, clientRequestId } = req.body
     const requestedCount = Number(count)
     if (!prompt || typeof prompt !== 'string') return res.status(400).json({ error: '提示词不能为空' })
     if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
-    const settings = imageModelSettings(model, resolution)
+    const settings = imageModelSettings(model, resolution, quality)
     const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
     const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
     const now = new Date().toISOString()
@@ -1250,6 +1260,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       resolvedAspectRatio,
       model: settings.model,
       resolution: settings.resolution,
+      quality: settings.quality,
       generationSize: imageSize,
       count: requestedCount,
       referenceCount: images.length,

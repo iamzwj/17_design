@@ -117,7 +117,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .tool-group { display: flex; gap: 7px; align-items: center; }
 .tool-button, .ratio-trigger, .brand-trigger { height: 31px; border: 1px solid rgba(61,79,63,.08); background: rgba(255,255,255,.33); border-radius: 9px; display: flex; align-items: center; gap: 6px; padding: 0 9px; color: var(--muted); font-size: 10px; cursor: pointer; }
 .image-model-select { height: 31px; max-width: 185px; padding: 0 24px 0 9px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; outline: 0; background: rgba(255,255,255,.33); color: var(--mid); font-size: 10px; cursor: pointer; }
-.image-resolution-select { max-width: 56px; padding-right: 7px; }.image-model-select:disabled { cursor: default; opacity: .58; }
+.image-resolution-select { max-width: 56px; padding-right: 7px; }.image-quality-select { max-width: 70px; padding-right: 7px; }.image-model-select:disabled { cursor: default; opacity: .58; }
 .reference-add { width: 31px; padding: 0; justify-content: center; }
 .tool-button:disabled { opacity: .5; cursor: default; }
 .ratio-picker { position: relative; }

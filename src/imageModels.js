@@ -2,7 +2,17 @@ export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 export const DEFAULT_IMAGE_RESOLUTION = '2k'
+export const DEFAULT_IMAGE_QUALITY = 'high'
 const EXTREME_RATIO_MODELS = new Set([VIP_IMAGE_MODEL, 'gpt-image-2.5-sunburst', 'image-2.5-sunburst'])
+const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'])
+
+export const IMAGE_QUALITY_OPTIONS = [
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '超高' },
+  { value: 'max', label: '最高' },
+]
 
 export function supportsImageResolution(model) {
   return [VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
@@ -14,6 +24,15 @@ export function supportsImageResolution(model) {
 export function supportsImageRatio(model, resolution, ratio) {
   if (!['1:3', '3:1'].includes(ratio)) return true
   return EXTREME_RATIO_MODELS.has(model) && ['2k', '4k'].includes(String(resolution).toLowerCase())
+}
+
+export function imageQualityOptions(model) {
+  return EXTENDED_QUALITY_MODELS.has(model) ? IMAGE_QUALITY_OPTIONS : IMAGE_QUALITY_OPTIONS.slice(0, 3)
+}
+
+export function imageQualityForModel(model, quality) {
+  const available = imageQualityOptions(model)
+  return available.some((item) => item.value === quality) ? quality : DEFAULT_IMAGE_QUALITY
 }
 
 export function imageCreditCost(model, count = 1) {

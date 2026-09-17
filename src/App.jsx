@@ -13,7 +13,7 @@ import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
 import ImagePreview from './ImagePreview.jsx'
-import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, supportsImageRatio, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, imageQualityForModel, imageQualityOptions, supportsImageRatio, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
@@ -89,7 +89,7 @@ function normalizedImageRatio(model, resolution, ratio) {
   return supportsImageRatio(model, resolution, ratio) ? ratio : DEFAULT_IMAGE_ASPECT_RATIO
 }
 
-function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model = DEFAULT_IMAGE_MODEL, resolution = DEFAULT_IMAGE_RESOLUTION, resolvedAspectRatio, clientRequestId }) {
+function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model = DEFAULT_IMAGE_MODEL, resolution = DEFAULT_IMAGE_RESOLUTION, quality = DEFAULT_IMAGE_QUALITY, resolvedAspectRatio, clientRequestId }) {
   const now = new Date().toISOString()
   return {
     id: clientRequestId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -98,6 +98,7 @@ function createOptimisticWaterfallTask({ prompt, images = [], aspectRatio = DEFA
     resolvedAspectRatio: resolvedAspectRatio || aspectRatio,
     model,
     resolution: imageResolutionForModel(model, resolution),
+    quality: imageQualityForModel(model, quality),
     count,
     referenceCount: images.length,
     referenceImages: images,
@@ -654,6 +655,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   const [ratio, setRatio] = useState(conversation?.ratio || DEFAULT_IMAGE_ASPECT_RATIO)
   const [model, setModel] = useState(conversation?.imageModel || DEFAULT_IMAGE_MODEL)
   const [resolution, setResolution] = useState(() => imageResolutionForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageResolution || DEFAULT_IMAGE_RESOLUTION))
+  const [quality, setQuality] = useState(() => imageQualityForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageQuality || DEFAULT_IMAGE_QUALITY))
   const [references, setReferences] = useState([])
   const [editImage, setEditImage] = useState(restoredEditImage)
   const [previewImage, setPreviewImage] = useState(null)
@@ -685,7 +687,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       setLoading(false)
       setRunningStartedAt(null)
       setError('上次生成请求已中断，请重新发起。')
-      onSave({ id: conversationId.current, type: 'image', messages: interruptedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, editImage: conversation.editImage || null, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      onSave({ id: conversationId.current, type: 'image', messages: interruptedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: conversation.editImage || null, status: 'idle', runningStartedAt: null, unreadComplete: false })
       return
     }
     setMessages(conversation.messages || [])
@@ -694,6 +696,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     const nextModel = conversation.imageModel || DEFAULT_IMAGE_MODEL
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, conversation.imageResolution))
+    setQuality(imageQualityForModel(nextModel, conversation.imageQuality || DEFAULT_IMAGE_QUALITY))
     if (Object.hasOwn(conversation, 'editImage')) setEditImage(conversation.editImage)
   }, [conversation])
 
@@ -704,13 +707,13 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       const nextMessages = withoutFailureMessages(messages)
       if (nextMessages.length === messages.length) return
       setMessages(nextMessages)
-      onSave({ id: conversationId.current, type: 'image', messages: nextMessages, ratio, imageModel: model, imageResolution: resolution, editImage, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      onSave({ id: conversationId.current, type: 'image', messages: nextMessages, ratio, imageModel: model, imageResolution: resolution, imageQuality: quality, editImage, status: 'idle', runningStartedAt: null, unreadComplete: false })
     }
     const nextDeadline = Math.min(...failedMessages.map(failureDeadline))
     if (!nextDeadline || nextDeadline <= Date.now()) { cleanUp(); return undefined }
     const timer = window.setTimeout(cleanUp, nextDeadline - Date.now())
     return () => window.clearTimeout(timer)
-  }, [editImage, messages, model, onSave, ratio, resolution])
+  }, [editImage, messages, model, onSave, quality, ratio, resolution])
 
   async function appendFiles(fileList) {
     const referenceLimit = editImage ? 3 : 4
@@ -744,7 +747,9 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     const text = (customPrompt || prompt).trim()
     if (!text || loading) return
     const selectedRatio = normalizedImageRatio(model, resolution, ratio)
+    const selectedQuality = imageQualityForModel(model, quality)
     if (selectedRatio !== ratio) setRatio(selectedRatio)
+    if (selectedQuality !== quality) setQuality(selectedQuality)
     const referenceSnapshot = references
     const editSnapshot = editImage
     const startedAt = new Date().toISOString()
@@ -752,7 +757,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     activeRequestRef.current = true
     setMessages(userMessages)
     scrollToLatestResult()
-    onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, editImage: editSnapshot, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
+    onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
     setPrompt(''); setReferences([]); setLoading(true); setRunningStartedAt(startedAt); setError('')
     const creditCost = imageCreditCost(model)
     onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 50) - creditCost) } : current)
@@ -766,6 +771,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         aspectRatio: selectedRatio,
         model,
         resolution,
+        quality: selectedQuality,
       })
       if (result.user) onUserUpdate(result.user)
       const nextEditImage = result.urls[0] || null
@@ -774,7 +780,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       setMessages(completedMessages)
       scrollToLatestResult()
       setEditImage(nextEditImage)
-      onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, editImage: nextEditImage, status: 'idle', runningStartedAt: null, unreadComplete: true })
+      onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: nextEditImage, status: 'idle', runningStartedAt: null, unreadComplete: true })
     } catch (err) {
       try {
         const { user: refreshedUser } = await getCurrentAccount()
@@ -786,7 +792,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       const failedMessages = [...userMessages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
       setMessages(failedMessages)
       scrollToLatestResult()
-      onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, editImage: editSnapshot, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'idle', runningStartedAt: null, unreadComplete: false })
     } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
   }
 
@@ -805,7 +811,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>
-    <ImageComposer prompt={prompt} setPrompt={setPrompt} ratio={ratio} setRatio={setRatio} model={model} setModel={setModel} resolution={resolution} setResolution={setResolution} references={references} setReferences={setReferences} editImage={editImage} fileRef={fileRef} addFiles={addFiles} appendFiles={appendFiles} submit={submit} loading={loading} error={error} onPreview={setPreviewImage}/>
+    <ImageComposer prompt={prompt} setPrompt={setPrompt} ratio={ratio} setRatio={setRatio} model={model} setModel={setModel} resolution={resolution} setResolution={setResolution} quality={quality} setQuality={setQuality} references={references} setReferences={setReferences} editImage={editImage} fileRef={fileRef} addFiles={addFiles} appendFiles={appendFiles} submit={submit} loading={loading} error={error} onPreview={setPreviewImage}/>
     {previewImage && <ImagePreview url={previewImage.url || previewImage} urls={previewImage.urls} prompt={previewImage.prompt} onClose={() => setPreviewImage(null)}/>} 
     </section>}
   </>
@@ -830,6 +836,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const [ratio, setRatio] = useState(DEFAULT_IMAGE_ASPECT_RATIO)
   const [model, setModel] = useState(DEFAULT_IMAGE_MODEL)
   const [resolution, setResolution] = useState(DEFAULT_IMAGE_RESOLUTION)
+  const [quality, setQuality] = useState(DEFAULT_IMAGE_QUALITY)
   const [count, setCount] = useState(2)
   const [references, setReferences] = useState([])
   const [ratioOpen, setRatioOpen] = useState(false)
@@ -1000,7 +1007,9 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     const clientRequestId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
     const selectedRatio = normalizedImageRatio(model, resolution, ratio)
     if (selectedRatio !== ratio) setRatio(selectedRatio)
-    const request = { prompt: prompt.trim(), images: referenceSnapshot, aspectRatio: selectedRatio, count, model, resolution, clientRequestId }
+    const selectedQuality = imageQualityForModel(model, quality)
+    if (selectedQuality !== quality) setQuality(selectedQuality)
+    const request = { prompt: prompt.trim(), images: referenceSnapshot, aspectRatio: selectedRatio, count, model, resolution, quality: selectedQuality, clientRequestId }
     const optimisticTask = createOptimisticWaterfallTask(request)
     sessionTaskIds.current.add(optimisticTask.id)
     if (retryReferenceSnapshot.length) sessionReferenceImages.current.set(optimisticTask.id, retryReferenceSnapshot)
@@ -1052,6 +1061,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     const nextModel = task.model || DEFAULT_IMAGE_MODEL
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, task.resolution))
+    setQuality(imageQualityForModel(nextModel, task.quality || DEFAULT_IMAGE_QUALITY))
     setCount(task.count || 2)
     setReferences((task.referenceImages || []).map((src, index) => ({ name: `参考图 ${index + 1}`, src })))
     setError('')
@@ -1068,6 +1078,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
       count: task.count || 2,
       model: task.model || DEFAULT_IMAGE_MODEL,
       resolution: imageResolutionForModel(task.model || DEFAULT_IMAGE_MODEL, task.resolution || DEFAULT_IMAGE_RESOLUTION),
+      quality: imageQualityForModel(task.model || DEFAULT_IMAGE_MODEL, task.quality || DEFAULT_IMAGE_QUALITY),
     }
     const optimisticTask = createOptimisticWaterfallTask({ ...request, resolvedAspectRatio: task.resolvedAspectRatio })
     sessionTaskIds.current.add(optimisticTask.id)
@@ -1145,8 +1156,9 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         <div className="composer-tools"><div className="tool-group">
           <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= 9}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
           <div className="ratio-picker" ref={ratioPickerRef}><button className="ratio-trigger" type="button" onClick={() => setRatioOpen((open) => !open)}><span>比例</span><b>{imageRatioOptions(model, resolution).find((item) => item.value === ratio)?.label || DEFAULT_IMAGE_ASPECT_RATIO}</b><Icon name="chevron" size={14}/></button>{ratioOpen && <div className="ratio-menu glass-strong"><div className="ratio-menu-title">比例</div><div className="ratio-grid">{imageRatioOptions(model, resolution).map((item) => <button key={item.value} className={ratio === item.value ? 'active' : ''} onClick={() => { setRatio(item.value); setRatioOpen(false) }}><span className="ratio-shape" style={shapeStyle(item.value)}/><b>{item.label}</b></button>)}</div></div>}</div>
-          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => { const nextResolution = event.target.value; setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select image-quality-select" aria-label="出图质量" value={quality} onChange={(event) => setQuality(event.target.value)}>{imageQualityOptions(model).map((item) => <option key={item.value} value={item.value}>质量 {item.label}</option>)}</select>
           <div className="count-picker"><span>数量</span>{[1,2,3,4].map((value) => <button type="button" className={count === value ? 'active' : ''} onClick={() => setCount(value)} key={value}>{value}</button>)}</div>
         </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
@@ -1291,7 +1303,7 @@ function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src
   </div>
 }
 
-function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, resolution, setResolution, references, setReferences, editImage, fileRef, addFiles, appendFiles, submit, loading, error, onPreview }) {
+function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, resolution, setResolution, quality, setQuality, references, setReferences, editImage, fileRef, addFiles, appendFiles, submit, loading, error, onPreview }) {
   const [ratioOpen, setRatioOpen] = useState(false)
   const [draggingFiles, setDraggingFiles] = useState(false)
   const ratioPickerRef = useRef(null)
@@ -1363,8 +1375,9 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
               </button>)}</div>
             </div>}
           </div>
-          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => { const nextResolution = event.target.value; setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="image-model-select image-quality-select" aria-label="出图质量" value={quality} onChange={(event) => setQuality(event.target.value)}>{imageQualityOptions(model).map((item) => <option key={item.value} value={item.value}>质量 {item.label}</option>)}</select>
         </div>
         <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? '生成中' : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button></div>
       </div>
