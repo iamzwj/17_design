@@ -761,6 +761,10 @@ function recoverWaterfallTasks() {
 }
 
 function ocrExecutablePath() {
+  // This helper wraps Apple Vision and is bundled only for the macOS desktop
+  // app. The Tencent deployment runs Linux, where attempting to execute the
+  // Mach-O binary aborts the entire compliance request.
+  if (process.platform !== 'darwin') return null
   const bundledPath = process.resourcesPath && path.join(process.resourcesPath, 'native-bin', 'macos-vision-ocr')
   if (bundledPath && fs.existsSync(bundledPath)) return bundledPath
   return path.join(rootDir, 'native', 'bin', 'macos-vision-ocr')
@@ -788,7 +792,7 @@ async function imageSourceToBuffer(source) {
 
 async function analyzeImageLayout(sources) {
   const images = await Promise.all(sources.map(imageSourceToData))
-  const parts = [{ text: `你是品牌物料的视觉检查器。逐张查看图片本身，只输出可直接观察到的事实，不做最终合规结论。
+  const parts = [{ text: `你是品牌物料和门店店招的视觉检查器。逐张查看图片本身，只输出可直接观察到的事实，不做最终合规结论。
 
 必须检查并清楚描述：
 1. 图片内所有可辨认文字，尤其是品牌英文名、中文名、Logo 文案、数字和单位；
@@ -796,6 +800,8 @@ async function analyzeImageLayout(sources) {
 3. Logo 是否旋转、镜像、压扁、拉长、透视变形、改色、描边或使用错误版本；
 4. 核心标题、电话号码等是否被裁断或互相覆盖；
 5. 对遮挡关系写明“哪个元素遮挡了哪个元素”，不要只转录文字。
+6. 如果画面是门店、门头、侧招、玻璃贴、广告牌或施工/效果图，识别可见物料类型，完整转录可辨认的尺寸、比例、材质、工艺、色值、灯箱、侧招、玻璃贴、二维码和导视信息；说明画面是否覆盖门店正面、侧面和玻璃区域。
+7. 不要从照片臆测不可见的材质、厚度、色温、调光器、防水、二维码跳转或现场尺寸。看不到时明确写“未提供足够可见证据”。
 
 如果 Logo 虽然还能辨认但有任何部分被其他文字覆盖，也必须明确报告。不要因为能读出文字就忽略遮挡。` }]
   images.forEach((image, index) => {
@@ -826,7 +832,10 @@ async function analyzeImageLayout(sources) {
 
 async function recognizeImageText(source, index) {
   const executable = ocrExecutablePath()
-  if (!fs.existsSync(executable)) throw new Error('本机图片识别组件缺失，请重新安装最新版应用')
+  // Visual analysis remains available on the server, so OCR is an optional
+  // supplement. Returning an empty string lets the audit complete even where
+  // the platform-specific local OCR runtime is unavailable.
+  if (!executable || !fs.existsSync(executable)) return ''
   const temporaryDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'diefa-ocr-'))
   const imagePath = path.join(temporaryDir, `image-${index}.bin`)
   try {
