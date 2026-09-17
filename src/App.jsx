@@ -1602,14 +1602,18 @@ function TextStudio({ type, conversation, onSave }) {
         const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
         return { ...file, src: url }
       })) : submittedAttachments
-      const nextMessages = [...messagesRef.current, { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }]
+      const submittedMessage = { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }
+      const nextMessages = [...messagesRef.current, submittedMessage]
       updateMessages(nextMessages)
       scrollToLatestResult()
       saveTaskState(nextMessages, { activate: true })
       const requestMessages = nextMessages.filter((item) => item.role !== 'error').map((item) => {
         if (item.role !== 'user' || !item.attachments?.length) return { role: item.role, content: item.content }
         const textFiles = item.attachments.filter((file) => file.kind === 'text')
-        const imageFiles = item.attachments.filter((file) => file.kind === 'image' && file.src)
+        // Keep prior answers as conversation context, but only send the
+        // images attached to this submission. A stale historical thumbnail
+        // must never prevent the current review from running.
+        const imageFiles = item === submittedMessage ? item.attachments.filter((file) => file.kind === 'image' && file.src) : []
         const imageInstruction = imageFiles.length ? `\n\n当前消息附带 ${imageFiles.length} 张待审核图片。你必须直接查看图片中的文字、Logo、排版和可见内容并完成审核，不得要求用户再次提供图片或图片文字。` : ''
         const text = [item.content, imageInstruction, ...textFiles.map((file) => `\n\n--- 文件：${file.name} ---\n${file.content}`)].join('')
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
