@@ -66,14 +66,21 @@ jobs:
           fi
           echo "Vibbit credential preflight passed (HTTP $status; nonexistent task expected)."
 
-      - name: Inspect GRS text service models
+      - name: Probe GRS text model availability
         run: |
-          # Diagnostic only: print the provider response, never its credential.
-          # This exposes model availability when a compatible text endpoint
-          # returns an otherwise opaque provider error.
-          curl --silent --show-error --max-time 20 \
-            --header "Authorization: Bearer ${{ secrets.GRSAI_API_KEY }}" \
-            "${{ secrets.GRSAI_BASE_URL }}/v1/models" || true
+          # The provider does not expose a model-list endpoint. Probe a few
+          # small compatible text requests without printing credentials.
+          for text_model in gpt-5.6-terra gpt-4o-mini gpt-4o gpt-5-mini; do
+            http_code=$(curl --silent --show-error --output /tmp/grs-text-probe.json --write-out '%{http_code}' \
+              --connect-timeout 10 --max-time 30 \
+              --header "Authorization: Bearer ${{ secrets.GRSAI_API_KEY }}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"model\":\"$text_model\",\"messages\":[{\"role\":\"user\",\"content\":\"回复：好\"}],\"max_tokens\":4}" \
+              "${{ secrets.GRSAI_BASE_URL }}/v1/chat/completions" || true)
+            printf '%s HTTP %s: ' "$text_model" "$http_code"
+            cat /tmp/grs-text-probe.json
+            printf '\n'
+          done
 
       - name: Upload server environment
         run: |

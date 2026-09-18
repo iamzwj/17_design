@@ -512,7 +512,12 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
   }
 
   if (!response.ok) {
-    const message = data?.error?.message || data?.error || data?.message || `上游服务返回 HTTP ${response.status}`
+    const upstreamMessage = data?.error?.message || data?.error || data?.message || `上游服务返回 HTTP ${response.status}`
+    // Some OpenAI-compatible gateways leak this opaque English fallback even
+    // though the user never configured OpenAI directly.
+    const message = /openai api error/i.test(String(upstreamMessage))
+      ? 'AI 审核服务暂时不可用，请稍后重试'
+      : upstreamMessage
     const error = new Error(typeof message === 'string' ? message : JSON.stringify(message))
     error.status = response.status
     throw error
