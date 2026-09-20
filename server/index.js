@@ -79,6 +79,25 @@ const FESTIVAL_PROMPT_REASONING = 'high'
 const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
 const FESTIVAL_IMAGE_QUALITY = 'high'
+const FESTIVAL_DEFAULT_STYLE = 'color-ink'
+const festivalPosterStyles = Object.freeze({
+  '3d-cartoon': {
+    label: '3D卡通风格',
+    prompt: '高级精致3D卡通渲染，人物比例自然、表情亲切，材质细腻，柔和全局光照与真实空间景深；保持现代社区的可信生活感，避免低幼玩具感和夸张大头造型',
+  },
+  photorealistic: {
+    label: '写实风格',
+    prompt: '高级商业摄影级写实风格，真实现代住宅小区、自然亚洲人物面貌、真实服装与皮肤材质，电影感自然光和克制景深；画面温暖可信，避免插画感、塑料感和过度磨皮',
+  },
+  'color-ink': {
+    label: '彩色水墨风',
+    prompt: '高级彩色水墨与现代东方水墨风格，宣纸肌理、通透叠色、干湿笔触和克制金色点染，现代社区建筑与生活人物清晰可辨',
+  },
+  'paper-cut': {
+    label: '剪纸风格',
+    prompt: '高级现代立体剪纸插画风格，以中国民间剪纸语言结合多层纸艺结构、细腻刻纹、纸张纤维和柔和层叠阴影；构图现代克制，避免廉价贴纸感和纯平图标感',
+  },
+})
 const festivalAssetDir = path.join(rootDir, 'public', 'festival-poster')
 const festivalAssetFiles = {
   style: 'modern-ink-style-reference.png',
@@ -1149,7 +1168,13 @@ async function festivalReferenceDataUrl(fileName) {
   return `data:${imageMimeFromFileName(fileName)};base64,${buffer.toString('base64')}`
 }
 
-async function buildFestivalPlans(festival) {
+function normalizeFestivalPosterStyle(style) {
+  return Object.hasOwn(festivalPosterStyles, style) ? style : FESTIVAL_DEFAULT_STYLE
+}
+
+async function buildFestivalPlans(festival, styleKey = FESTIVAL_DEFAULT_STYLE) {
+  const normalizedStyle = normalizeFestivalPosterStyle(styleKey)
+  const selectedStyle = festivalPosterStyles[normalizedStyle]
   const systemPrompt = `你是资深中国社区品牌海报策划师。请为用户给出的节日规划两套完整、明显不同的9:16竖版海报生图提示词，并只输出JSON对象：{"plans":[{"title":"方案名","scene":"场景摘要","prompt":"完整生图提示词"},{...}]}。
 
 输出语言和命名规则：
@@ -1158,7 +1183,7 @@ async function buildFestivalPlans(festival) {
 - scene 用一句中文说清场所、服务对象、动作和道具归属；prompt 必须是可直接生图的完整中文描述。
 
 固定规则：
-1. 画面为高级彩色水墨/现代东方水墨，现代住宅小区为主体，大环境优先；人物大小适中，位于右下约四分之一。
+1. 本次指定风格为“${selectedStyle.label}”：${selectedStyle.prompt}。这是硬性风格约束，两套方案必须一致遵循。现代住宅小区为主体，大环境优先；人物大小适中，位于右下约四分之一。
 2. 两套方案必须采用不同的社区空间和不同的服务/陪伴动作，且动作与节日属性、邻里和睦明确相关，不能只是摆拍。
 3. 主人物固定为约20岁的黑色短发亚洲女性，微笑。按中国时令更换服装：夏季白色短袖衬衫；秋季白色长袖衬衫；更冷时黑色西装外套加白衬衫；冬季黑色呢子大衣。下装始终为黑色西裤和黑皮鞋。
 4. 女主领口必须使用参考图中的浅橙色双层长菱形飘带和中央顶部深色圆扣，禁止画成普通蝴蝶结。
@@ -1168,8 +1193,9 @@ async function buildFestivalPlans(festival) {
 8. 禁止国旗、国徽、华表、天安门、军事及其他政治敏感元素。允许无图案纯色红旗、红色装饰和不含政治符号的横幅。
 9. 花或礼物的持有者必须符合叙事逻辑；逐项约束双手、手指、手腕、手肘和道具连接完整，不得断手、融合或多肢。
 10. 底部约18%必须留作蒙版安全区，人物鞋子、轮椅、文字及重要物件全部高于安全线。不要把朴邻Logo或蒙版本身画进底图。
-11. 如果节日有明确周年数字或传统意象，应以花圃、装置、活动等自然方式延展，而不是只使用简单节气元素。`
-  const userPrompt = `节日：${festival}\n请结合该节日在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。`
+11. 如果节日有明确周年数字或传统意象，应以花圃、装置、活动等自然方式延展，而不是只使用简单节气元素。
+12. 完整提示词必须明确写出“${selectedStyle.label}”及其关键视觉特征，不得混入其他画风。`
+  const userPrompt = `节日或节气：${festival}\n指定风格：${selectedStyle.label}\n请结合它在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。`
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
@@ -1289,7 +1315,7 @@ async function runFestivalPosterPlanningTask(taskId) {
   if (!task || task.status !== 'running') return
   try {
     updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
-    const planning = await buildFestivalPlans(task.festival)
+    const planning = await buildFestivalPlans(task.festival, task.style)
     updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，正在自动开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== FESTIVAL_PROMPT_MODEL })
     beginFestivalPosterImageGeneration(taskId, planning.plans)
   } catch (error) {
@@ -1301,11 +1327,13 @@ async function runFestivalPosterImageTask(taskId) {
   const task = festivalPosterTasks.find((item) => item.id === taskId)
   if (!task || task.status !== 'running' || !Array.isArray(task.plans) || task.plans.length !== 2) return
   try {
-    const [styleReference, collarReference, templateBuffer] = await Promise.all([
-      festivalReferenceDataUrl(festivalAssetFiles.style),
+    const normalizedStyle = normalizeFestivalPosterStyle(task.style)
+    const [collarReference, templateBuffer, styleReference] = await Promise.all([
       festivalReferenceDataUrl(festivalAssetFiles.collar),
       fs.promises.readFile(path.join(festivalAssetDir, festivalAssetFiles.template)),
+      normalizedStyle === FESTIVAL_DEFAULT_STYLE ? festivalReferenceDataUrl(festivalAssetFiles.style) : Promise.resolve(null),
     ])
+    const imageReferences = styleReference ? [styleReference, collarReference] : [collarReference]
     const templateMetadata = await sharp(templateBuffer).metadata()
     if (templateMetadata.width !== 1080 || templateMetadata.height !== 1920) throw new Error('朴邻蒙版必须保持1080×1920原尺寸')
     updateFestivalPosterTask(taskId, { phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版' })
@@ -1313,10 +1341,10 @@ async function runFestivalPosterImageTask(taskId) {
       let generated
       let fallbackUsed = false
       try {
-        generated = await requestFestivalImage(plan.prompt, [styleReference, collarReference], FESTIVAL_PRIMARY_IMAGE_MODEL)
+        generated = await requestFestivalImage(plan.prompt, imageReferences, FESTIVAL_PRIMARY_IMAGE_MODEL)
       } catch (primaryError) {
         console.warn(`Festival poster ${index + 1}: Sunburst unavailable, falling back to Image 2.5:`, primaryError?.message || primaryError)
-        generated = await requestFestivalImage(plan.prompt, [styleReference, collarReference], FESTIVAL_FALLBACK_IMAGE_MODEL)
+        generated = await requestFestivalImage(plan.prompt, imageReferences, FESTIVAL_FALLBACK_IMAGE_MODEL)
         fallbackUsed = true
       }
       return {
@@ -1332,6 +1360,8 @@ async function runFestivalPosterImageTask(taskId) {
     }))
     const result = {
       festival: task.festival,
+      style: normalizedStyle,
+      styleLabel: festivalPosterStyles[normalizedStyle].label,
       promptModel: task.promptModel || FESTIVAL_PROMPT_MODEL,
       promptModelLabel: `GRS AI · ${task.promptModel || FESTIVAL_PROMPT_MODEL} · 高质量`,
       imageModelLabel: posters.some((poster) => poster.fallbackUsed) ? 'Image 2.5（Sunburst 不可用，已自动降级）' : 'Image 2.5 Sunburst · high',
@@ -1347,10 +1377,11 @@ async function runFestivalPosterImageTask(taskId) {
 app.post('/api/festival-posters/tasks', requireAuth, (req, res, next) => {
   try {
     const festival = String(req.body?.festival || '').trim().slice(0, 24)
-    if (!festival) return res.status(400).json({ error: '请输入节日名称' })
+    if (!festival) return res.status(400).json({ error: '请输入节日或节气名称' })
+    const style = normalizeFestivalPosterStyle(String(req.body?.style || ''))
     const now = new Date().toISOString()
     const task = {
-      id: randomUUID(), userId: req.user.id, festival, status: 'running', phase: 'queued',
+      id: randomUUID(), userId: req.user.id, festival, style, status: 'running', phase: 'queued',
       message: '任务已提交，正在生成提示词', autoGenerate: true, createdAt: now, updatedAt: now,
     }
     festivalPosterTasks.push(task)

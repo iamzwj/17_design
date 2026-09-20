@@ -6,9 +6,21 @@ import ToolPageHeader from './ToolPageHeader.jsx'
 import './festivalPoster.css'
 
 const FESTIVAL_DRAFT_KEY = 'diefa-festival-poster-draft-v1'
+const FESTIVAL_STYLE_KEY = 'diefa-festival-poster-style-v1'
+const DEFAULT_FESTIVAL_STYLE = 'color-ink'
+const FESTIVAL_STYLES = [
+  { value: '3d-cartoon', label: '3D卡通风格' },
+  { value: 'photorealistic', label: '写实风格' },
+  { value: DEFAULT_FESTIVAL_STYLE, label: '彩色水墨风' },
+  { value: 'paper-cut', label: '剪纸风格' },
+]
 const taskListeners = new Set()
 const taskPollers = new Map()
-let taskStore = { festival: localStorage.getItem(FESTIVAL_DRAFT_KEY) || '国庆', tasks: [], loadingHistory: false, creating: false, error: '', loaded: false }
+let taskStore = { festival: localStorage.getItem(FESTIVAL_DRAFT_KEY) || '国庆', style: localStorage.getItem(FESTIVAL_STYLE_KEY) || DEFAULT_FESTIVAL_STYLE, tasks: [], loadingHistory: false, creating: false, error: '', loaded: false }
+
+function festivalStyleLabel(style) {
+  return FESTIVAL_STYLES.find((item) => item.value === style)?.label || '彩色水墨风'
+}
 
 function emit(update) {
   taskStore = { ...taskStore, ...update }
@@ -61,11 +73,11 @@ async function loadHistory() {
   } finally { emit({ loadingHistory: false }) }
 }
 
-async function createTask(festival) {
+async function createTask(festival, style = DEFAULT_FESTIVAL_STYLE) {
   if (taskStore.creating) return
   emit({ creating: true, error: '' })
   try {
-    const { task } = await createFestivalPosterTask({ festival })
+    const { task } = await createFestivalPosterTask({ festival, style })
     putTask(task); pollTask(task.id).catch(() => {})
   } finally { emit({ creating: false }) }
 }
@@ -91,11 +103,12 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
   useEffect(() => { if (!taskStore.loaded) loadHistory().catch(() => {}) }, [])
 
   function changeFestival(value) { localStorage.setItem(FESTIVAL_DRAFT_KEY, value); emit({ festival: value }) }
+  function changeStyle(value) { localStorage.setItem(FESTIVAL_STYLE_KEY, value); emit({ style: value }) }
 
   async function submitFestival() {
     const festival = store.festival.trim()
     if (!festival || store.creating) return
-    try { await createTask(festival) }
+    try { await createTask(festival, store.style) }
     catch (error) { if (error.status === 401) onRequireLogin?.(); else emit({ error: friendlyError(error) }) }
   }
 
@@ -112,13 +125,13 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
 
   return <section className="workspace festival-poster-workspace"><div className="festival-poster-page">
     <ToolPageHeader eyebrow="CONTENT CREATION" title="朴邻节日节气海报"/>
-    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日，例如国庆、重阳、元旦" maxLength={24}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
+    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日节气海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日或节气，例如国庆、重阳、冬至" maxLength={24}/><select aria-label="海报风格" value={store.style} onChange={(event) => changeStyle(event.target.value)}>{FESTIVAL_STYLES.map((style) => <option key={style.value} value={style.value}>{style.label}</option>)}</select><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
     <div className="festival-task-stream">
-      {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日海报任务</b><span>输入节日后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {
+      {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日节气海报任务</b><span>输入节日或节气后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {
         const plans = Array.isArray(task.plans) ? task.plans : []
         const posters = task.result?.posters || []
         return <article className={`festival-task-card status-${task.status}`} key={task.id}>
-          <header><div className="festival-task-leading"><span className="festival-status-dot"/><div><div><b>{task.festival}</b><em>{statusLabel(task)}</em></div><small>{new Date(task.createdAt).toLocaleString('zh-CN')}<span>{task.promptModel || (task.status === 'running' ? '高质量方案模型' : 'gpt-5.5')}</span><span>Image 2.5 Sunburst / 2.5</span>{task.promptModelFallback && <span>已自动切换备用模型</span>}</small></div></div><div className="festival-task-actions">{task.status === 'succeeded' && <button type="button" onClick={() => createTask(task.festival)}>重新生成</button>}{task.status === 'failed' && plans.length === 2 && <button type="button" onClick={() => generateImages(task)}>重新生成</button>}{task.status === 'failed' && plans.length !== 2 && <button type="button" onClick={() => createTask(task.festival)}>重新生成</button>}</div></header>
+          <header><div className="festival-task-leading"><span className="festival-status-dot"/><div><div><b>{task.festival}</b><em>{statusLabel(task)}</em></div><small>{new Date(task.createdAt).toLocaleString('zh-CN')}<span>{festivalStyleLabel(task.style)}</span><span>{task.promptModel || (task.status === 'running' ? '高质量方案模型' : 'gpt-5.5')}</span><span>Image 2.5 Sunburst / 2.5</span>{task.promptModelFallback && <span>已自动切换备用模型</span>}</small></div></div><div className="festival-task-actions">{task.status === 'succeeded' && <button type="button" onClick={() => createTask(task.festival, task.style || DEFAULT_FESTIVAL_STYLE)}>重新生成</button>}{task.status === 'failed' && plans.length === 2 && <button type="button" onClick={() => generateImages(task)}>重新生成</button>}{task.status === 'failed' && plans.length !== 2 && <button type="button" onClick={() => createTask(task.festival, task.style || DEFAULT_FESTIVAL_STYLE)}>重新生成</button>}</div></header>
           {task.status === 'running' && <div className="festival-task-running"><i className="festival-loader"/><span>{task.message || '后台任务处理中'}</span></div>}
           {task.status === 'failed' && <div className="festival-error task-error">{task.error || '生成失败，请重试'}</div>}
           {posters.length > 0 && <div className="festival-task-images">{posters.map((poster, index) => <figure key={poster.url}><button type="button" onClick={() => setPreview({ url: poster.url, urls: posters.map((item) => item.url), prompt: poster.prompt })}><img src={poster.url} alt={`${task.festival}方案${index + 1}`}/></button><figcaption><div><b>{poster.title || `方案 ${index + 1}`}</b><small>{poster.scene || '邻里服务场景'}</small></div><button type="button" onClick={() => downloadGeneratedImage(poster.url, `${task.festival}-方案${index + 1}`)}><Icon name="download" size={15}/>下载</button></figcaption></figure>)}</div>}
