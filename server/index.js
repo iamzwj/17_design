@@ -1412,7 +1412,7 @@ app.post('/api/festival-posters/tasks/:id/generate', requireAuth, (req, res, nex
 
 app.get('/api/festival-posters/tasks', requireAuth, (req, res) => {
   const tasks = festivalPosterTasks
-    .filter((item) => item.userId === req.user.id)
+    .filter((item) => item.userId === req.user.id && item.status !== 'failed')
     .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
     .map(publicFestivalPosterTask)
   res.json({ tasks })
