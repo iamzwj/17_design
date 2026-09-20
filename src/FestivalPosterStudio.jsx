@@ -111,7 +111,7 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
   }
 
   return <section className="workspace festival-poster-workspace"><div className="festival-poster-page">
-    <ToolPageHeader eyebrow="CONTENT CREATION" title="朴邻节日海报"/>
+    <ToolPageHeader eyebrow="CONTENT CREATION" title="朴邻节日节气海报"/>
     <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日，例如国庆、重阳、元旦" maxLength={24}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
     <div className="festival-task-stream">
       {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日海报任务</b><span>输入节日后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {

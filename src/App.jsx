@@ -474,7 +474,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {active === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
-            <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日海报</button>
+            <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日节气海报</button>
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={moreExpanded} onClick={() => { if (item.disabled) return; setMoreExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
