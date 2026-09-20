@@ -147,6 +147,7 @@ const videoAssetsDir = path.join(waterfallDataDir, 'video-assets')
 const waterfallStoreFile = path.join(waterfallDataDir, 'waterfall-tasks.json')
 const directImageStoreFile = path.join(waterfallDataDir, 'direct-image-records.json')
 const videoTaskStoreFile = path.join(waterfallDataDir, 'video-tasks.json')
+const festivalPosterStoreFile = path.join(waterfallDataDir, 'festival-poster-tasks.json')
 const avatarDownloadStoreFile = path.join(waterfallDataDir, 'please-day-avatar-downloads.json')
 const waterfallControllers = new Map()
 const FAILED_TASK_TTL = 5 * 60 * 1000
@@ -312,6 +313,26 @@ function loadVideoTaskRecords() {
 }
 
 const videoTasks = new Map(loadVideoTaskRecords().map((record) => [record.id, record]))
+
+function loadFestivalPosterTasks() {
+  try {
+    const records = JSON.parse(fs.readFileSync(festivalPosterStoreFile, 'utf8'))
+    return Array.isArray(records) ? records.filter((record) => record?.id && record?.userId) : []
+  } catch { return [] }
+}
+
+let festivalPosterTasks = loadFestivalPosterTasks()
+
+function saveFestivalPosterTasks() {
+  festivalPosterTasks = festivalPosterTasks.slice(-100)
+  fs.writeFileSync(festivalPosterStoreFile, JSON.stringify(festivalPosterTasks, null, 2), { mode: 0o600 })
+}
+
+function updateFestivalPosterTask(id, update) {
+  festivalPosterTasks = festivalPosterTasks.map((task) => task.id === id ? { ...task, ...update, updatedAt: new Date().toISOString() } : task)
+  saveFestivalPosterTasks()
+  return festivalPosterTasks.find((task) => task.id === id)
+}
 
 function saveVideoTasks() {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000
@@ -1149,7 +1170,7 @@ async function buildFestivalPlans(festival) {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `节日：${festival}\n请结合该节日在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。` },
     ],
-  }, undefined, 90_000)
+  }, undefined, 180_000)
   return parseFestivalPlans(completionText(completion))
 }
 
@@ -1185,21 +1206,28 @@ async function saveFestivalPoster(sourceUrl, templateBuffer, festival, index) {
   return `/api/waterfall/assets/${fileName}`
 }
 
-app.post('/api/festival-posters', requireAuth, async (req, res, next) => {
-  let chargedUser = null
-  const creditCost = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
+function publicFestivalPosterTask(task) {
+  if (!task) return null
+  const visible = { ...task }
+  delete visible.userId
+  delete visible.chargedCredits
+  return visible
+}
+
+async function runFestivalPosterTask(taskId) {
+  const task = festivalPosterTasks.find((item) => item.id === taskId)
+  if (!task || task.status !== 'running') return
   try {
-    const festival = String(req.body?.festival || '').trim().slice(0, 24)
-    if (!festival) return res.status(400).json({ error: '请输入节日名称' })
+    updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
     const [plans, styleReference, collarReference, templateBuffer] = await Promise.all([
-      buildFestivalPlans(festival),
+      buildFestivalPlans(task.festival),
       festivalReferenceDataUrl(festivalAssetFiles.style),
       festivalReferenceDataUrl(festivalAssetFiles.collar),
       fs.promises.readFile(path.join(festivalAssetDir, festivalAssetFiles.template)),
     ])
     const templateMetadata = await sharp(templateBuffer).metadata()
     if (templateMetadata.width !== 1080 || templateMetadata.height !== 1920) throw new Error('朴邻蒙版必须保持1080×1920原尺寸')
-    chargedUser = spendCredits(req.user.id, creditCost)
+    updateFestivalPosterTask(taskId, { phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版' })
     const posters = await Promise.all(plans.map(async (plan, index) => {
       let generated
       let fallbackUsed = false
@@ -1214,26 +1242,54 @@ app.post('/api/festival-posters', requireAuth, async (req, res, next) => {
         title: plan.title,
         scene: plan.scene,
         prompt: plan.prompt,
-        url: await saveFestivalPoster(generated.url, templateBuffer, festival, index),
+        url: await saveFestivalPoster(generated.url, templateBuffer, task.festival, index),
         model: generated.model,
         resolution: generated.resolution,
         quality: FESTIVAL_IMAGE_QUALITY,
         fallbackUsed,
       }
     }))
-    res.json({
-      festival,
+    const result = {
+      festival: task.festival,
       promptModel: FESTIVAL_PROMPT_MODEL,
       promptModelLabel: 'GRS AI · GPT-5.5 · 高',
       imageModelLabel: posters.some((poster) => poster.fallbackUsed) ? 'Image 2.5（Sunburst 不可用，已自动降级）' : 'Image 2.5 Sunburst · high',
       posters,
-      user: chargedUser,
-    })
+    }
+    updateFestivalPosterTask(taskId, { status: 'succeeded', phase: 'completed', message: '两套海报已完成', result, completedAt: new Date().toISOString() })
   } catch (error) {
-    if (chargedUser) refundCredits(req.user.id, creditCost)
-    next(error)
+    refundCredits(task.userId, task.chargedCredits)
+    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: error?.message || '生成失败，请稍后重试', completedAt: new Date().toISOString() })
   }
+}
+
+app.post('/api/festival-posters/tasks', requireAuth, (req, res, next) => {
+  try {
+    const festival = String(req.body?.festival || '').trim().slice(0, 24)
+    if (!festival) return res.status(400).json({ error: '请输入节日名称' })
+    const chargedCredits = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
+    const chargedUser = spendCredits(req.user.id, chargedCredits)
+    const now = new Date().toISOString()
+    const task = {
+      id: randomUUID(), userId: req.user.id, festival, status: 'running', phase: 'queued',
+      message: '任务已提交，等待后台处理', chargedCredits, createdAt: now, updatedAt: now,
+    }
+    festivalPosterTasks.push(task)
+    saveFestivalPosterTasks()
+    setImmediate(() => { void runFestivalPosterTask(task.id) })
+    res.status(202).json({ task: publicFestivalPosterTask(task), user: chargedUser })
+  } catch (error) { next(error) }
 })
+
+app.get('/api/festival-posters/tasks/:id', requireAuth, (req, res) => {
+  const task = festivalPosterTasks.find((item) => item.id === req.params.id && item.userId === req.user.id)
+  if (!task) return res.status(404).json({ error: '节日海报任务不存在或无权访问' })
+  res.json({ task: publicFestivalPosterTask(task) })
+})
+
+for (const task of festivalPosterTasks.filter((item) => item.status === 'running')) {
+  setImmediate(() => { void runFestivalPosterTask(task.id) })
+}
 
 app.post('/api/text', requireAuth, handleTextCompletion)
 // Compliance review remains separate from account-only text chat.

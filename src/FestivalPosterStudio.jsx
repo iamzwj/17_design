@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createFestivalPosters, downloadGeneratedImage } from './api.js'
+import { createFestivalPosterTask, downloadGeneratedImage, getFestivalPosterTask } from './api.js'
 import { Icon } from './icons.jsx'
 import './festivalPoster.css'
 
@@ -11,7 +11,7 @@ let festivalTaskRequest = null
 function loadFestivalTask() {
   try {
     const saved = JSON.parse(localStorage.getItem(FESTIVAL_TASK_KEY) || '{}')
-    if (saved?.status === 'running') return { ...saved, status: 'error', error: '上次任务因页面刷新中断，请重新生成。' }
+    if (saved?.status === 'running' && !saved?.taskId) return { ...saved, status: 'error', error: '上次任务编号丢失，请重新生成。' }
     return {
       festival: saved?.festival || DEFAULT_FESTIVAL,
       status: saved?.status || 'idle',
@@ -37,19 +37,48 @@ function subscribeFestivalTask(listener) {
   return () => festivalTaskListeners.delete(listener)
 }
 
-function runFestivalTask(festival) {
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+async function pollFestivalTask(taskId) {
+  while (true) {
+    const { task } = await getFestivalPosterTask(taskId)
+    if (task.status === 'succeeded') {
+      updateFestivalTask({ status: 'success', phase: task.phase, message: task.message, result: task.result, error: '' })
+      return task.result
+    }
+    if (task.status === 'failed') throw new Error(task.error || '生成失败，请稍后重试')
+    updateFestivalTask({ status: 'running', phase: task.phase, message: task.message || '后台任务处理中' })
+    await wait(3_000)
+  }
+}
+
+function resumeFestivalTask(taskId) {
   if (festivalTaskRequest) return festivalTaskRequest
-  updateFestivalTask({ festival, status: 'running', error: '' })
-  festivalTaskRequest = createFestivalPosters({ festival })
-    .then((result) => {
-      updateFestivalTask({ festival, status: 'success', result, error: '' })
-      return result
-    })
+  festivalTaskRequest = pollFestivalTask(taskId)
     .catch((error) => {
-      updateFestivalTask({ festival, status: 'error', error: error.message || '生成失败，请稍后重试' })
+      updateFestivalTask({ status: 'error', error: error.message || '生成失败，请稍后重试' })
       throw error
     })
     .finally(() => { festivalTaskRequest = null })
+  return festivalTaskRequest
+}
+
+function runFestivalTask(festival) {
+  if (festivalTaskRequest) return festivalTaskRequest
+  updateFestivalTask({ festival, taskId: null, status: 'running', phase: 'submitting', message: '正在提交后台任务', result: null, error: '' })
+  festivalTaskRequest = createFestivalPosterTask({ festival })
+    .then(({ task, user }) => {
+      updateFestivalTask({ taskId: task.id, user, status: 'running', phase: task.phase, message: task.message })
+      festivalTaskRequest = null
+      return resumeFestivalTask(task.id)
+    })
+    .catch((error) => {
+      updateFestivalTask({ status: 'error', error: error.message || '生成失败，请稍后重试' })
+      festivalTaskRequest = null
+      throw error
+    })
   return festivalTaskRequest
 }
 
@@ -59,7 +88,10 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
   const loading = task.status === 'running'
 
   useEffect(() => subscribeFestivalTask(setTask), [])
-  useEffect(() => { if (result?.user) onUserUpdate?.(result.user) }, [result?.user, onUserUpdate])
+  useEffect(() => { if (task.user) onUserUpdate?.(task.user) }, [task.user, onUserUpdate])
+  useEffect(() => {
+    if (task.status === 'running' && task.taskId) resumeFestivalTask(task.taskId).catch(() => {})
+  }, [task.status, task.taskId])
 
   function changeFestival(value) {
     updateFestivalTask({ festival: value })
@@ -100,7 +132,7 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
             <li>严格使用领花、风格母版与朴邻蒙版</li>
             <li>规避国旗、国徽、华表等敏感元素</li>
           </ul>
-          {loading && <div className="festival-progress"><i/><span>正在规划场景、生成画面并叠加品牌蒙版，通常需要几分钟。</span></div>}
+          {loading && <div className="festival-progress"><i/><span>{task.message || '正在规划场景、生成画面并叠加品牌蒙版，通常需要几分钟。'}</span></div>}
           {error && <div className="festival-error">{error}</div>}
         </aside>
 
