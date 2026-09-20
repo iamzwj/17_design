@@ -1,30 +1,77 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFestivalPosters, downloadGeneratedImage } from './api.js'
 import { Icon } from './icons.jsx'
 import './festivalPoster.css'
 
 const DEFAULT_FESTIVAL = '国庆'
+const FESTIVAL_TASK_KEY = 'diefa-festival-poster-task-v1'
+const festivalTaskListeners = new Set()
+let festivalTaskRequest = null
+
+function loadFestivalTask() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FESTIVAL_TASK_KEY) || '{}')
+    if (saved?.status === 'running') return { ...saved, status: 'error', error: '上次任务因页面刷新中断，请重新生成。' }
+    return {
+      festival: saved?.festival || DEFAULT_FESTIVAL,
+      status: saved?.status || 'idle',
+      error: saved?.error || '',
+      result: saved?.result || null,
+    }
+  } catch {
+    return { festival: DEFAULT_FESTIVAL, status: 'idle', error: '', result: null }
+  }
+}
+
+let festivalTask = loadFestivalTask()
+
+function updateFestivalTask(update) {
+  festivalTask = { ...festivalTask, ...update }
+  try { localStorage.setItem(FESTIVAL_TASK_KEY, JSON.stringify(festivalTask)) } catch { /* Keep the shared in-memory task when storage is full. */ }
+  festivalTaskListeners.forEach((listener) => listener(festivalTask))
+}
+
+function subscribeFestivalTask(listener) {
+  festivalTaskListeners.add(listener)
+  listener(festivalTask)
+  return () => festivalTaskListeners.delete(listener)
+}
+
+function runFestivalTask(festival) {
+  if (festivalTaskRequest) return festivalTaskRequest
+  updateFestivalTask({ festival, status: 'running', error: '' })
+  festivalTaskRequest = createFestivalPosters({ festival })
+    .then((result) => {
+      updateFestivalTask({ festival, status: 'success', result, error: '' })
+      return result
+    })
+    .catch((error) => {
+      updateFestivalTask({ festival, status: 'error', error: error.message || '生成失败，请稍后重试' })
+      throw error
+    })
+    .finally(() => { festivalTaskRequest = null })
+  return festivalTaskRequest
+}
 
 export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
-  const [festival, setFestival] = useState(DEFAULT_FESTIVAL)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
+  const [task, setTask] = useState(festivalTask)
+  const { festival, result, error } = task
+  const loading = task.status === 'running'
+
+  useEffect(() => subscribeFestivalTask(setTask), [])
+  useEffect(() => { if (result?.user) onUserUpdate?.(result.user) }, [result?.user, onUserUpdate])
+
+  function changeFestival(value) {
+    updateFestivalTask({ festival: value })
+  }
 
   async function generate() {
     const name = festival.trim()
     if (!name || loading) return
-    setLoading(true)
-    setError('')
     try {
-      const data = await createFestivalPosters({ festival: name })
-      setResult(data)
-      if (data.user) onUserUpdate?.(data.user)
+      await runFestivalTask(name)
     } catch (requestError) {
       if (requestError.status === 401) onRequireLogin?.()
-      else setError(requestError.message || '生成失败，请稍后重试')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -40,7 +87,7 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
         <aside className="festival-poster-panel glass-strong">
           <label htmlFor="festival-name">节日名称</label>
           <div className="festival-input-row">
-            <input id="festival-name" value={festival} onChange={(event) => setFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) generate() }} placeholder="例如：国庆、重阳、元旦" maxLength={24}/>
+            <input id="festival-name" value={festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) generate() }} placeholder="例如：国庆、重阳、元旦" maxLength={24}/>
             <button type="button" onClick={generate} disabled={!festival.trim() || loading}>{loading ? '生成中…' : '生成两套方案'}<Icon name="spark" size={17}/></button>
           </div>
           <div className="festival-model-card">
