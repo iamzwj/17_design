@@ -72,6 +72,17 @@ const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 const DEFAULT_IMAGE_QUALITY = 'high'
 const imageQualities = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
 const extremeImageRatios = new Set(['1:3', '3:1'])
+const FESTIVAL_PROMPT_MODEL = 'gpt-5.5'
+const FESTIVAL_PROMPT_REASONING = 'high'
+const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
+const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
+const FESTIVAL_IMAGE_QUALITY = 'high'
+const festivalAssetDir = path.join(rootDir, 'public', 'festival-poster')
+const festivalAssetFiles = {
+  style: 'modern-ink-style-reference.png',
+  collar: 'orange-collar-reference.png',
+  template: 'pulin-overlay-template.png',
+}
 
 function supportsImageRatio(model, resolution, ratio) {
   if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
@@ -1090,6 +1101,139 @@ async function handleTextCompletion(req, res, next) {
     next(error)
   }
 }
+
+function parseFestivalPlans(value) {
+  const source = String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+  let parsed
+  try { parsed = JSON.parse(source) } catch { throw new Error('提示词模型没有返回有效方案，请重试') }
+  const plans = Array.isArray(parsed) ? parsed : parsed?.plans
+  if (!Array.isArray(plans) || plans.length !== 2) throw new Error('提示词模型必须返回两套海报方案')
+  return plans.map((plan, index) => {
+    const prompt = String(plan?.prompt || '').trim()
+    if (!prompt) throw new Error(`方案 ${index + 1} 缺少生图提示词`)
+    return {
+      title: String(plan?.title || `方案 ${index + 1}`).trim().slice(0, 40),
+      scene: String(plan?.scene || '邻里服务场景').trim().slice(0, 120),
+      prompt: prompt.slice(0, 30_000),
+    }
+  })
+}
+
+async function festivalReferenceDataUrl(fileName) {
+  const filePath = path.join(festivalAssetDir, fileName)
+  const buffer = await fs.promises.readFile(filePath)
+  return `data:${imageMimeFromFileName(fileName)};base64,${buffer.toString('base64')}`
+}
+
+async function buildFestivalPlans(festival) {
+  const systemPrompt = `你是资深中国社区品牌海报策划师。请为用户给出的节日规划两套完整、明显不同的9:16竖版海报生图提示词，并只输出JSON对象：{"plans":[{"title":"方案名","scene":"场景摘要","prompt":"完整生图提示词"},{...}]}。
+
+固定规则：
+1. 画面为高级彩色水墨/现代东方水墨，现代住宅小区为主体，大环境优先；人物大小适中，位于右下约四分之一。
+2. 两套方案必须采用不同的社区空间和不同的服务/陪伴动作，且动作与节日属性、邻里和睦明确相关，不能只是摆拍。
+3. 主人物固定为约20岁的黑色短发亚洲女性，微笑。按中国时令更换服装：夏季白色短袖衬衫；秋季白色长袖衬衫；更冷时黑色西装外套加白衬衫；冬季黑色呢子大衣。下装始终为黑色西裤和黑皮鞋。
+4. 女主领口必须使用参考图中的浅橙色双层长菱形飘带和中央顶部深色圆扣，禁止画成普通蝴蝶结。
+5. 标题、两句五言诗和必要的节日场景文字都必须随画面生成。标题参考风格图左侧大号竖排蓝绿色夹暖赭干笔书法，距离边缘至少10%画布宽。只允许出现节日名称、两句五言诗和必要的节日横幅文案，不得有额外文字。
+6. 诗句必须是两句各五个汉字，贴合节日和邻里和睦；提示词中逐字写出标题、诗句和横幅文字，要求文字清晰准确。
+7. 不固定使用巨大太阳或月亮，只有节日本身需要时才使用。
+8. 禁止国旗、国徽、华表、天安门、军事及其他政治敏感元素。允许无图案纯色红旗、红色装饰和不含政治符号的横幅。
+9. 花或礼物的持有者必须符合叙事逻辑；逐项约束双手、手指、手腕、手肘和道具连接完整，不得断手、融合或多肢。
+10. 底部约18%必须留作蒙版安全区，人物鞋子、轮椅、文字及重要物件全部高于安全线。不要把朴邻Logo或蒙版本身画进底图。
+11. 如果节日有明确周年数字或传统意象，应以花圃、装置、活动等自然方式延展，而不是只使用简单节气元素。`
+  const completion = await requestUpstream('/v1/chat/completions', {
+    model: FESTIVAL_PROMPT_MODEL,
+    reasoning_effort: FESTIVAL_PROMPT_REASONING,
+    stream: false,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `节日：${festival}\n请结合该节日在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。` },
+    ],
+  }, undefined, 90_000)
+  return parseFestivalPlans(completionText(completion))
+}
+
+async function requestFestivalImage(prompt, references, model) {
+  const settings = model === FESTIVAL_PRIMARY_IMAGE_MODEL
+    ? { model, resolution: '2k', size: '1440x2560' }
+    : { model: FESTIVAL_FALLBACK_IMAGE_MODEL, resolution: '1k', size: '720x1280' }
+  const data = await requestUpstream('/v1/api/generate', {
+    model: settings.model,
+    prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
+    images: references,
+    aspectRatio: settings.size,
+    quality: FESTIVAL_IMAGE_QUALITY,
+    replyType: 'json',
+  }, undefined, 240_000)
+  const url = upstreamResultUrl(data)
+  const status = upstreamStatus(data)
+  if (!succeededUpstreamStatuses.has(status) || !url) throw new Error(upstreamError(data) || `${settings.model} 生成失败`)
+  return { url, model: settings.model, resolution: settings.resolution }
+}
+
+async function saveFestivalPoster(sourceUrl, templateBuffer, festival, index) {
+  const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
+  if (!response.ok) throw new Error(`保存节日海报失败（HTTP ${response.status}）`)
+  const baseBuffer = Buffer.from(await response.arrayBuffer())
+  const fileName = `festival-${String(festival).replace(/[^a-z0-9\u4e00-\u9fff_-]+/gi, '-').slice(0, 24) || 'poster'}-${Date.now()}-${index}-${randomUUID()}.png`
+  await sharp(baseBuffer, { failOn: 'none' })
+    .rotate()
+    .resize(1080, 1920, { fit: 'fill' })
+    .composite([{ input: templateBuffer, left: 0, top: 0 }])
+    .png()
+    .toFile(path.join(waterfallAssetsDir, fileName))
+  return `/api/waterfall/assets/${fileName}`
+}
+
+app.post('/api/festival-posters', requireAuth, async (req, res, next) => {
+  let chargedUser = null
+  const creditCost = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
+  try {
+    const festival = String(req.body?.festival || '').trim().slice(0, 24)
+    if (!festival) return res.status(400).json({ error: '请输入节日名称' })
+    const [plans, styleReference, collarReference, templateBuffer] = await Promise.all([
+      buildFestivalPlans(festival),
+      festivalReferenceDataUrl(festivalAssetFiles.style),
+      festivalReferenceDataUrl(festivalAssetFiles.collar),
+      fs.promises.readFile(path.join(festivalAssetDir, festivalAssetFiles.template)),
+    ])
+    const templateMetadata = await sharp(templateBuffer).metadata()
+    if (templateMetadata.width !== 1080 || templateMetadata.height !== 1920) throw new Error('朴邻蒙版必须保持1080×1920原尺寸')
+    chargedUser = spendCredits(req.user.id, creditCost)
+    const posters = await Promise.all(plans.map(async (plan, index) => {
+      let generated
+      let fallbackUsed = false
+      try {
+        generated = await requestFestivalImage(plan.prompt, [styleReference, collarReference], FESTIVAL_PRIMARY_IMAGE_MODEL)
+      } catch (primaryError) {
+        console.warn(`Festival poster ${index + 1}: Sunburst unavailable, falling back to Image 2.5:`, primaryError?.message || primaryError)
+        generated = await requestFestivalImage(plan.prompt, [styleReference, collarReference], FESTIVAL_FALLBACK_IMAGE_MODEL)
+        fallbackUsed = true
+      }
+      return {
+        title: plan.title,
+        scene: plan.scene,
+        prompt: plan.prompt,
+        url: await saveFestivalPoster(generated.url, templateBuffer, festival, index),
+        model: generated.model,
+        resolution: generated.resolution,
+        quality: FESTIVAL_IMAGE_QUALITY,
+        fallbackUsed,
+      }
+    }))
+    res.json({
+      festival,
+      promptModel: FESTIVAL_PROMPT_MODEL,
+      promptModelLabel: 'GRS AI · GPT-5.5 · 高',
+      imageModelLabel: posters.some((poster) => poster.fallbackUsed) ? 'Image 2.5（Sunburst 不可用，已自动降级）' : 'Image 2.5 Sunburst · high',
+      posters,
+      user: chargedUser,
+    })
+  } catch (error) {
+    if (chargedUser) refundCredits(req.user.id, creditCost)
+    next(error)
+  }
+})
 
 app.post('/api/text', requireAuth, handleTextCompletion)
 // Compliance review remains separate from account-only text chat.

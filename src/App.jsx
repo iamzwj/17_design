@@ -13,6 +13,7 @@ import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
 import ImagePreview from './ImagePreview.jsx'
+import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, imageQualityForModel, imageQualityOptions, supportsImageRatio, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
@@ -22,7 +23,7 @@ const MODULES = [
   { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
-  { id: 'content', label: '内容生产', caption: '即将上线', icon: 'book', disabled: true },
+  { id: 'content', label: '内容创作', caption: '节日海报与品牌内容', icon: 'book' },
 ]
 
 const RATIO_OPTIONS = [
@@ -469,6 +470,11 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           {imageExpanded && <div className="module-submenu" role="menu" aria-label="图像创作模式">
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'dialogue' ? 'true' : undefined} className={active === 'image' && imageMode === 'dialogue' ? 'active' : ''} onClick={() => { onSelectImageMode('dialogue'); onClose() }}>对话模式</button>
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
+          </div>}
+        </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
+          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {active === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
+            <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日海报</button>
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={moreExpanded} onClick={() => { if (item.disabled) return; setMoreExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -1678,6 +1684,7 @@ export default function App() {
   const directLogoTool = localPreviewParams.get('tool') === 'logo'
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
+  const directContent = localPreviewParams.get('module') === 'content'
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
   const localPreviewTheme = localPreviewParams.get('theme')
@@ -1685,7 +1692,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
@@ -1864,6 +1871,8 @@ export default function App() {
       ? <MoreTools key={workspaceToken} tool={moreTool}/>
     : active === 'image'
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
+      : active === 'content'
+        ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
       : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>

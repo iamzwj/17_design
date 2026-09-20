@@ -112,6 +112,7 @@ export async function getAdminOverview() {
 }
 
 export const generateImage = (payload) => post('/api/image', payload)
+export const createFestivalPosters = (payload) => post('/api/festival-posters', payload)
 export const uploadComplianceImage = (payload) => post('/api/compliance/uploads', payload)
 export const generateComplianceReview = (payload) => post('/api/compliance/review', payload)
 export async function generateText(payload) {
