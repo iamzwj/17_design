@@ -113,6 +113,17 @@ export async function getAdminOverview() {
 
 export const generateImage = (payload) => post('/api/image', payload)
 export const createFestivalPosterTask = (payload) => post('/api/festival-posters/tasks', payload)
+export const generateFestivalPosterImages = (id, plans) => post(`/api/festival-posters/tasks/${encodeURIComponent(id)}/generate`, { plans })
+export async function listFestivalPosterTasks() {
+  const response = await fetch(apiUrl('/api/festival-posters/tasks'), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(data.error || `加载节日海报历史失败 (${response.status})`)
+    error.status = response.status
+    throw error
+  }
+  return data
+}
 export async function getFestivalPosterTask(id) {
   const response = await fetch(apiUrl(`/api/festival-posters/tasks/${encodeURIComponent(id)}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
   const data = await response.json().catch(() => ({}))

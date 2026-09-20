@@ -1214,13 +1214,29 @@ function publicFestivalPosterTask(task) {
   return visible
 }
 
-async function runFestivalPosterTask(taskId) {
+function festivalPosterErrorMessage(error) {
+  const message = String(error?.message || error || '')
+  if (/timeout|timed out|aborted/i.test(message)) return 'GRS AI 本次响应超时，积分已退回，请重新生成'
+  return message || '生成失败，请稍后重试'
+}
+
+async function runFestivalPosterPlanningTask(taskId) {
   const task = festivalPosterTasks.find((item) => item.id === taskId)
   if (!task || task.status !== 'running') return
   try {
     updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
-    const [plans, styleReference, collarReference, templateBuffer] = await Promise.all([
-      buildFestivalPlans(task.festival),
+    const plans = await buildFestivalPlans(task.festival)
+    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，可修改后开始生图', plans })
+  } catch (error) {
+    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterErrorMessage(error), completedAt: new Date().toISOString() })
+  }
+}
+
+async function runFestivalPosterImageTask(taskId) {
+  const task = festivalPosterTasks.find((item) => item.id === taskId)
+  if (!task || task.status !== 'running' || !Array.isArray(task.plans) || task.plans.length !== 2) return
+  try {
+    const [styleReference, collarReference, templateBuffer] = await Promise.all([
       festivalReferenceDataUrl(festivalAssetFiles.style),
       festivalReferenceDataUrl(festivalAssetFiles.collar),
       fs.promises.readFile(path.join(festivalAssetDir, festivalAssetFiles.template)),
@@ -1228,7 +1244,7 @@ async function runFestivalPosterTask(taskId) {
     const templateMetadata = await sharp(templateBuffer).metadata()
     if (templateMetadata.width !== 1080 || templateMetadata.height !== 1920) throw new Error('朴邻蒙版必须保持1080×1920原尺寸')
     updateFestivalPosterTask(taskId, { phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版' })
-    const posters = await Promise.all(plans.map(async (plan, index) => {
+    const posters = await Promise.all(task.plans.map(async (plan, index) => {
       let generated
       let fallbackUsed = false
       try {
@@ -1258,8 +1274,8 @@ async function runFestivalPosterTask(taskId) {
     }
     updateFestivalPosterTask(taskId, { status: 'succeeded', phase: 'completed', message: '两套海报已完成', result, completedAt: new Date().toISOString() })
   } catch (error) {
-    refundCredits(task.userId, task.chargedCredits)
-    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: error?.message || '生成失败，请稍后重试', completedAt: new Date().toISOString() })
+    if (task.chargedCredits) refundCredits(task.userId, task.chargedCredits)
+    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterErrorMessage(error), completedAt: new Date().toISOString() })
   }
 }
 
@@ -1267,18 +1283,45 @@ app.post('/api/festival-posters/tasks', requireAuth, (req, res, next) => {
   try {
     const festival = String(req.body?.festival || '').trim().slice(0, 24)
     if (!festival) return res.status(400).json({ error: '请输入节日名称' })
-    const chargedCredits = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
-    const chargedUser = spendCredits(req.user.id, chargedCredits)
     const now = new Date().toISOString()
     const task = {
       id: randomUUID(), userId: req.user.id, festival, status: 'running', phase: 'queued',
-      message: '任务已提交，等待后台处理', chargedCredits, createdAt: now, updatedAt: now,
+      message: '任务已提交，正在生成提示词', createdAt: now, updatedAt: now,
     }
     festivalPosterTasks.push(task)
     saveFestivalPosterTasks()
-    setImmediate(() => { void runFestivalPosterTask(task.id) })
-    res.status(202).json({ task: publicFestivalPosterTask(task), user: chargedUser })
+    setImmediate(() => { void runFestivalPosterPlanningTask(task.id) })
+    res.status(202).json({ task: publicFestivalPosterTask(task) })
   } catch (error) { next(error) }
+})
+
+app.post('/api/festival-posters/tasks/:id/generate', requireAuth, (req, res, next) => {
+  let chargedUser = null
+  try {
+    const task = festivalPosterTasks.find((item) => item.id === req.params.id && item.userId === req.user.id)
+    if (!task) return res.status(404).json({ error: '节日海报任务不存在或无权访问' })
+    if (!['planned', 'failed'].includes(task.status)) return res.status(409).json({ error: task.status === 'running' ? '任务正在处理中' : '当前任务不能开始生图' })
+    const inputPlans = Array.isArray(req.body?.plans) ? req.body.plans : task.plans
+    const plans = inputPlans?.map((plan, index) => ({
+      title: String(plan?.title || `方案 ${index + 1}`).trim().slice(0, 40),
+      scene: String(plan?.scene || '邻里服务场景').trim().slice(0, 120),
+      prompt: String(plan?.prompt || '').trim().slice(0, 30_000),
+    }))
+    if (!Array.isArray(plans) || plans.length !== 2 || plans.some((plan) => !plan.prompt)) return res.status(400).json({ error: '请保留两套完整提示词' })
+    const chargedCredits = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
+    chargedUser = spendCredits(req.user.id, chargedCredits)
+    const updated = updateFestivalPosterTask(task.id, { status: 'running', phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版', plans, chargedCredits, error: '', result: null })
+    setImmediate(() => { void runFestivalPosterImageTask(task.id) })
+    res.status(202).json({ task: publicFestivalPosterTask(updated), user: chargedUser })
+  } catch (error) { next(error) }
+})
+
+app.get('/api/festival-posters/tasks', requireAuth, (req, res) => {
+  const tasks = festivalPosterTasks
+    .filter((item) => item.userId === req.user.id)
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+    .map(publicFestivalPosterTask)
+  res.json({ tasks })
 })
 
 app.get('/api/festival-posters/tasks/:id', requireAuth, (req, res) => {
@@ -1288,7 +1331,7 @@ app.get('/api/festival-posters/tasks/:id', requireAuth, (req, res) => {
 })
 
 for (const task of festivalPosterTasks.filter((item) => item.status === 'running')) {
-  setImmediate(() => { void runFestivalPosterTask(task.id) })
+  setImmediate(() => { void (task.phase === 'generating' ? runFestivalPosterImageTask(task.id) : runFestivalPosterPlanningTask(task.id)) })
 }
 
 app.post('/api/text', requireAuth, handleTextCompletion)

@@ -1,153 +1,134 @@
 import { useEffect, useState } from 'react'
-import { createFestivalPosterTask, downloadGeneratedImage, getFestivalPosterTask } from './api.js'
+import { createFestivalPosterTask, downloadGeneratedImage, generateFestivalPosterImages, getFestivalPosterTask, listFestivalPosterTasks } from './api.js'
 import { Icon } from './icons.jsx'
+import ImagePreview from './ImagePreview.jsx'
 import './festivalPoster.css'
 
-const DEFAULT_FESTIVAL = '国庆'
-const FESTIVAL_TASK_KEY = 'diefa-festival-poster-task-v1'
-const festivalTaskListeners = new Set()
-let festivalTaskRequest = null
+const FESTIVAL_DRAFT_KEY = 'diefa-festival-poster-draft-v1'
+const taskListeners = new Set()
+const taskPollers = new Map()
+let taskStore = { festival: localStorage.getItem(FESTIVAL_DRAFT_KEY) || '国庆', tasks: [], loadingHistory: false, creating: false, error: '', loaded: false }
 
-function loadFestivalTask() {
+function emit(update) {
+  taskStore = { ...taskStore, ...update }
+  taskListeners.forEach((listener) => listener(taskStore))
+}
+
+function subscribe(listener) {
+  taskListeners.add(listener); listener(taskStore)
+  return () => taskListeners.delete(listener)
+}
+
+function putTask(task) {
+  emit({ tasks: [task, ...taskStore.tasks.filter((item) => item.id !== task.id)].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) })
+}
+
+function friendlyError(error) {
+  const message = String(error?.message || error || '')
+  return /timeout|timed out|aborted/i.test(message) ? 'GRS AI 本次响应超时，请重新生成。' : message || '生成失败，请稍后重试'
+}
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+function pollTask(id) {
+  if (taskPollers.has(id)) return taskPollers.get(id)
+  const request = (async () => {
+    while (true) {
+      const { task } = await getFestivalPosterTask(id)
+      putTask(task)
+      if (task.status !== 'running') return task
+      await wait(3_000)
+    }
+  })().catch((error) => {
+    const current = taskStore.tasks.find((task) => task.id === id)
+    if (current) putTask({ ...current, status: 'failed', phase: 'failed', error: friendlyError(error) })
+    throw error
+  }).finally(() => taskPollers.delete(id))
+  taskPollers.set(id, request)
+  return request
+}
+
+async function loadHistory() {
+  if (taskStore.loadingHistory) return
+  emit({ loadingHistory: true, error: '' })
   try {
-    const saved = JSON.parse(localStorage.getItem(FESTIVAL_TASK_KEY) || '{}')
-    if (saved?.status === 'running' && !saved?.taskId) return { ...saved, status: 'error', error: '上次任务编号丢失，请重新生成。' }
-    return {
-      festival: saved?.festival || DEFAULT_FESTIVAL,
-      status: saved?.status || 'idle',
-      error: saved?.error || '',
-      result: saved?.result || null,
-    }
-  } catch {
-    return { festival: DEFAULT_FESTIVAL, status: 'idle', error: '', result: null }
-  }
+    const { tasks } = await listFestivalPosterTasks()
+    emit({ tasks: tasks || [], loaded: true })
+    for (const task of tasks || []) if (task.status === 'running') pollTask(task.id).catch(() => {})
+  } catch (error) {
+    emit({ error: error.status === 401 ? '' : friendlyError(error), loaded: true }); throw error
+  } finally { emit({ loadingHistory: false }) }
 }
 
-let festivalTask = loadFestivalTask()
-
-function updateFestivalTask(update) {
-  festivalTask = { ...festivalTask, ...update }
-  try { localStorage.setItem(FESTIVAL_TASK_KEY, JSON.stringify(festivalTask)) } catch { /* Keep the shared in-memory task when storage is full. */ }
-  festivalTaskListeners.forEach((listener) => listener(festivalTask))
+async function createTask(festival) {
+  if (taskStore.creating) return
+  emit({ creating: true, error: '' })
+  try {
+    const { task } = await createFestivalPosterTask({ festival })
+    putTask(task); pollTask(task.id).catch(() => {})
+  } finally { emit({ creating: false }) }
 }
 
-function subscribeFestivalTask(listener) {
-  festivalTaskListeners.add(listener)
-  listener(festivalTask)
-  return () => festivalTaskListeners.delete(listener)
+async function startImages(task, plans) {
+  const response = await generateFestivalPosterImages(task.id, plans)
+  putTask(response.task); pollTask(task.id).catch(() => {})
+  return response
 }
 
-function wait(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-async function pollFestivalTask(taskId) {
-  while (true) {
-    const { task } = await getFestivalPosterTask(taskId)
-    if (task.status === 'succeeded') {
-      updateFestivalTask({ status: 'success', phase: task.phase, message: task.message, result: task.result, error: '' })
-      return task.result
-    }
-    if (task.status === 'failed') throw new Error(task.error || '生成失败，请稍后重试')
-    updateFestivalTask({ status: 'running', phase: task.phase, message: task.message || '后台任务处理中' })
-    await wait(3_000)
-  }
-}
-
-function resumeFestivalTask(taskId) {
-  if (festivalTaskRequest) return festivalTaskRequest
-  festivalTaskRequest = pollFestivalTask(taskId)
-    .catch((error) => {
-      updateFestivalTask({ status: 'error', error: error.message || '生成失败，请稍后重试' })
-      throw error
-    })
-    .finally(() => { festivalTaskRequest = null })
-  return festivalTaskRequest
-}
-
-function runFestivalTask(festival) {
-  if (festivalTaskRequest) return festivalTaskRequest
-  updateFestivalTask({ festival, taskId: null, status: 'running', phase: 'submitting', message: '正在提交后台任务', result: null, error: '' })
-  festivalTaskRequest = createFestivalPosterTask({ festival })
-    .then(({ task, user }) => {
-      updateFestivalTask({ taskId: task.id, user, status: 'running', phase: task.phase, message: task.message })
-      festivalTaskRequest = null
-      return resumeFestivalTask(task.id)
-    })
-    .catch((error) => {
-      updateFestivalTask({ status: 'error', error: error.message || '生成失败，请稍后重试' })
-      festivalTaskRequest = null
-      throw error
-    })
-  return festivalTaskRequest
+function statusLabel(task) {
+  if (task.status === 'succeeded') return '已完成'
+  if (task.status === 'planned') return '待确认提示词'
+  if (task.status === 'failed') return '生成失败'
+  return task.phase === 'generating' ? '正在生图' : '正在生成提示词'
 }
 
 export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
-  const [task, setTask] = useState(festivalTask)
-  const { festival, result, error } = task
-  const loading = task.status === 'running'
+  const [store, setStore] = useState(taskStore)
+  const [editing, setEditing] = useState('')
+  const [preview, setPreview] = useState(null)
 
-  useEffect(() => subscribeFestivalTask(setTask), [])
-  useEffect(() => { if (task.user) onUserUpdate?.(task.user) }, [task.user, onUserUpdate])
-  useEffect(() => {
-    if (task.status === 'running' && task.taskId) resumeFestivalTask(task.taskId).catch(() => {})
-  }, [task.status, task.taskId])
+  useEffect(() => subscribe(setStore), [])
+  useEffect(() => { if (!taskStore.loaded) loadHistory().catch(() => {}) }, [])
 
-  function changeFestival(value) {
-    updateFestivalTask({ festival: value })
+  function changeFestival(value) { localStorage.setItem(FESTIVAL_DRAFT_KEY, value); emit({ festival: value }) }
+
+  async function submitFestival() {
+    const festival = store.festival.trim()
+    if (!festival || store.creating) return
+    try { await createTask(festival) }
+    catch (error) { if (error.status === 401) onRequireLogin?.(); else emit({ error: friendlyError(error) }) }
   }
 
-  async function generate() {
-    const name = festival.trim()
-    if (!name || loading) return
+  function changePrompt(task, index, prompt) {
+    putTask({ ...task, plans: task.plans.map((plan, planIndex) => planIndex === index ? { ...plan, prompt } : plan) })
+  }
+
+  async function generateImages(task) {
+    if (!Array.isArray(task.plans) || task.plans.length !== 2 || task.plans.some((plan) => !plan.prompt.trim())) return
     try {
-      await runFestivalTask(name)
-    } catch (requestError) {
-      if (requestError.status === 401) onRequireLogin?.()
+      const { user } = await startImages(task, task.plans)
+      if (user) onUserUpdate?.(user)
+    } catch (error) {
+      if (error.status === 401) onRequireLogin?.()
+      else putTask({ ...task, status: 'failed', error: friendlyError(error) })
     }
   }
 
-  return <section className="workspace festival-poster-workspace">
-    <div className="festival-poster-page">
-      <header className="festival-poster-heading">
-        <span>CONTENT CREATION</span>
-        <h1>朴邻节日海报</h1>
-        <p>输入节日名称，自动规划两套不同的邻里服务场景并生成 9:16 成品海报。</p>
-      </header>
-
-      <div className="festival-poster-layout">
-        <aside className="festival-poster-panel glass-strong">
-          <label htmlFor="festival-name">节日名称</label>
-          <div className="festival-input-row">
-            <input id="festival-name" value={festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) generate() }} placeholder="例如：国庆、重阳、元旦" maxLength={24}/>
-            <button type="button" onClick={generate} disabled={!festival.trim() || loading}>{loading ? '生成中…' : '生成两套方案'}<Icon name="spark" size={17}/></button>
-          </div>
-          <div className="festival-model-card">
-            <div><span>提示词模型</span><b>GRS AI · GPT-5.5</b><small>高推理</small></div>
-            <div><span>生图模型</span><b>Image 2.5 Sunburst</b><small>高质量 · 自动降级 Image 2.5</small></div>
-          </div>
-          <ul className="festival-rules">
-            <li>固定输出两套不同服务场景</li>
-            <li>自动匹配季节着装与节日氛围</li>
-            <li>严格使用领花、风格母版与朴邻蒙版</li>
-            <li>规避国旗、国徽、华表等敏感元素</li>
-          </ul>
-          {loading && <div className="festival-progress"><i/><span>{task.message || '正在规划场景、生成画面并叠加品牌蒙版，通常需要几分钟。'}</span></div>}
-          {error && <div className="festival-error">{error}</div>}
-        </aside>
-
-        <main className="festival-poster-results">
-          {!result ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>等待节日灵感</b><span>生成后，两套完整海报会显示在这里。</span></div> : <>
-            <div className="festival-result-summary"><div><span>{result.festival}</span><b>已生成 2 套方案</b></div><small>提示词：{result.promptModelLabel || 'GPT-5.5 · 高'} · 生图：{result.imageModelLabel || 'Image 2.5 Sunburst · high'}</small></div>
-            <div className="festival-poster-grid">
-              {(result.posters || []).map((poster, index) => <article className="festival-poster-card glass-strong" key={poster.url || index}>
-                <div className="festival-image-wrap"><img src={poster.url} alt={`${result.festival}海报方案${index + 1}`}/><span>方案 {index + 1}</span></div>
-                <footer><div><b>{poster.title || `方案 ${index + 1}`}</b><small>{poster.scene || '邻里服务场景'}</small></div><button type="button" onClick={() => downloadGeneratedImage(poster.url, `${result.festival}-方案${index + 1}`)}><Icon name="download" size={16}/>下载</button></footer>
-              </article>)}
-            </div>
-          </>}
-        </main>
-      </div>
+  return <section className="workspace festival-poster-workspace"><div className="festival-poster-page">
+    <header className="festival-poster-heading"><span>CONTENT CREATION</span><h1>朴邻节日海报</h1></header>
+    <div className="festival-waterfall-composer glass-strong"><label htmlFor="festival-name">节日名称</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="例如：国庆、重阳、元旦" maxLength={24}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '提交中…' : '生成两套提示词'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
+    <div className="festival-task-stream">
+      {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日海报任务</b><span>输入节日后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {
+        const plans = Array.isArray(task.plans) ? task.plans : []
+        const posters = task.result?.posters || []
+        return <article className={`festival-task-card glass-strong status-${task.status}`} key={task.id}>
+          <header><div className="festival-task-leading"><span className="festival-task-icon"><Icon name="book" size={17}/></span><div><div><b>{task.festival}</b><em>{statusLabel(task)}</em></div><small>{new Date(task.createdAt).toLocaleString('zh-CN')} · GPT-5.5 高 · Image 2.5 Sunburst / 2.5</small></div></div><div className="festival-task-actions">{task.status === 'planned' && <button type="button" onClick={() => generateImages(task)}>生成两张海报</button>}{task.status === 'succeeded' && <button type="button" onClick={() => createTask(task.festival)}>再次生成</button>}{task.status === 'failed' && (plans.length === 2 ? <button type="button" onClick={() => generateImages(task)}>重新生图</button> : <button type="button" onClick={() => createTask(task.festival)}>重试提示词</button>)}</div></header>
+          {task.status === 'running' && <div className="festival-task-running"><i className="festival-loader"/><span>{task.message || '后台任务处理中'}</span></div>}
+          {task.status === 'failed' && <div className="festival-error task-error">{task.error || '生成失败，请重试'}</div>}
+          {plans.length === 2 && task.status !== 'succeeded' && <div className="festival-prompt-list task-prompts">{plans.map((plan, index) => { const editKey = `${task.id}:${index}`; return <section className="festival-prompt-card" key={editKey}><div><span>方案 {index + 1}</span><b>{plan.title || `方案 ${index + 1}`}</b><button type="button" onClick={() => setEditing(editing === editKey ? '' : editKey)} aria-label={`${editing === editKey ? '完成' : '编辑'}方案 ${index + 1} 提示词`}><Icon name={editing === editKey ? 'check' : 'edit'} size={15}/></button></div><textarea value={plan.prompt} readOnly={editing !== editKey || task.status === 'running'} onChange={(event) => changePrompt(task, index, event.target.value)} rows="8"/></section> })}</div>}
+          {posters.length > 0 && <div className="festival-task-images">{posters.map((poster, index) => <figure key={poster.url}><button type="button" onClick={() => setPreview({ url: poster.url, urls: posters.map((item) => item.url), prompt: poster.prompt })}><img src={poster.url} alt={`${task.festival}方案${index + 1}`}/></button><figcaption><div><b>{poster.title || `方案 ${index + 1}`}</b><small>{poster.scene || '邻里服务场景'}</small></div><button type="button" onClick={() => downloadGeneratedImage(poster.url, `${task.festival}-方案${index + 1}`)}><Icon name="download" size={15}/>下载</button></figcaption></figure>)}</div>}
+        </article>
+      })}
     </div>
-  </section>
+  </div>{preview && <ImagePreview url={preview.url} urls={preview.urls} prompt={preview.prompt} onClose={() => setPreview(null)}/>}</section>
 }
