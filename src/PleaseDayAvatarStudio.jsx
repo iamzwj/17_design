@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
+import ToolPageHeader from './ToolPageHeader.jsx'
 import './pleaseDayAvatar.css'
 
 const OUTPUT_SIZE = 850
@@ -124,11 +125,7 @@ export default function PleaseDayAvatarStudio() {
 
   return <section className="workspace please-day-workspace">
     <div className="please-day-page more-tool-page">
-      <header className="please-day-heading more-tool-heading">
-        <span>PLEASE DAY</span>
-        <h1>朴里节头像框</h1>
-        <p>上传头像，调整位置和大小，即可生成活动头像。</p>
-      </header>
+      <ToolPageHeader eyebrow="PLEASE DAY" title="朴里节头像框" description="上传头像，调整位置和大小，即可生成活动头像。"/>
       <div className="please-day-frame-tabs" role="tablist" aria-label="选择头像框版本">
         {FRAME_OPTIONS.map((frame) => <button key={frame.id} type="button" role="tab" aria-selected={frame.id === frameId} className={frame.id === frameId ? 'active' : ''} onClick={() => setFrameId(frame.id)}>{frame.label}</button>)}
       </div>

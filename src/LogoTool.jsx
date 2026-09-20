@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { embeddedImageAssetsFromWorkbook } from './excelEmbeddedImages.js'
 import { Icon } from './icons.jsx'
+import ToolPageHeader from './ToolPageHeader.jsx'
 import './logoTool.css'
 
 const OUTPUT_SIZE = 240
@@ -230,7 +231,7 @@ export default function LogoTool() {
 
   return <section className="workspace logo-tool-workspace">
     <div className="logo-tool-page more-tool-page">
-      <header className="logo-tool-heading more-tool-heading"><span>LOGO PROCESSING</span><h1>Logo 处理</h1><p>单个调整后下载，或在原表格中批量替换为统一的白底 240 × 240 Logo。</p></header>
+      <ToolPageHeader eyebrow="LOGO PROCESSING" title="Logo 处理" description="单个调整后下载，或在原表格中批量替换为统一的白底 240 × 240 Logo。"/>
       <div className="logo-mode-tabs" role="tablist" aria-label="Logo 处理方式"><button type="button" role="tab" aria-selected={mode === 'single'} className={mode === 'single' ? 'active' : ''} onClick={() => { setMode('single'); setError('') }}>单个处理</button><button type="button" role="tab" aria-selected={mode === 'batch'} className={mode === 'batch' ? 'active' : ''} onClick={() => { setMode('batch'); setError('') }}>批量处理</button></div>
       {mode === 'single' ? <div className="logo-tool-layout">
         <main className="logo-preview-panel glass-strong"><div className={`logo-canvas-wrap${logo ? ' has-logo' : ''}`}><canvas ref={canvasRef} width={OUTPUT_SIZE} height={OUTPUT_SIZE} aria-label="Logo 输出预览" onPointerDown={beginDrag} onPointerMove={moveLogo} onPointerUp={stopDrag} onPointerCancel={stopDrag}/>{!logo && <button className="logo-empty-upload" type="button" onClick={() => uploadRef.current?.click()}><Icon name="upload" size={20}/><b>上传 Logo</b><small>PNG、JPG、WebP 或 SVG</small></button>}</div><p className="logo-preview-note">{logo ? '拖动 Logo 调整位置' : '输出画布：240 × 240，白色背景'}</p></main>

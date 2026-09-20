@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { fetchBatchImage, fetchBatchSpreadsheet } from './api.js'
 import { embeddedImagesFromWorkbook } from './excelEmbeddedImages.js'
 import { Icon } from './icons.jsx'
+import ToolPageHeader from './ToolPageHeader.jsx'
 import './qrBatch.css'
 
 const URL_KEYS = ['二维码图片链接', 'qr_image_url', 'qr_url', '二维码链接', '二维码图片', '二维码', '链接', 'url']
@@ -425,7 +426,7 @@ async function availableFileName(directory, name) {
 
   return <section className="workspace batch-workspace">
     <div className="batch-page more-tool-page">
-      <div className="batch-heading more-tool-heading"><div><span>BATCH COMPOSER</span><h1>批处理二维码</h1><p>上传一张底图和 Excel，框选替换位置，一次生成全部成品。</p></div></div>
+      <ToolPageHeader eyebrow="BATCH COMPOSER" title="批处理二维码" description="上传一张底图和 Excel，框选替换位置，一次生成全部成品。"/>
       <div className="batch-layout">
         <aside className="batch-controls glass-strong">
           <Step number="1" title="上传底图" done={Boolean(baseFile)}><label className="batch-upload"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectBase}/><Icon name="upload" size={17}/><span>{baseFile ? baseFile.name : '选择 PNG / JPG / WebP'}</span></label>{baseSize && <small>{baseSize.width} × {baseSize.height} px</small>}</Step>

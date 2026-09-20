@@ -72,7 +72,9 @@ const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 const DEFAULT_IMAGE_QUALITY = 'high'
 const imageQualities = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
 const extremeImageRatios = new Set(['1:3', '3:1'])
-const FESTIVAL_PROMPT_MODEL = 'gpt-5.5'
+const FESTIVAL_PROMPT_MODEL = 'gemini-3.1-pro'
+const FESTIVAL_PROMPT_FALLBACK_MODEL = 'gpt-6-astra'
+const FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL = 'gpt-5.5'
 const FESTIVAL_PROMPT_REASONING = 'high'
 const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
@@ -1124,9 +1126,10 @@ async function handleTextCompletion(req, res, next) {
 }
 
 function parseFestivalPlans(value) {
-  const source = String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+  const source = String(value || '').trim().replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+  const jsonStart = source.indexOf('{"plans"')
   let parsed
-  try { parsed = JSON.parse(source) } catch { throw new Error('提示词模型没有返回有效方案，请重试') }
+  try { parsed = JSON.parse(jsonStart >= 0 ? source.slice(jsonStart) : source) } catch { throw new Error('提示词模型没有返回有效方案，请重试') }
   const plans = Array.isArray(parsed) ? parsed : parsed?.plans
   if (!Array.isArray(plans) || plans.length !== 2) throw new Error('提示词模型必须返回两套海报方案')
   return plans.map((plan, index) => {
@@ -1161,17 +1164,47 @@ async function buildFestivalPlans(festival) {
 9. 花或礼物的持有者必须符合叙事逻辑；逐项约束双手、手指、手腕、手肘和道具连接完整，不得断手、融合或多肢。
 10. 底部约18%必须留作蒙版安全区，人物鞋子、轮椅、文字及重要物件全部高于安全线。不要把朴邻Logo或蒙版本身画进底图。
 11. 如果节日有明确周年数字或传统意象，应以花圃、装置、活动等自然方式延展，而不是只使用简单节气元素。`
-  const completion = await requestUpstream('/v1/chat/completions', {
-    model: FESTIVAL_PROMPT_MODEL,
-    reasoning_effort: FESTIVAL_PROMPT_REASONING,
-    stream: false,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: `节日：${festival}\n请结合该节日在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。` },
-    ],
-  }, undefined, 180_000)
-  return parseFestivalPlans(completionText(completion))
+  const userPrompt = `节日：${festival}\n请结合该节日在中国的日期、时令、社区活动和邻里服务语境，输出两套差异明显的方案。`
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ]
+  async function requestGeminiPlans() {
+    const response = await fetch(`${apiBase}/v1beta/models/${FESTIVAL_PROMPT_MODEL}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+      }),
+      signal: AbortSignal.timeout(100_000),
+    })
+    const raw = await response.text()
+    let data
+    try { data = JSON.parse(raw) } catch { data = { error: raw } }
+    if (!response.ok) throw new Error(data?.error?.message || data?.error || `GRS AI 返回 HTTP ${response.status}`)
+    const content = (data?.candidates?.[0]?.content?.parts || []).map((part) => part?.text).filter(Boolean).join('\n')
+    return parseFestivalPlans(content)
+  }
+  async function requestPlans(model, timeoutMs) {
+    const completion = await requestUpstream('/v1/chat/completions', {
+      model,
+      reasoning_effort: FESTIVAL_PROMPT_REASONING,
+      stream: false,
+      response_format: { type: 'json_object' },
+      messages,
+    }, undefined, timeoutMs)
+    return parseFestivalPlans(completionText(completion))
+  }
+  try {
+    return { plans: await requestGeminiPlans(), model: FESTIVAL_PROMPT_MODEL }
+  } catch (primaryError) {
+    try {
+      return { plans: await requestPlans(FESTIVAL_PROMPT_FALLBACK_MODEL, 120_000), model: FESTIVAL_PROMPT_FALLBACK_MODEL, primaryError: String(primaryError?.message || primaryError) }
+    } catch (fallbackError) {
+      return { plans: await requestPlans(FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL, 150_000), model: FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL, primaryError: String(primaryError?.message || primaryError), fallbackError: String(fallbackError?.message || fallbackError) }
+    }
+  }
 }
 
 async function requestFestivalImage(prompt, references, model) {
@@ -1220,15 +1253,21 @@ function festivalPosterErrorMessage(error) {
   return message || '生成失败，请稍后重试'
 }
 
+function festivalPosterPlanningErrorMessage(error) {
+  const message = String(error?.message || error || '')
+  if (/timeout|timed out|aborted/i.test(message)) return '高推理提示词模型本次响应超时，请重新生成方案'
+  return message || '方案生成失败，请重试'
+}
+
 async function runFestivalPosterPlanningTask(taskId) {
   const task = festivalPosterTasks.find((item) => item.id === taskId)
   if (!task || task.status !== 'running') return
   try {
     updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
-    const plans = await buildFestivalPlans(task.festival)
-    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，可修改后开始生图', plans })
+    const planning = await buildFestivalPlans(task.festival)
+    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，可修改后开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== FESTIVAL_PROMPT_MODEL })
   } catch (error) {
-    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterErrorMessage(error), completedAt: new Date().toISOString() })
+    updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterPlanningErrorMessage(error), completedAt: new Date().toISOString() })
   }
 }
 
@@ -1267,8 +1306,8 @@ async function runFestivalPosterImageTask(taskId) {
     }))
     const result = {
       festival: task.festival,
-      promptModel: FESTIVAL_PROMPT_MODEL,
-      promptModelLabel: 'GRS AI · GPT-5.5 · 高',
+      promptModel: task.promptModel || FESTIVAL_PROMPT_MODEL,
+      promptModelLabel: `GRS AI · ${task.promptModel || FESTIVAL_PROMPT_MODEL} · 高质量`,
       imageModelLabel: posters.some((poster) => poster.fallbackUsed) ? 'Image 2.5（Sunburst 不可用，已自动降级）' : 'Image 2.5 Sunburst · high',
       posters,
     }

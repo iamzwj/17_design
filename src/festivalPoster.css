@@ -1,13 +1,10 @@
 .festival-poster-workspace { overflow-y: auto; padding: 20px max(24px, calc((100% - 1180px)/2)) 54px; }
 .festival-poster-page { width: min(1180px,100%); margin: 0 auto; }
-.festival-poster-heading { min-height: 106px; display: flex; flex-direction: column; justify-content: center; }
-.festival-poster-heading > span { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .18em; }
-.festival-poster-heading h1 { margin: 6px 0 5px; font: 400 clamp(31px,3.4vw,42px) 'DM Serif Display','Songti SC',serif; }
 .festival-poster-layout { display: grid; grid-template-columns: minmax(300px,360px) minmax(0,1fr); gap: 18px; align-items: start; }
 .festival-poster-panel { position: sticky; top: 18px; padding: 20px; border-radius: 22px; }
 .festival-poster-panel > label { display: block; margin-bottom: 8px; color: var(--mid); font-size: 11px; font-weight: 650; }
 .festival-input-row { display: grid; gap: 9px; }
-.festival-input-row input { width: 100%; height: 46px; border: 1px solid rgba(61,79,63,.12); border-radius: 13px; padding: 0 14px; outline: none; background: rgba(255,255,255,.58); color: var(--ink); font: 600 15px inherit; transition: .18s ease; }
+.festival-input-row input { width: 100%; height: 48px; border: 1px solid rgba(61,79,63,.12); border-radius: 12px; padding: 0 15px; outline: none; background: rgba(255,255,255,.58); color: var(--ink); font: 600 15px inherit; transition: .18s ease; }
 .festival-input-row input:focus { border-color: rgba(107,78,255,.45); box-shadow: 0 0 0 3px rgba(107,78,255,.1); }
 .festival-input-row button { height: 44px; border: 0; border-radius: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: white; font-size: 12px; font-weight: 650; cursor: pointer; box-shadow: 0 8px 22px rgba(107,78,255,.22); }
 .festival-input-row button:disabled { opacity: .55; cursor: wait; }
@@ -35,31 +32,35 @@
 .festival-poster-card footer b { color: var(--ink); font-size: 11px; }
 .festival-poster-card footer small { margin-top: 3px; color: var(--muted); font-size: 9px; }
 .festival-poster-card footer button { height: 32px; padding: 0 10px; border: 1px solid rgba(61,79,63,.1); border-radius: 10px; display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.48); color: var(--mid); font-size: 9px; cursor: pointer; }
-:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-poster-card footer button { background: rgba(16,23,19,.55); border-color: rgba(255,255,255,.1); }
+:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-poster-card footer button { background: #23212b; border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-poster-card,:root[data-theme='dark'] .festival-poster-panel,:root[data-theme='dark'] .festival-empty { border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-progress { background: rgba(132,111,255,.13); }
 @media (max-width: 900px) { .festival-poster-layout { grid-template-columns: 1fr; }.festival-poster-panel { position: static; }.festival-poster-grid { max-width: 720px; margin: 0 auto; } }
-@media (max-width: 580px) { .festival-poster-workspace { padding: 10px 14px 36px; }.festival-poster-heading { min-height: 92px; }.festival-poster-grid { grid-template-columns: 1fr; }.festival-result-summary { align-items: flex-start; flex-direction: column; }.festival-result-summary small { text-align: left; } }
+@media (max-width: 580px) { .festival-poster-workspace { padding: 10px 14px 36px; }.festival-poster-grid { grid-template-columns: 1fr; }.festival-result-summary { align-items: flex-start; flex-direction: column; }.festival-result-summary small { text-align: left; } }
 
-.festival-waterfall-composer { position: sticky; top: 12px; z-index: 5; padding: 15px 16px; border-radius: 18px; }
-.festival-waterfall-composer > label { display: block; margin-bottom: 7px; color: var(--mid); font-size: 10px; font-weight: 650; }
+.festival-waterfall-composer { position: sticky; top: 12px; z-index: 5; padding: 12px; border: 1px solid rgba(61,79,63,.1); border-radius: 16px; background: rgba(255,255,255,.42); box-shadow: 0 10px 30px rgba(26,46,31,.06); backdrop-filter: blur(20px); }
+.festival-waterfall-composer > label { display: block; margin: 0 0 8px 2px; color: var(--mid); font-size: 10px; font-weight: 650; }
 .festival-input-row.horizontal { grid-template-columns: minmax(0,1fr) auto; }
-.festival-input-row.horizontal button { min-width: 168px; padding: 0 18px; }
-.festival-task-stream { margin-top: 16px; display: grid; gap: 14px; padding-bottom: 40px; }
-.festival-task-card { overflow: hidden; border-radius: 20px; }
-.festival-task-card > header { min-height: 70px; padding: 13px 15px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(61,79,63,.07); }
+.festival-input-row.horizontal button { min-width: 176px; height: 48px; padding: 0 18px; border-radius: 12px; box-shadow: none; }
+.festival-task-stream { margin-top: 14px; display: grid; gap: 10px; padding-bottom: 40px; }
+.festival-task-card { overflow: hidden; border: 1px solid rgba(61,79,63,.1); border-radius: 16px; background: rgba(255,255,255,.34); box-shadow: 0 7px 22px rgba(26,46,31,.045); }
+.festival-task-card > header { min-height: 64px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(61,79,63,.07); }
 .festival-task-leading { min-width: 0; display: flex; align-items: center; gap: 10px; }
-.festival-task-icon { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 11px; display: grid; place-items: center; background: rgba(107,78,255,.1); color: var(--accent); }
+.festival-status-dot { width: 9px; height: 9px; flex: 0 0 auto; border: 2px solid rgba(107,78,255,.25); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(107,78,255,.08); }
+.festival-task-card.status-failed .festival-status-dot { border-color: rgba(190,76,88,.22); background: #bd5863; box-shadow: 0 0 0 4px rgba(190,76,88,.08); }
+.festival-task-card.status-succeeded .festival-status-dot { background: #7b6bf0; }
 .festival-task-leading > div { min-width: 0; }
 .festival-task-leading > div > div { display: flex; align-items: center; gap: 8px; }
 .festival-task-leading b { color: var(--ink); font-size: 13px; }
 .festival-task-leading em { padding: 3px 7px; border-radius: 999px; background: rgba(107,78,255,.09); color: var(--accent); font-size: 8px; font-style: normal; }
-.festival-task-leading small { display: block; margin-top: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); font-size: 9px; }
+.festival-task-leading small { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 9px; }
+.festival-task-leading small span { position: relative; padding-left: 9px; }
+.festival-task-leading small span::before { content: ''; position: absolute; left: 1px; top: 50%; width: 3px; height: 3px; transform: translateY(-50%); border-radius: 50%; background: currentColor; opacity: .5; }
 .festival-task-actions { display: flex; gap: 7px; }
 .festival-task-actions button,.festival-generate-images { height: 32px; padding: 0 11px; border: 1px solid rgba(107,78,255,.18); border-radius: 10px; background: rgba(107,78,255,.08); color: var(--accent); font-size: 9px; font-weight: 650; cursor: pointer; }
-.festival-task-running { min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 10px; }
+.festival-task-running { min-height: 84px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 10px; }
 .festival-loader { width: 19px; height: 19px; border: 2px solid rgba(107,78,255,.2); border-top-color: var(--accent); border-radius: 50%; animation: festivalSpin .85s linear infinite; }
-.festival-error.task-error { margin: 14px 15px; }
+.festival-error.task-error { margin: 10px 14px 13px; padding: 9px 11px; border-radius: 10px; }
 .festival-prompt-list.task-prompts { padding: 14px 15px 16px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
 .festival-prompt-card { min-width: 0; border: 1px solid rgba(61,79,63,.09); border-radius: 14px; padding: 11px; background: rgba(255,255,255,.3); }
 .festival-prompt-card > div { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 7px; margin-bottom: 8px; }
@@ -69,6 +70,9 @@
 .festival-prompt-card textarea { width: 100%; min-height: 145px; resize: vertical; border: 1px solid rgba(61,79,63,.09); border-radius: 10px; padding: 10px; outline: none; background: rgba(255,255,255,.45); color: var(--ink); font: 10px/1.65 inherit; }
 .festival-prompt-card textarea:not([readonly]):focus { border-color: rgba(107,78,255,.4); box-shadow: 0 0 0 3px rgba(107,78,255,.08); }
 .festival-prompt-card textarea[readonly] { color: var(--mid); cursor: default; }
+.festival-image-action { min-height: 62px; padding: 10px 15px; border-top: 1px solid rgba(61,79,63,.07); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.festival-image-action span { color: var(--muted); font-size: 10px; }
+.festival-image-action button { height: 40px; padding: 0 15px; border: 0; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 7px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 650; cursor: pointer; }
 .festival-task-images { padding: 14px 15px 16px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .festival-task-images figure { overflow: hidden; margin: 0; border: 1px solid rgba(61,79,63,.08); border-radius: 15px; background: rgba(255,255,255,.25); }
 .festival-task-images figure > button { width: 100%; padding: 0; border: 0; display: block; cursor: zoom-in; background: transparent; }
@@ -77,6 +81,8 @@
 .festival-task-images figcaption b,.festival-task-images figcaption small { display: block; }
 .festival-task-images figcaption b { font-size: 10px; }.festival-task-images figcaption small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .festival-task-images figcaption > button { height: 30px; padding: 0 9px; border: 1px solid rgba(61,79,63,.1); border-radius: 9px; display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.42); color: var(--mid); font-size: 8px; cursor: pointer; }
-:root[data-theme='dark'] .festival-prompt-card,:root[data-theme='dark'] .festival-prompt-card textarea,:root[data-theme='dark'] .festival-task-images figure { background: rgba(16,23,19,.42); border-color: rgba(255,255,255,.09); }
+:root[data-theme='dark'] .festival-waterfall-composer { border-color: rgba(255,255,255,.09); background: rgba(29,28,36,.94); box-shadow: 0 12px 30px rgba(0,0,0,.18); }
+:root[data-theme='dark'] .festival-task-card { border-color: rgba(255,255,255,.085); background: rgba(29,28,36,.72); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+:root[data-theme='dark'] .festival-prompt-card,:root[data-theme='dark'] .festival-prompt-card textarea,:root[data-theme='dark'] .festival-task-images figure { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.09); }
 :root[data-theme='dark'] .festival-prompt-card > div > button,:root[data-theme='dark'] .festival-task-images figcaption > button { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
-@media (max-width: 700px) { .festival-input-row.horizontal { grid-template-columns: 1fr; }.festival-input-row.horizontal button { width: 100%; }.festival-prompt-list.task-prompts,.festival-task-images { grid-template-columns: 1fr; }.festival-task-card > header { align-items: flex-start; }.festival-task-leading small { white-space: normal; }.festival-task-actions { flex: 0 0 auto; } }
+@media (max-width: 700px) { .festival-input-row.horizontal { grid-template-columns: 1fr; }.festival-input-row.horizontal button { width: 100%; }.festival-prompt-list.task-prompts,.festival-task-images { grid-template-columns: 1fr; }.festival-task-card > header { align-items: flex-start; }.festival-task-actions { flex: 0 0 auto; }.festival-image-action { align-items: stretch; flex-direction: column; }.festival-image-action button { width: 100%; } }

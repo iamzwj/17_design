@@ -87,12 +87,13 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .mobile-menu { display: none; background: transparent; border: 0; padding: 5px; }
 .workspace { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .more-tool-page { width: min(1180px,100%); margin: 0 auto; }
-.more-tool-heading { min-height: 94px; margin-bottom: 20px; display: flex; flex-direction: column; justify-content: center; }
-.more-tool-heading span { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
-.more-tool-heading h1 { margin: 5px 0; font: 400 clamp(30px,3vw,38px) 'DM Serif Display','Songti SC',serif; }
-.more-tool-heading p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.tool-page-header { height: 112px; margin-bottom: 20px; padding-top: 10px; display: grid; grid-template-rows: 16px 50px 22px; align-content: start; }
+.tool-page-header > span { color: var(--accent); font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .16em; }
+.tool-page-header h1 { align-self: center; margin: 0; font: 400 clamp(30px,3vw,38px)/1.18 'DM Serif Display','Songti SC',serif; }
+.tool-page-header p { align-self: start; margin: 0; color: var(--muted); font-size: 13px; line-height: 22px; }
+.tool-page-header p.is-placeholder { visibility: hidden; }
 @media (max-width: 820px) { .more-tool-page { width: min(540px,100%); } }
-@media (max-width: 520px) { .more-tool-heading { min-height: 84px; margin-bottom: 14px; padding: 12px 2px 18px; }.more-tool-heading p { max-width: 280px; font-size: 12px; } }
+@media (max-width: 520px) { .tool-page-header { height: 104px; margin-bottom: 14px; padding: 6px 2px 0; grid-template-rows: 16px 46px 22px; }.tool-page-header h1 { font-size: 32px; }.tool-page-header p { max-width: 280px; font-size: 12px; } }
 .conversation { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: auto; padding: 34px max(30px, calc((100% - 850px)/2)) 180px; }
 .workspace.empty .conversation { display: grid; place-items: center; padding-bottom: 155px; }
 .welcome { width: min(710px, 100%); text-align: center; animation: appear .55s ease both; }
