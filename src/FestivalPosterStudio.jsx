@@ -78,14 +78,13 @@ async function startImages(task, plans) {
 
 function statusLabel(task) {
   if (task.status === 'succeeded') return '已完成'
-  if (task.status === 'planned') return '待确认提示词'
+  if (task.status === 'planned') return '准备生图'
   if (task.status === 'failed') return '生成失败'
   return task.phase === 'generating' ? '正在生图' : '正在生成提示词'
 }
 
 export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
   const [store, setStore] = useState(taskStore)
-  const [editing, setEditing] = useState('')
   const [preview, setPreview] = useState(null)
 
   useEffect(() => subscribe(setStore), [])
@@ -98,10 +97,6 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
     if (!festival || store.creating) return
     try { await createTask(festival) }
     catch (error) { if (error.status === 401) onRequireLogin?.(); else emit({ error: friendlyError(error) }) }
-  }
-
-  function changePrompt(task, index, prompt) {
-    putTask({ ...task, plans: task.plans.map((plan, planIndex) => planIndex === index ? { ...plan, prompt } : plan) })
   }
 
   async function generateImages(task) {
@@ -117,16 +112,15 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
 
   return <section className="workspace festival-poster-workspace"><div className="festival-poster-page">
     <ToolPageHeader eyebrow="CONTENT CREATION" title="朴邻节日海报"/>
-    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日，例如国庆、重阳、元旦" maxLength={24}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '正在创建…' : '生成两套方案'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
+    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日，例如国庆、重阳、元旦" maxLength={24}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
     <div className="festival-task-stream">
       {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日海报任务</b><span>输入节日后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {
         const plans = Array.isArray(task.plans) ? task.plans : []
         const posters = task.result?.posters || []
         return <article className={`festival-task-card status-${task.status}`} key={task.id}>
-          <header><div className="festival-task-leading"><span className="festival-status-dot"/><div><div><b>{task.festival}</b><em>{statusLabel(task)}</em></div><small>{new Date(task.createdAt).toLocaleString('zh-CN')}<span>{task.promptModel || (task.status === 'running' ? '高质量方案模型' : 'gpt-5.5')}</span><span>Image 2.5 Sunburst / 2.5</span>{task.promptModelFallback && <span>已自动切换备用模型</span>}</small></div></div><div className="festival-task-actions">{task.status === 'succeeded' && <button type="button" onClick={() => createTask(task.festival)}>再生成一组</button>}{task.status === 'failed' && plans.length !== 2 && <button type="button" onClick={() => createTask(task.festival)}>重试生成方案</button>}</div></header>
+          <header><div className="festival-task-leading"><span className="festival-status-dot"/><div><div><b>{task.festival}</b><em>{statusLabel(task)}</em></div><small>{new Date(task.createdAt).toLocaleString('zh-CN')}<span>{task.promptModel || (task.status === 'running' ? '高质量方案模型' : 'gpt-5.5')}</span><span>Image 2.5 Sunburst / 2.5</span>{task.promptModelFallback && <span>已自动切换备用模型</span>}</small></div></div><div className="festival-task-actions">{task.status === 'succeeded' && <button type="button" onClick={() => createTask(task.festival)}>重新生成</button>}{task.status === 'failed' && plans.length === 2 && <button type="button" onClick={() => generateImages(task)}>重新生成</button>}{task.status === 'failed' && plans.length !== 2 && <button type="button" onClick={() => createTask(task.festival)}>重新生成</button>}</div></header>
           {task.status === 'running' && <div className="festival-task-running"><i className="festival-loader"/><span>{task.message || '后台任务处理中'}</span></div>}
           {task.status === 'failed' && <div className="festival-error task-error">{task.error || '生成失败，请重试'}</div>}
-          {plans.length === 2 && <><div className="festival-prompt-list task-prompts">{plans.map((plan, index) => { const editKey = `${task.id}:${index}`; const expanded = editing === editKey; return <section className={`festival-prompt-card${expanded ? ' is-expanded' : ''}`} key={editKey}><div><span>方案 {index + 1}</span><b>{plan.title || `方案 ${index + 1}`}</b><button type="button" onClick={() => setEditing(expanded ? '' : editKey)} aria-label={`${expanded ? '收起' : '编辑'}方案 ${index + 1} 提示词`}><Icon name={expanded ? 'check' : 'edit'} size={15}/></button></div>{expanded ? <textarea value={plan.prompt} readOnly={task.status === 'running'} onChange={(event) => changePrompt(task, index, event.target.value)} rows="8"/> : <button className="festival-prompt-preview" type="button" onClick={() => setEditing(editKey)}>{plan.prompt}</button>}</section> })}</div>{task.status !== 'running' && <div className="festival-image-action"><span>{task.status === 'succeeded' ? '可展开修改提示词后重新生图' : '提示词已就绪'}</span><button type="button" onClick={() => generateImages(task)}>{task.status === 'succeeded' ? '按提示词重新生成' : task.status === 'failed' ? '重新生成两张海报' : '立即生成两张海报'}<Icon name="spark" size={16}/></button></div>}</>}
           {posters.length > 0 && <div className="festival-task-images">{posters.map((poster, index) => <figure key={poster.url}><button type="button" onClick={() => setPreview({ url: poster.url, urls: posters.map((item) => item.url), prompt: poster.prompt })}><img src={poster.url} alt={`${task.festival}方案${index + 1}`}/></button><figcaption><div><b>{poster.title || `方案 ${index + 1}`}</b><small>{poster.scene || '邻里服务场景'}</small></div><button type="button" onClick={() => downloadGeneratedImage(poster.url, `${task.festival}-方案${index + 1}`)}><Icon name="download" size={15}/>下载</button></figcaption></figure>)}</div>}
         </article>
       })}
