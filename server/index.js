@@ -1152,6 +1152,11 @@ async function festivalReferenceDataUrl(fileName) {
 async function buildFestivalPlans(festival) {
   const systemPrompt = `你是资深中国社区品牌海报策划师。请为用户给出的节日规划两套完整、明显不同的9:16竖版海报生图提示词，并只输出JSON对象：{"plans":[{"title":"方案名","scene":"场景摘要","prompt":"完整生图提示词"},{...}]}。
 
+输出语言和命名规则：
+- JSON中的 title、scene、prompt 必须全部使用简体中文，不得输出英文提示词。
+- title 必须是6至10个中文字的场景方案名，两套必须不同；不得只写节日名、“方案一”或“方案二”。
+- scene 用一句中文说清场所、服务对象、动作和道具归属；prompt 必须是可直接生图的完整中文描述。
+
 固定规则：
 1. 画面为高级彩色水墨/现代东方水墨，现代住宅小区为主体，大环境优先；人物大小适中，位于右下约四分之一。
 2. 两套方案必须采用不同的社区空间和不同的服务/陪伴动作，且动作与节日属性、邻里和睦明确相关，不能只是摆拍。
@@ -1169,6 +1174,16 @@ async function buildFestivalPlans(festival) {
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ]
+  function validatePlans(plans) {
+    const titles = plans.map((plan) => plan.title.replace(/\s+/g, ''))
+    if (new Set(titles).size !== 2 || titles.some((title) => title === festival || /^(方案|plan)/i.test(title))) throw new Error('提示词模型没有生成有区分度的中文方案名')
+    for (const plan of plans) {
+      const chineseCount = (plan.prompt.match(/[\u4e00-\u9fff]/g) || []).length
+      const latinCount = (plan.prompt.match(/[A-Za-z]/g) || []).length
+      if (chineseCount < 100 || latinCount > chineseCount * 0.2) throw new Error('提示词模型未按要求返回完整中文提示词')
+    }
+    return plans
+  }
   async function requestGeminiPlans() {
     const response = await fetch(`${apiBase}/v1beta/models/${FESTIVAL_PROMPT_MODEL}:generateContent`, {
       method: 'POST',
@@ -1184,7 +1199,7 @@ async function buildFestivalPlans(festival) {
     try { data = JSON.parse(raw) } catch { data = { error: raw } }
     if (!response.ok) throw new Error(data?.error?.message || data?.error || `GRS AI 返回 HTTP ${response.status}`)
     const content = (data?.candidates?.[0]?.content?.parts || []).map((part) => part?.text).filter(Boolean).join('\n')
-    return parseFestivalPlans(content)
+    return validatePlans(parseFestivalPlans(content))
   }
   async function requestPlans(model, timeoutMs) {
     const completion = await requestUpstream('/v1/chat/completions', {
@@ -1194,7 +1209,7 @@ async function buildFestivalPlans(festival) {
       response_format: { type: 'json_object' },
       messages,
     }, undefined, timeoutMs)
-    return parseFestivalPlans(completionText(completion))
+    return validatePlans(parseFestivalPlans(completionText(completion)))
   }
   try {
     return { plans: await requestGeminiPlans(), model: FESTIVAL_PROMPT_MODEL }
@@ -1259,13 +1274,24 @@ function festivalPosterPlanningErrorMessage(error) {
   return message || '方案生成失败，请重试'
 }
 
+function beginFestivalPosterImageGeneration(taskId, plans) {
+  const task = festivalPosterTasks.find((item) => item.id === taskId)
+  if (!task) throw new Error('节日海报任务不存在')
+  const chargedCredits = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
+  const chargedUser = spendCredits(task.userId, chargedCredits)
+  const updated = updateFestivalPosterTask(task.id, { status: 'running', phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版', plans, chargedCredits, error: '', result: null })
+  setImmediate(() => { void runFestivalPosterImageTask(task.id) })
+  return { task: updated, user: chargedUser }
+}
+
 async function runFestivalPosterPlanningTask(taskId) {
   const task = festivalPosterTasks.find((item) => item.id === taskId)
   if (!task || task.status !== 'running') return
   try {
     updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
     const planning = await buildFestivalPlans(task.festival)
-    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，可修改后开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== FESTIVAL_PROMPT_MODEL })
+    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，正在自动开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== FESTIVAL_PROMPT_MODEL })
+    beginFestivalPosterImageGeneration(taskId, planning.plans)
   } catch (error) {
     updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterPlanningErrorMessage(error), completedAt: new Date().toISOString() })
   }
@@ -1325,7 +1351,7 @@ app.post('/api/festival-posters/tasks', requireAuth, (req, res, next) => {
     const now = new Date().toISOString()
     const task = {
       id: randomUUID(), userId: req.user.id, festival, status: 'running', phase: 'queued',
-      message: '任务已提交，正在生成提示词', createdAt: now, updatedAt: now,
+      message: '任务已提交，正在生成提示词', autoGenerate: true, createdAt: now, updatedAt: now,
     }
     festivalPosterTasks.push(task)
     saveFestivalPosterTasks()
@@ -1339,7 +1365,7 @@ app.post('/api/festival-posters/tasks/:id/generate', requireAuth, (req, res, nex
   try {
     const task = festivalPosterTasks.find((item) => item.id === req.params.id && item.userId === req.user.id)
     if (!task) return res.status(404).json({ error: '节日海报任务不存在或无权访问' })
-    if (!['planned', 'failed'].includes(task.status)) return res.status(409).json({ error: task.status === 'running' ? '任务正在处理中' : '当前任务不能开始生图' })
+    if (!['planned', 'failed', 'succeeded'].includes(task.status)) return res.status(409).json({ error: task.status === 'running' ? '任务正在处理中' : '当前任务不能开始生图' })
     const inputPlans = Array.isArray(req.body?.plans) ? req.body.plans : task.plans
     const plans = inputPlans?.map((plan, index) => ({
       title: String(plan?.title || `方案 ${index + 1}`).trim().slice(0, 40),
@@ -1347,11 +1373,9 @@ app.post('/api/festival-posters/tasks/:id/generate', requireAuth, (req, res, nex
       prompt: String(plan?.prompt || '').trim().slice(0, 30_000),
     }))
     if (!Array.isArray(plans) || plans.length !== 2 || plans.some((plan) => !plan.prompt)) return res.status(400).json({ error: '请保留两套完整提示词' })
-    const chargedCredits = imageCreditCost(FESTIVAL_PRIMARY_IMAGE_MODEL, 2)
-    chargedUser = spendCredits(req.user.id, chargedCredits)
-    const updated = updateFestivalPosterTask(task.id, { status: 'running', phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版', plans, chargedCredits, error: '', result: null })
-    setImmediate(() => { void runFestivalPosterImageTask(task.id) })
-    res.status(202).json({ task: publicFestivalPosterTask(updated), user: chargedUser })
+    const started = beginFestivalPosterImageGeneration(task.id, plans)
+    chargedUser = started.user
+    res.status(202).json({ task: publicFestivalPosterTask(started.task), user: chargedUser })
   } catch (error) { next(error) }
 })
 

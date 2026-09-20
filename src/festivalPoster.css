@@ -67,7 +67,9 @@
 .festival-prompt-card > div > span { color: var(--accent); font-size: 8px; font-weight: 700; letter-spacing: .08em; }
 .festival-prompt-card > div > b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; }
 .festival-prompt-card > div > button { width: 27px; height: 27px; border: 1px solid rgba(61,79,63,.09); border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.46); color: var(--mid); cursor: pointer; }
-.festival-prompt-card textarea { width: 100%; min-height: 145px; resize: vertical; border: 1px solid rgba(61,79,63,.09); border-radius: 10px; padding: 10px; outline: none; background: rgba(255,255,255,.45); color: var(--ink); font: 10px/1.65 inherit; }
+.festival-prompt-preview { width: 100%; height: 46px; padding: 3px 2px; overflow: hidden; border: 0; display: -webkit-box; background: transparent; color: var(--muted); font-family: inherit; font-size: 10px; line-height: 1.65; text-align: left; cursor: pointer; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.festival-prompt-preview:hover { color: var(--mid); }
+.festival-prompt-card textarea { width: 100%; min-height: 168px; resize: vertical; border: 1px solid rgba(61,79,63,.09); border-radius: 10px; padding: 11px 12px; outline: none; background: rgba(255,255,255,.45); color: var(--ink); font-family: inherit; font-size: 11px; line-height: 1.72; letter-spacing: .01em; }
 .festival-prompt-card textarea:not([readonly]):focus { border-color: rgba(107,78,255,.4); box-shadow: 0 0 0 3px rgba(107,78,255,.08); }
 .festival-prompt-card textarea[readonly] { color: var(--mid); cursor: default; }
 .festival-image-action { min-height: 62px; padding: 10px 15px; border-top: 1px solid rgba(61,79,63,.07); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
