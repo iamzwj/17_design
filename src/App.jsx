@@ -1672,7 +1672,7 @@ function TextStudio({ type, conversation, onSave }) {
             <button className="brand-trigger" type="button" aria-haspopup="menu" aria-expanded={brandOpen} onClick={() => setBrandOpen((open) => !open)}><span>品牌</span><b>{COMPLIANCE_BRANDS.find((item) => item.value === brand)?.label || '通用合规'}</b><Icon name="chevron" size={14}/></button>
             {brandOpen && <div className="brand-menu glass-strong" role="menu" aria-label="选择审核品牌"><div className="brand-menu-title">选择品牌</div><div className="brand-grid">{COMPLIANCE_BRANDS.map((item) => <button key={item.value} type="button" role="menuitem" className={brand === item.value ? 'active' : ''} onClick={() => { setBrand(item.value); setBrandOpen(false) }}><b>{item.label}</b></button>)}</div></div>}
           </div>
-        </div> : <div className="text-tools"><span className="model-chip">GPT-5.6 Terra</span></div>}
+        </div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span></div>}
         <button className="send-button" onClick={() => submit()} disabled={!input.trim() && attachments.length === 0}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 

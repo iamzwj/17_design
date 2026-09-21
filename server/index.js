@@ -79,6 +79,7 @@ const FESTIVAL_PROMPT_REASONING = 'high'
 const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
 const FESTIVAL_IMAGE_QUALITY = 'high'
+const TEXT_REVIEW_MODEL = 'gemini-3.1-pro'
 const FESTIVAL_DEFAULT_STYLE = 'color-ink'
 const festivalPosterStyles = Object.freeze({
   '3d-cartoon': {
@@ -1114,9 +1115,7 @@ async function handleTextCompletion(req, res, next) {
     const sources = webResult.sources
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
     const upstreamRequest = {
-      // GRS exposes this model through its OpenAI-compatible protocol. Do not
-      // use Codex desktop model names here: they are not upstream model IDs.
-      model: 'gpt-5.6-terra',
+      model: TEXT_REVIEW_MODEL,
       stream: false,
       messages: [
         ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
@@ -1125,7 +1124,7 @@ async function handleTextCompletion(req, res, next) {
     }
     // Text replies should fail visibly instead of keeping a chat card in a
     // running state for several minutes when the upstream stalls.
-    let data = await requestUpstream('/v1/chat/completions', upstreamRequest, undefined, 45_000)
+    let data = await requestUpstream('/v1/chat/completions', upstreamRequest, undefined, 90_000)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
     // field on the first completion. Retry once with an explicit answer request
@@ -1134,11 +1133,11 @@ async function handleTextCompletion(req, res, next) {
       data = await requestUpstream('/v1/chat/completions', {
         ...upstreamRequest,
         messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
-      }, undefined, 45_000)
+      }, undefined, 90_000)
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
-    res.json({ content, sources, usage: data.usage || null, model: data.model || 'gpt-5.6-terra' })
+    res.json({ content, sources, usage: data.usage || null, model: data.model || TEXT_REVIEW_MODEL })
   } catch (error) {
     next(error)
   }
