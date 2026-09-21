@@ -80,6 +80,7 @@ const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
 const FESTIVAL_IMAGE_QUALITY = 'high'
 const TEXT_REVIEW_MODEL = 'gemini-3.1-pro'
+const TEXT_REVIEW_FALLBACK_MODEL = 'gpt-5.6-terra'
 const FESTIVAL_DEFAULT_STYLE = 'color-ink'
 const festivalPosterStyles = Object.freeze({
   '3d-cartoon': {
@@ -1124,16 +1125,27 @@ async function handleTextCompletion(req, res, next) {
     }
     // Text replies should fail visibly instead of keeping a chat card in a
     // running state for several minutes when the upstream stalls.
-    let data = await requestUpstream('/v1/chat/completions', upstreamRequest, undefined, 90_000)
+    async function requestReviewCompletion(request) {
+      try {
+        return await requestUpstream('/v1/chat/completions', request, undefined, 90_000)
+      } catch (error) {
+        // Gemini 3.1 Pro is the preferred reviewer. Preserve availability when
+        // its provider explicitly reports temporary capacity exhaustion.
+        if (!/model load is too high/i.test(String(error?.message || ''))) throw error
+        return requestUpstream('/v1/chat/completions', { ...request, model: TEXT_REVIEW_FALLBACK_MODEL }, undefined, 90_000)
+      }
+    }
+
+    let data = await requestReviewCompletion(upstreamRequest)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
     // field on the first completion. Retry once with an explicit answer request
     // so the UI never renders sources without a response.
     if (!content) {
-      data = await requestUpstream('/v1/chat/completions', {
+      data = await requestReviewCompletion({
         ...upstreamRequest,
         messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
-      }, undefined, 90_000)
+      })
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
