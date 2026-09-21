@@ -46,7 +46,7 @@
 .festival-input-row.horizontal { grid-template-columns: minmax(0,1fr) auto auto; }
 .festival-input-row.horizontal button { min-width: 176px; height: 48px; padding: 0 18px; border-radius: 12px; box-shadow: none; }
 .festival-task-stream { width: min(820px,100%); margin: 14px auto 0; display: grid; gap: 10px; padding-bottom: 40px; }
-.festival-task-card { overflow: hidden; border: 1px solid rgba(61,79,63,.1); border-radius: 16px; background: rgba(255,255,255,.34); box-shadow: 0 7px 22px rgba(26,46,31,.045); }
+.festival-task-card { overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .festival-task-card > header { min-height: 64px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(61,79,63,.07); }
 .festival-task-leading { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .festival-status-dot { width: 9px; height: 9px; flex: 0 0 auto; border: 2px solid rgba(107,78,255,.25); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(107,78,255,.08); }
@@ -73,7 +73,6 @@
 .festival-task-images figcaption b { font-size: 10px; }.festival-task-images figcaption small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .festival-task-images figcaption > button { min-width: 58px; height: 30px; padding: 0 9px; border: 1px solid rgba(61,79,63,.1); border-radius: 9px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; background: rgba(255,255,255,.42); color: var(--mid); font-size: 8px; white-space: nowrap; cursor: pointer; }
 :root[data-theme='dark'] .festival-waterfall-composer { border-color: rgba(255,255,255,.09); background: rgba(29,28,36,.94); box-shadow: 0 12px 30px rgba(0,0,0,.18); }
-:root[data-theme='dark'] .festival-task-card { border-color: rgba(255,255,255,.085); background: rgba(29,28,36,.72); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
 :root[data-theme='dark'] .festival-task-images figure { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.09); }
 :root[data-theme='dark'] .festival-task-images figcaption > button { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
 @media (max-width: 700px) { .festival-input-row.horizontal { grid-template-columns: 1fr; }.festival-input-row.horizontal select,.festival-input-row.horizontal button { width: 100%; }.festival-task-images { grid-template-columns: minmax(0,320px); }.festival-task-card > header { align-items: flex-start; }.festival-task-actions { flex: 0 0 auto; } }
