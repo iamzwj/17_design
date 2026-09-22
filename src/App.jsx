@@ -1419,14 +1419,14 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
   </div>
 }
 
-function TextStudio({ type, conversation, onSave, defaultBrand = 'general' }) {
+function TextStudio({ type, conversation, onSave }) {
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
   const [messages, setMessages] = useState(() => validTextMessages(conversation?.messages))
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
-  const [brand, setBrand] = useState(conversation?.brand || defaultBrand)
+  const [brand, setBrand] = useState(conversation?.brand || 'general')
   const webSearch = type === 'strategy'
   const [brandOpen, setBrandOpen] = useState(false)
   const [draggingComplianceFiles, setDraggingComplianceFiles] = useState(false)
@@ -1684,9 +1684,6 @@ export default function App() {
   const directLogoTool = localPreviewParams.get('tool') === 'logo'
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
-  const directComplianceBrand = COMPLIANCE_BRANDS.some((item) => item.value === localPreviewParams.get('brand'))
-    ? localPreviewParams.get('brand')
-    : directCompliance ? 'pulin' : 'general'
   const directContent = localPreviewParams.get('module') === 'content'
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
@@ -1878,7 +1875,7 @@ export default function App() {
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
-        : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation} defaultBrand={active === 'compliance' ? directComplianceBrand : 'general'}/>
+      : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
