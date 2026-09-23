@@ -6,7 +6,7 @@ import ToolPageHeader from './ToolPageHeader.jsx'
 import './pulinTitle.css'
 
 const STORE_KEY = 'diefa-pulin-title-studio-v1'
-const DEFAULT_DRAFT = { title: '邻里欢聚', subtitle: '', layout: 'stacked', hands: true, transparentOutput: true, backgroundColor: '#ff00ff' }
+const DEFAULT_DRAFT = { title: '邻里欢聚', subtitle: '', layout: 'stacked', hands: true }
 const listeners = new Set()
 const pendingRequests = new Map()
 const referenceImageCache = new Map()
@@ -106,7 +106,7 @@ async function startGeneration(draft, onUserUpdate, onRequireLogin) {
   if (!title) return emit({ error: '请填写主标题' })
   const task = {
     id: `pulin-title-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    title, subtitle, layout: draft.layout, hands: Boolean(draft.hands), transparentOutput: draft.transparentOutput !== false, backgroundColor: draft.backgroundColor || '#ff00ff', status: 'running',
+    title, subtitle, layout: draft.layout, hands: Boolean(draft.hands), transparentOutput: true, backgroundColor: '#ff00ff', status: 'running',
     createdAt: new Date().toISOString(), model: 'GPT Image 2.5 Sunburst', error: '', urls: [],
   }
   emit({ creating: true, error: '' })
@@ -171,7 +171,6 @@ export default function PulinTitleStudio({ onUserUpdate, onRequireLogin }) {
       <div className="pulin-title-settings">
         <div className="pulin-inline-setting"><b>排版</b><div className="pulin-option-buttons" role="group" aria-label="标题排版"><button type="button" className={store.draft.layout === 'horizontal' ? 'active' : ''} onClick={() => updateDraft({ layout: 'horizontal' })}>一行</button><button type="button" className={store.draft.layout === 'stacked' ? 'active' : ''} onClick={() => updateDraft({ layout: 'stacked' })}>两行</button></div></div>
         <div className="pulin-inline-setting"><b>拍手</b><div className="pulin-option-buttons" role="group" aria-label="拍手图标"><button type="button" className={store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: true })}>有</button><button type="button" className={!store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: false })}>无</button></div></div>
-        <label className="pulin-title-cutout"><input type="checkbox" checked={store.draft.transparentOutput !== false} onChange={(event) => updateDraft({ transparentOutput: event.target.checked })}/><span>透明 PNG</span><input type="color" value={store.draft.backgroundColor || '#ff00ff'} onChange={(event) => updateDraft({ backgroundColor: event.target.value })} disabled={store.draft.transparentOutput === false} aria-label="自动抠图背景色" title="自动抠图背景色"/></label><small className="pulin-title-cutout-hint">洋红底色自动抠图</small>
       </div>
       {store.error && <div className="pulin-title-error">{store.error}</div>}
     </div>
