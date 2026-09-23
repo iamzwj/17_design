@@ -638,7 +638,31 @@ function updateWaterfallTask(id, transform) {
   return waterfallTasks.find((task) => task.id === id)
 }
 
-async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio) {
+function chromaKeyRgb(value) {
+  const color = String(value || '').trim()
+  const match = color.match(/^#([0-9a-f]{6})$/i)
+  if (!match) throw Object.assign(new Error('抠图背景色格式无效'), { status: 400 })
+  const hex = match[1]
+  return [Number.parseInt(hex.slice(0, 2), 16), Number.parseInt(hex.slice(2, 4), 16), Number.parseInt(hex.slice(4, 6), 16)]
+}
+
+async function removeChromaBackground(imageBuffer, backgroundColor) {
+  const key = chromaKeyRgb(backgroundColor)
+  const { data, info } = await sharp(imageBuffer, { failOn: 'none' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const innerDistance = 46 * 46
+  const outerDistance = 168 * 168
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const red = data[offset] - key[0]
+    const green = data[offset + 1] - key[1]
+    const blue = data[offset + 2] - key[2]
+    const distance = red * red + green * green + blue * blue
+    if (distance <= innerDistance) data[offset + 3] = 0
+    else if (distance < outerDistance) data[offset + 3] = Math.round(data[offset + 3] * ((distance - innerDistance) / (outerDistance - innerDistance)))
+  }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
+}
+
+async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio, { removeBackground = false, backgroundColor = '#ff00ff' } = {}) {
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`保存生成图片失败（HTTP ${response.status}）`)
   const contentType = response.headers.get('content-type') || 'image/png'
@@ -661,7 +685,12 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
   }
 
-  const extension = imageExtensionForFormat(metadata.format, upstreamExtension)
+  if (removeBackground) {
+    imageBuffer = await removeChromaBackground(imageBuffer, backgroundColor)
+    metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
+  }
+
+  const extension = removeBackground ? 'png' : imageExtensionForFormat(metadata.format, upstreamExtension)
   const fileName = `${taskId}-${slotIndex}.${extension}`
   await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), imageBuffer)
   let thumbnailUrl = null
@@ -1473,13 +1502,14 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0
   try {
-    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution, quality = DEFAULT_IMAGE_QUALITY } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution, quality = DEFAULT_IMAGE_QUALITY, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt 不能为空' })
     }
     if (!Array.isArray(images) || images.length > 4) {
       return res.status(400).json({ error: '参考图最多 4 张' })
     }
+    if (removeBackground) chromaKeyRgb(backgroundColor)
     const settings = imageModelSettings(model, resolution, quality)
     creditCost = imageCreditCost(settings.model)
     chargedUser = spendCredits(req.user.id, creditCost)
@@ -1499,7 +1529,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       throw new Error(upstreamError(data) || `图片生成未成功，当前状态：${status || 'unknown'}`)
     }
     const assetPrefix = `image-${data.id || randomUUID()}`
-    const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index, resolvedAspectRatio)))
+    const localImages = await Promise.all(urls.map((url, index) => persistWaterfallImage(url, assetPrefix, index, resolvedAspectRatio, { removeBackground, backgroundColor })))
     directImageRecords = [{
       id: randomUUID(),
       userId: req.user.id,
@@ -1508,12 +1538,14 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       resolution: settings.resolution,
       quality: settings.quality,
       aspectRatio: resolvedAspectRatio,
+      removeBackground: Boolean(removeBackground),
+      backgroundColor: removeBackground ? backgroundColor : null,
       generationSize: localImages[0]?.size || generationSize(settings.model, settings.resolution, resolvedAspectRatio),
       createdAt: new Date().toISOString(),
       images: localImages,
     }, ...directImageRecords]
     saveDirectImageRecords()
-    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, quality: settings.quality, urls: localImages.map((image) => image.url), user: chargedUser })
+    res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, quality: settings.quality, removeBackground: Boolean(removeBackground), urls: localImages.map((image) => image.url), user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, creditCost)
     next(error)
