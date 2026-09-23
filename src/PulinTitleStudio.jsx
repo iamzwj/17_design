@@ -160,13 +160,13 @@ export default function PulinTitleStudio({ onUserUpdate, onRequireLogin }) {
   }
 
   return <section className="workspace pulin-title-workspace"><div className="pulin-title-page">
-    <ToolPageHeader eyebrow="MORE TOOLS" title="朴里节标题工具" description="输入文案，选择排版和拍手图标，生成可直接用于海报的深蓝标题视觉。"/>
+    <ToolPageHeader eyebrow="MORE TOOLS" title="朴里节标题工具" description="输入文案，选择排版和拍手图标，生成朴里节风格的透明标题。"/>
     <div className="pulin-title-composer glass-strong">
       <div className="pulin-title-composer-label">新建朴里节标题</div>
       <div className="pulin-title-input-row">
         <input value={store.draft.title} onChange={(event) => updateDraft({ title: event.target.value })} placeholder="主标题，例如：邻里欢聚" maxLength="32" aria-label="主标题"/>
         <input value={store.draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} placeholder="副标题（可留空）" maxLength="24" aria-label="副标题"/>
-        <button className="pulin-title-generate" type="button" onClick={submit} disabled={!store.draft.title.trim() || store.creating}>{store.creating ? '正在生成…' : '生成 2 个方案'}<Icon name="spark" size={17}/></button>
+        <button className="pulin-title-generate" type="button" onClick={submit} disabled={!store.draft.title.trim() || store.creating}>{store.creating ? '正在生成…' : '生成'}<Icon name="spark" size={17}/></button>
       </div>
       <div className="pulin-title-settings">
         <div className="pulin-inline-setting"><b>排版</b><div className="pulin-option-buttons" role="group" aria-label="标题排版"><button type="button" className={store.draft.layout === 'horizontal' ? 'active' : ''} onClick={() => updateDraft({ layout: 'horizontal' })}>一行</button><button type="button" className={store.draft.layout === 'stacked' ? 'active' : ''} onClick={() => updateDraft({ layout: 'stacked' })}>两行</button></div></div>
