@@ -3,11 +3,6 @@ import { Icon } from './icons.jsx'
 import './materialLibrary.css'
 
 const IP_ASSETS = [
-  { id: 'xiaodie-main', group: 'cartoon', kind: '主形象全身照', name: '小蝶 · 主形象', file: '/xiaodie-mascot.png', note: '标准主形象' },
-  { id: 'xiaodie-views', group: 'cartoon', kind: '三视图', name: '小蝶 · 三视图', note: '正面 / 侧面 / 背面' },
-  { id: 'xiaodie-face', group: 'cartoon', kind: '面部特写', name: '小蝶 · 面部特写', file: '/xiaodie-avatar.png', note: '头像与表情参考' },
-  { id: 'xiaodie-clothes', group: 'cartoon', kind: '服装', name: '小蝶 · 标准服装', note: '服装结构与配色' },
-  { id: 'xiaodie-detail', group: 'cartoon', kind: '细节特写', name: '小蝶 · 动作细节', file: '/xiaodie-frame-wave.png', note: '挥手动作透明素材' },
   { id: 'onewo-yixiu', group: 'cartoon', kind: '主形象全身照', name: '一修 · 打招呼', file: '/material-library/onewo-yixiu.png', note: '万物云 3D IP' },
   { id: 'onewo-xiaozhizhi', group: 'cartoon', kind: '主形象全身照', name: '管家小知之', file: '/material-library/onewo-xiaozhizhi.png', note: '万物云 3D IP' },
   { id: 'onewo-keke', group: 'cartoon', kind: '主形象全身照', name: '可可 · 解说', file: '/material-library/onewo-keke.png', note: '万物云 3D IP' },
@@ -50,7 +45,7 @@ function downloadAsset(asset) {
 
 function AssetCard({ asset, onPreview }) {
   const available = Boolean(asset.file)
-  return <article className={`material-card${available ? '' : ' is-pending'}${asset.variant === '反白' ? ' is-reversed' : ''}`}>
+  return <article className={`material-card is-${asset.type}${available ? '' : ' is-pending'}${asset.variant === '反白' ? ' is-reversed' : ''}`}>
     <button className="material-thumb" type="button" disabled={!available} onClick={() => available && onPreview(asset)} aria-label={available ? `预览 ${asset.name}` : `${asset.name} 待上传`}>
       {available
         ? <img src={asset.file} alt={asset.name} loading="lazy" decoding="async"/>
