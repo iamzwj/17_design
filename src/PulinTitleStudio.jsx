@@ -162,15 +162,16 @@ export default function PulinTitleStudio({ onUserUpdate, onRequireLogin }) {
   return <section className="workspace pulin-title-workspace"><div className="pulin-title-page">
     <ToolPageHeader eyebrow="MORE TOOLS" title="朴里节标题工具" description="输入文案，选择排版和拍手图标，生成可直接用于海报的深蓝标题视觉。"/>
     <div className="pulin-title-composer glass-strong">
-      <div className="pulin-title-fields">
-        <label><span>主标题</span><input value={store.draft.title} onChange={(event) => updateDraft({ title: event.target.value })} placeholder="例如：邻里欢聚" maxLength="32"/></label>
-        <label><span>副标题 <i>可留空</i></span><input value={store.draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} placeholder="例如：万科物业朴里节" maxLength="24"/></label>
+      <div className="pulin-title-composer-label">新建朴里节标题</div>
+      <div className="pulin-title-input-row">
+        <input value={store.draft.title} onChange={(event) => updateDraft({ title: event.target.value })} placeholder="主标题，例如：邻里欢聚" maxLength="32" aria-label="主标题"/>
+        <input value={store.draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} placeholder="副标题（可留空）" maxLength="24" aria-label="副标题"/>
+        <button className="pulin-title-generate" type="button" onClick={submit} disabled={!store.draft.title.trim() || store.creating}>{store.creating ? '正在生成…' : '生成 2 个方案'}<Icon name="spark" size={17}/></button>
       </div>
-        <div className="pulin-title-options">
-        <div><span>标题排版</span><div className="pulin-option-buttons" role="group" aria-label="标题排版"><button type="button" className={store.draft.layout === 'horizontal' ? 'active' : ''} onClick={() => updateDraft({ layout: 'horizontal' })}>一行字</button><button type="button" className={store.draft.layout === 'stacked' ? 'active' : ''} onClick={() => updateDraft({ layout: 'stacked' })}>两行字</button></div></div>
-        <div><span>拍手图标</span><div className="pulin-option-buttons" role="group" aria-label="拍手图标"><button type="button" className={store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: true })}>有</button><button type="button" className={!store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: false })}>无</button></div></div>
-        <div className="pulin-title-cutout"><span>输出格式</span><label><input type="checkbox" checked={store.draft.transparentOutput !== false} onChange={(event) => updateDraft({ transparentOutput: event.target.checked })}/>透明 PNG</label><input type="color" value={store.draft.backgroundColor || '#ff00ff'} onChange={(event) => updateDraft({ backgroundColor: event.target.value })} disabled={store.draft.transparentOutput === false} aria-label="自动抠图背景色" title="自动抠图背景色"/><small>建议洋红</small></div>
-        <button className="pulin-title-generate" type="button" onClick={submit} disabled={!store.draft.title.trim() || store.creating}>{store.creating ? '正在生成…' : '生成标题'}<Icon name="spark" size={17}/></button>
+      <div className="pulin-title-settings">
+        <div className="pulin-inline-setting"><b>排版</b><div className="pulin-option-buttons" role="group" aria-label="标题排版"><button type="button" className={store.draft.layout === 'horizontal' ? 'active' : ''} onClick={() => updateDraft({ layout: 'horizontal' })}>一行</button><button type="button" className={store.draft.layout === 'stacked' ? 'active' : ''} onClick={() => updateDraft({ layout: 'stacked' })}>两行</button></div></div>
+        <div className="pulin-inline-setting"><b>拍手</b><div className="pulin-option-buttons" role="group" aria-label="拍手图标"><button type="button" className={store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: true })}>有</button><button type="button" className={!store.draft.hands ? 'active' : ''} onClick={() => updateDraft({ hands: false })}>无</button></div></div>
+        <label className="pulin-title-cutout"><input type="checkbox" checked={store.draft.transparentOutput !== false} onChange={(event) => updateDraft({ transparentOutput: event.target.checked })}/><span>透明 PNG</span><input type="color" value={store.draft.backgroundColor || '#ff00ff'} onChange={(event) => updateDraft({ backgroundColor: event.target.value })} disabled={store.draft.transparentOutput === false} aria-label="自动抠图背景色" title="自动抠图背景色"/></label><small className="pulin-title-cutout-hint">洋红底色自动抠图</small>
       </div>
       {store.error && <div className="pulin-title-error">{store.error}</div>}
     </div>
