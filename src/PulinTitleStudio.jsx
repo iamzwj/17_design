@@ -9,6 +9,38 @@ const STORE_KEY = 'diefa-pulin-title-studio-v1'
 const DEFAULT_DRAFT = { title: '邻里欢聚', subtitle: '', layout: 'stacked', hands: true }
 const listeners = new Set()
 const pendingRequests = new Map()
+const referenceImageCache = new Map()
+
+function referencePaths({ layout, hands, subtitle }) {
+  const suffix = hands ? 'hands' : 'no-hands'
+  if (layout === 'horizontal') {
+    const paths = [`/pulin-title/horizontal-${suffix}.png`]
+    if (subtitle) paths.push(`/pulin-title/stacked-subtitle-${suffix}.png`)
+    return paths
+  }
+  return [subtitle ? `/pulin-title/stacked-subtitle-${suffix}.png` : `/pulin-title/stacked-${suffix}.png`]
+}
+
+function imageToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('标题参考图读取失败，请稍后重试'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function titleReferenceImages(task) {
+  return Promise.all(referencePaths(task).map((path) => {
+    if (!referenceImageCache.has(path)) {
+      referenceImageCache.set(path, fetch(path).then(async (response) => {
+        if (!response.ok) throw new Error('标题参考图加载失败，请稍后重试')
+        return imageToDataUrl(await response.blob())
+      }))
+    }
+    return referenceImageCache.get(path)
+  }))
+}
 
 function loadStore() {
   try {
@@ -45,18 +77,20 @@ function titlePrompt({ title, subtitle, layout, hands }) {
     ? '横向一行排版，主标题从左至右完整呈现，不换行，画面比例16:9。'
     : '上下两行排版，将主标题自然拆分为上下两行，画面比例4:3。'
   const handDecoration = hands
-    ? '主标题上方加入一对毛绒质感的黄色和绿色拍手小手图标，带笑脸，作为顶部装饰。'
+    ? '保留参考图中的黄色、绿色笑脸拍手图标，并保持其位置、比例、材质和表情。'
     : '不要出现拍手、手掌、人物或其他顶部图标。'
   const subtitleRule = subtitle
     ? `在主标题下方增加一条金色丝带副标题，丝带上清晰准确地写“${subtitle}”。`
     : '不要增加副标题、丝带文字或任何额外文案。'
-  return `制作一张用于活动海报的中文3D标题视觉，深蓝色纯色或轻微渐变背景（皇家蓝到藏蓝），背景干净，没有其他场景。
+  return `已提供朴里节标题的原始参考图。这些参考图是唯一权威的视觉和版式来源：请在同一套设计上替换文字，不要自行发明新的标题造型、背景框、图标、配色或装饰方式。不要复用参考图里的示例文字。
+
+制作一张用于活动海报的中文3D标题视觉，深蓝色纯色或轻微渐变背景（皇家蓝到藏蓝），背景干净，没有其他场景。
 
 必须准确呈现的主标题是：“${title}”。${lineDirection}
 ${subtitleRule}
 ${handDecoration}
 
-视觉严格参考朴里节活动标题的结构语言：每个汉字是圆润饱满的立体毛绒/海绵材质，主体字采用象牙白和明亮金黄的分组配色，深钴蓝厚挤压描边与多层阴影，背后是不规则深蓝标题底座，周围有少量黄色星星、蓝色几何碎片和金色飘带。文字清晰、端正、完整，不得改字、漏字、乱码或出现英文。整体高端、欢快、儿童友好但不幼稚，边缘完整，不要水印、Logo、说明文字或多余字符。`
+严格保留参考图里的圆润厚实中文字体、象牙白与明黄分字配色、深钴蓝多层立体描边、不规则深蓝底座、金色丝带、黄色星星、蓝色几何碎片以及整体留白和层级。文字清晰、端正、完整，不得改字、漏字、乱码或出现英文。整体高端、欢快、儿童友好但不幼稚，边缘完整，不要水印、Logo、说明文字或多余字符。`
 }
 
 function titleRatio(layout) { return layout === 'horizontal' ? '16:9' : '4:3' }
@@ -77,12 +111,13 @@ async function startGeneration(draft, onUserUpdate, onRequireLogin) {
     const prompt = titlePrompt(task)
     const ratio = titleRatio(task.layout)
     try {
+      const images = await titleReferenceImages(task)
       let result
       let fallbackUsed = false
       try {
-        result = await generateImage({ prompt, aspectRatio: ratio, model: 'gpt-image-2.5-sunburst', resolution: '2k', quality: 'high' })
+        result = await generateImage({ prompt, images, aspectRatio: ratio, model: 'gpt-image-2.5-sunburst', resolution: '2k', quality: 'high' })
       } catch {
-        result = await generateImage({ prompt, aspectRatio: ratio, model: 'gpt-image-2.5', resolution: '1k', quality: 'high' })
+        result = await generateImage({ prompt, images, aspectRatio: ratio, model: 'gpt-image-2.5', resolution: '1k', quality: 'high' })
         fallbackUsed = true
       }
       if (result.user) onUserUpdate?.(result.user)
