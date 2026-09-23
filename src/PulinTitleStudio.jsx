@@ -73,6 +73,7 @@ function putTask(task) {
 }
 
 function titlePrompt({ title, subtitle, layout, hands }) {
+  const longTitleRule = title.length > 12 ? '标题字数较多：在不省略、不改字的前提下，自动缩小字号并适度收紧字距，确保所有文字完整、清晰。' : ''
   const lineDirection = layout === 'horizontal'
     ? '横向一行排版，主标题从左至右完整呈现，不换行，画面比例16:9。'
     : '上下两行排版，将主标题自然拆分为上下两行，画面比例4:3。'
@@ -86,7 +87,7 @@ function titlePrompt({ title, subtitle, layout, hands }) {
 
 制作一张用于活动海报的中文3D标题视觉，深蓝色纯色或轻微渐变背景（皇家蓝到藏蓝），背景干净，没有其他场景。
 
-必须准确呈现的主标题是：“${title}”。${lineDirection}
+必须准确呈现的主标题是：“${title}”。${lineDirection}${longTitleRule}
 ${subtitleRule}
 ${handDecoration}
 
@@ -97,8 +98,8 @@ function titleRatio(layout) { return layout === 'horizontal' ? '16:9' : '4:3' }
 
 async function startGeneration(draft, onUserUpdate, onRequireLogin) {
   if (titleStore.creating) return
-  const title = String(draft.title || '').trim().slice(0, 18)
-  const subtitle = String(draft.subtitle || '').trim().slice(0, 18)
+  const title = String(draft.title || '').trim().slice(0, 32)
+  const subtitle = String(draft.subtitle || '').trim().slice(0, 24)
   if (!title) return emit({ error: '请填写主标题' })
   const task = {
     id: `pulin-title-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -155,8 +156,8 @@ export default function PulinTitleStudio({ onUserUpdate, onRequireLogin }) {
     <ToolPageHeader eyebrow="MORE TOOLS" title="朴里节标题工具" description="输入文案，选择排版和拍手图标，生成可直接用于海报的深蓝标题视觉。"/>
     <div className="pulin-title-composer glass-strong">
       <div className="pulin-title-fields">
-        <label><span>主标题</span><input value={store.draft.title} onChange={(event) => updateDraft({ title: event.target.value })} placeholder="例如：邻里欢聚" maxLength="18"/></label>
-        <label><span>副标题 <i>可留空</i></span><input value={store.draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} placeholder="例如：万科物业朴里节" maxLength="18"/></label>
+        <label><span>主标题</span><input value={store.draft.title} onChange={(event) => updateDraft({ title: event.target.value })} placeholder="例如：邻里欢聚" maxLength="32"/></label>
+        <label><span>副标题 <i>可留空</i></span><input value={store.draft.subtitle} onChange={(event) => updateDraft({ subtitle: event.target.value })} placeholder="例如：万科物业朴里节" maxLength="24"/></label>
       </div>
       <div className="pulin-title-options">
         <div><span>标题排版</span><div className="pulin-option-buttons" role="group" aria-label="标题排版"><button type="button" className={store.draft.layout === 'horizontal' ? 'active' : ''} onClick={() => updateDraft({ layout: 'horizontal' })}>一行字</button><button type="button" className={store.draft.layout === 'stacked' ? 'active' : ''} onClick={() => updateDraft({ layout: 'stacked' })}>两行字</button></div></div>
