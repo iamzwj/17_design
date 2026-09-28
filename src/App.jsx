@@ -42,6 +42,42 @@ const RATIO_OPTIONS = [
   { value: '3:1', label: '3:1' },
 ]
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
+const WATERFALL_SKILLS = [
+  {
+    id: 'pulin-title',
+    name: '朴里节风格标题',
+    description: '生成朴里节风格标题',
+    promptAdvice: '写清主标题、副标题（没有可不写）和几行字。',
+    example: '主标题两行字内容是：万科物业朴里节 羽球联赛赛事预告；副标题是：提前了解羽球联赛赛程。',
+  },
+]
+const waterfallSkillReferenceCache = new Map()
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Skill 参考图读取失败，请稍后重试'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function waterfallSkillReferences(skillId) {
+  if (skillId !== 'pulin-title') return []
+  const path = '/pulin-title/stacked-subtitle-hands.png'
+  if (!waterfallSkillReferenceCache.has(path)) {
+    waterfallSkillReferenceCache.set(path, fetch(path).then(async (response) => {
+      if (!response.ok) throw new Error('Skill 参考图加载失败，请稍后重试')
+      return blobToDataUrl(await response.blob())
+    }))
+  }
+  return [await waterfallSkillReferenceCache.get(path)]
+}
+
+function promptWithWaterfallSkill(skillId, prompt) {
+  if (skillId !== 'pulin-title') return prompt
+  return `【Skill：朴里节风格标题】\n${prompt}\n\n已提供朴里节标题的标准参考图，参考图是唯一权威的视觉、材质与排版来源。请从用户描述中准确识别主标题、副标题和标题行数；主标题与副标题必须逐字正确、完整清晰地呈现。严格沿用参考图的圆润厚实中文字体、象牙白与明黄分字配色、深钴蓝多层立体描边、不规则深蓝底座、金色丝带、黄色星星和蓝色几何碎片。用户未提供副标题时，不得自行添加副标题或额外文字。不要生成场景、人物、Logo、水印、英文、乱码或说明文字；只生成完整的朴里节风格标题视觉，边缘不得裁切。`
+}
 
 const MODULE_COPY = {
   strategy: {
@@ -848,7 +884,9 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const [quality, setQuality] = useState(DEFAULT_IMAGE_QUALITY)
   const [count, setCount] = useState(2)
   const [references, setReferences] = useState([])
+  const [selectedSkill, setSelectedSkill] = useState('')
   const [ratioOpen, setRatioOpen] = useState(false)
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const [draggingFiles, setDraggingFiles] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -858,6 +896,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const fileRef = useRef(null)
   const promptRef = useRef(null)
   const ratioPickerRef = useRef(null)
+  const skillPickerRef = useRef(null)
   const dragDepth = useRef(0)
   const historyLoadingMore = useRef(false)
   const resultsRef = useRef(null)
@@ -866,6 +905,8 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   const tasksRef = useRef(tasks)
   const openAtLatest = useRef(true)
   const followLatestTask = useRef(false)
+  const selectedSkillDefinition = WATERFALL_SKILLS.find((skill) => skill.id === selectedSkill)
+  const referenceLimit = selectedSkillDefinition ? 8 : 9
 
   useEffect(() => {
     tasksRef.current = tasks
@@ -963,6 +1004,12 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   }, [])
 
   useEffect(() => {
+    const close = (event) => { if (!skillPickerRef.current?.contains(event.target)) setSkillPickerOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [])
+
+  useEffect(() => {
     const closeReferences = (event) => {
       if (event.target instanceof Element && !event.target.closest('.waterfall-reference-summary')) setExpandedReferenceTaskIds(new Set())
     }
@@ -984,7 +1031,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   }
 
   async function appendReferences(fileList) {
-    const files = Array.from(fileList || []).slice(0, 9 - references.length)
+    const files = Array.from(fileList || []).slice(0, referenceLimit - references.length)
     const valid = files.filter(isSupportedImageFile)
     if (files.length && !valid.length) return setError('请选择 PNG、JPG、WebP 等图片文件')
     try {
@@ -993,7 +1040,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         const source = await fileToDataUrl(prepared)
         return { name: prepared.name, src: source, backupSrc: source }
       }))
-      setReferences((current) => [...current, ...encoded].slice(0, 9))
+      setReferences((current) => [...current, ...encoded].slice(0, referenceLimit))
       if (encoded.length) setError('')
       void Promise.allSettled(encoded.map(async (reference) => ({ source: reference.src, url: (await uploadGoogleDriveImage({ source: reference.src, name: reference.name })).url }))).then((results) => {
         const replacements = new Map(results.filter((result) => result.status === 'fulfilled').map((result) => [result.value.source, result.value.url]))
@@ -1004,25 +1051,34 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
 
   function appendGeneratedReference(source) {
     if (!source) return
-    setReferences((current) => current.some((item) => item.src === source) ? current : [...current, { name: '已生成图片', src: source }].slice(0, 9))
+    setReferences((current) => current.some((item) => item.src === source) ? current : [...current, { name: '已生成图片', src: source }].slice(0, referenceLimit))
     setError('')
   }
 
   async function submitTask() {
     if (!prompt.trim() || submitting) return
     if (!getAuthToken()) { onRequireLogin(); return }
-    const referenceSnapshot = references.map((item) => item.src)
-    const retryReferenceSnapshot = references.map((item) => item.backupSrc || item.src)
+    if (references.length >= 9 && selectedSkillDefinition) { setError('已选 Skill 会占用 1 张参考图位置，请先移除一张参考图'); return }
+    setSubmitting(true); setError(''); setInitialLoading(false)
+    let skillReferences = []
+    try {
+      skillReferences = await waterfallSkillReferences(selectedSkill)
+    } catch (error) {
+      setSubmitting(false)
+      setError(error.message || 'Skill 参考图加载失败，请重试')
+      return
+    }
+    const referenceSnapshot = [...references.map((item) => item.src), ...skillReferences]
+    const retryReferenceSnapshot = [...references.map((item) => item.backupSrc || item.src), ...skillReferences]
     const clientRequestId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
     const selectedRatio = normalizedImageRatio(model, resolution, ratio)
     if (selectedRatio !== ratio) setRatio(selectedRatio)
     const selectedQuality = imageQualityForModel(model, quality)
     if (selectedQuality !== quality) setQuality(selectedQuality)
-    const request = { prompt: prompt.trim(), images: referenceSnapshot, aspectRatio: selectedRatio, count, model, resolution, quality: selectedQuality, clientRequestId }
+    const request = { prompt: promptWithWaterfallSkill(selectedSkill, prompt.trim()), images: referenceSnapshot, aspectRatio: selectedRatio, count, model, resolution, quality: selectedQuality, clientRequestId }
     const optimisticTask = createOptimisticWaterfallTask(request)
     sessionTaskIds.current.add(optimisticTask.id)
     if (retryReferenceSnapshot.length) sessionReferenceImages.current.set(optimisticTask.id, retryReferenceSnapshot)
-    setSubmitting(true); setError(''); setInitialLoading(false)
     setTasks((current) => [...current, optimisticTask])
     scrollToLatestTask()
     setPrompt(''); setReferences([])
@@ -1159,11 +1215,13 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     </div>
     <div className="waterfall-composer-wrap">
       <div className={`composer waterfall-composer glass-strong ${draggingFiles ? 'is-dragging-files' : ''}`} onDragEnter={(event) => { if (hasSupportedDrag(event.dataTransfer)) { event.preventDefault(); dragDepth.current += 1; setDraggingFiles(true) } }} onDragOver={(event) => { if (hasSupportedDrag(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDragLeave={(event) => { event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDraggingFiles(false) }} onDrop={handleDrop}>
-        {draggingFiles && <div className="image-drop-zone" aria-hidden="true"><b>松开以上传参考图</b><small>最多 9 张</small></div>}
+        {draggingFiles && <div className="image-drop-zone" aria-hidden="true"><b>松开以上传参考图</b><small>最多 {referenceLimit} 张</small></div>}
         {references.length > 0 && <ReferenceStrip references={references} setReferences={setReferences} onPreview={setPreviewImage} thumbnail={waterfallThumbnailUrl}/>}
+        {selectedSkillDefinition && <div className="waterfall-selected-skill"><Icon name="spark" size={14}/><b>{selectedSkillDefinition.name}</b><span>{selectedSkillDefinition.description}</span><button type="button" onClick={() => setSelectedSkill('')} aria-label="移除已选 Skill"><Icon name="x" size={13}/></button></div>}
         <textarea ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) { event.preventDefault(); submitTask() } }} placeholder="描述这一组图片…" rows="2"/>
         <div className="composer-tools"><div className="tool-group">
-          <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= 9}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
+          <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= referenceLimit}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
+          <div className="skill-picker" ref={skillPickerRef}><button className={`skill-trigger${selectedSkillDefinition ? ' active' : ''}`} type="button" aria-haspopup="dialog" aria-expanded={skillPickerOpen} onClick={() => setSkillPickerOpen((open) => !open)}><Icon name="spark" size={15}/><b>{selectedSkillDefinition ? '朴里节标题' : 'Skill'}</b><Icon name="chevron" size={13}/></button>{skillPickerOpen && <div className="skill-menu glass-strong" role="dialog" aria-label="选择生图 Skill"><div className="skill-menu-title"><b>选择 Skill</b><span>为本次生图补充专属规则与参考风格</span></div>{WATERFALL_SKILLS.map((skill) => <button className={`skill-option-card${selectedSkill === skill.id ? ' active' : ''}`} type="button" key={skill.id} onClick={() => { setSelectedSkill(skill.id); setSkillPickerOpen(false); setError('') }}><span className="skill-option-icon"><Icon name="spark" size={17}/></span><span className="skill-option-copy"><b>{skill.name}</b><small>{skill.description}</small><em>Prompts 建议</em><p>{skill.promptAdvice}</p><p className="skill-example">例：{skill.example}</p></span>{selectedSkill === skill.id && <Icon name="check" size={16}/>}</button>)}</div>}</div>
           <div className="ratio-picker" ref={ratioPickerRef}><button className="ratio-trigger" type="button" onClick={() => setRatioOpen((open) => !open)}><span>比例</span><b>{imageRatioOptions(model, resolution).find((item) => item.value === ratio)?.label || DEFAULT_IMAGE_ASPECT_RATIO}</b><Icon name="chevron" size={14}/></button>{ratioOpen && <div className="ratio-menu glass-strong"><div className="ratio-menu-title">比例</div><div className="ratio-grid">{imageRatioOptions(model, resolution).map((item) => <button key={item.value} className={ratio === item.value ? 'active' : ''} onClick={() => { setRatio(item.value); setRatioOpen(false) }}><span className="ratio-shape" style={shapeStyle(item.value)}/><b>{item.label}</b></button>)}</div></div>}</div>
           <select className="image-model-select" aria-label="生图模型" value={model} onChange={(event) => { const nextModel = event.target.value; const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}>{IMAGE_MODEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="image-model-select image-resolution-select" aria-label="生图清晰度" value={resolution} disabled={!supportsImageResolution(model)} onChange={(event) => { const nextResolution = event.target.value; setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }}>{VIP_IMAGE_RESOLUTION_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
