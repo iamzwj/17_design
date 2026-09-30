@@ -193,9 +193,9 @@ export function installAuth(app, { dataDir }) {
       await command(`MAIL FROM:<${username}>`, [250])
       await command(`RCPT TO:<${email}>`, [250, 251])
       await command('DATA', [354])
-      const subject = `=?UTF-8?B?${Buffer.from('小蝶注册验证码').toString('base64')}?=`
-      const html = `<div style="font-family:sans-serif;color:#1a2e1f"><h2>欢迎使用小蝶</h2><p>你的注册验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件。</p></div>`
-      socket.write(`From: 小蝶 <${username}>\r\nTo: <${email}>\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n\./g, '\r\n..')}\r\n.\r\n`)
+      const subject = `=?UTF-8?B?${Buffer.from('D-Gen 注册验证码').toString('base64')}?=`
+      const html = `<div style="font-family:sans-serif;color:#1a2e1f"><h2>欢迎使用 D-Gen</h2><p>你的注册验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件。</p></div>`
+      socket.write(`From: D-Gen <${username}>\r\nTo: <${email}>\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n\./g, '\r\n..')}\r\n.\r\n`)
       const delivered = await read()
       if (!delivered.startsWith('250')) throw new Error('邮件服务器未接受验证码邮件')
       await command('QUIT', [221])
