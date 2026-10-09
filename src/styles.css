@@ -40,6 +40,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .brand-avatar { position: relative; width: 60px; height: 44px; flex: 0 0 60px; display: block; margin-right: 3px; filter: drop-shadow(0 4px 7px rgba(88, 73, 191, .18)); }
 .brand-icon-static { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .12s ease-out; }
 .brand-icon-static.is-ready { opacity: 1; }
+.sidebar .brand-icon-static { transform: scaleY(1.18); transform-origin: center; }
 :root[data-theme='light'] .brand-icon-static { content: url('/dgen-butterfly-icon-light.png?v=1'); filter: saturate(1.18) contrast(1.08); }
 .brand-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .brand-name { font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; font-size: 20px; line-height: 1.2; font-weight: 600; white-space: nowrap; }
