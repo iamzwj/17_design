@@ -1333,7 +1333,7 @@ function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src
         draggedIndex.current = index
         setDraggingIndex(index)
         event.dataTransfer.effectAllowed = 'move'
-        event.dataTransfer.setData('application/x-xiaodie-reference-order', String(index))
+        event.dataTransfer.setData('application/x-dgen-reference-order', String(index))
       }}
       onDragEnter={(event) => {
         if (draggedIndex.current === null) return

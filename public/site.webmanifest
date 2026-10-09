@@ -1,0 +1,17 @@
+{
+  "name": "D-Gen",
+  "short_name": "D-Gen",
+  "description": "蝶发 AI 创作工作台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#131217",
+  "theme_color": "#131217",
+  "icons": [
+    {
+      "src": "/dgen-butterfly-favicon.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

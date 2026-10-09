@@ -198,7 +198,7 @@ async function safeRemoteUrl(value) {
 async function downloadPublicImage(value) {
   let url = await safeRemoteUrl(value)
   for (let redirects = 0; redirects <= 4; redirects += 1) {
-    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(25_000), headers: { 'user-agent': 'Xiaodie-Batch-Composer/1.0' } })
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(25_000), headers: { 'user-agent': 'DGen-Batch-Composer/1.0' } })
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location')
       if (!location) throw Object.assign(new Error('图片地址重定向无效'), { status: 502 })
