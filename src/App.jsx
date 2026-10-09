@@ -460,11 +460,11 @@ function ConversationRow({ conversation, activeConversationId, onSelect, onPin, 
   </div>
 }
 
-function MascotImage({ alt = '' }) {
+function BrandIcon({ alt = '' }) {
   const [loaded, setLoaded] = useState(false)
   return <img
-    className={`mascot-static${loaded ? ' is-ready' : ''}`}
-    src="/xiaodie-frame-open.png?v=4"
+    className={`brand-icon-static${loaded ? ' is-ready' : ''}`}
+    src="/dgen-butterfly-icon.png?v=1"
     alt={alt}
     onLoad={() => setLoaded(true)}
     onError={() => setLoaded(false)}
@@ -495,7 +495,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
     <aside className={`sidebar glass-strong ${open ? 'is-open' : ''}`}>
       <div className="brand">
         <span className="brand-avatar" role="img" aria-label="D-Gen">
-          <MascotImage />
+          <BrandIcon />
         </span>
         <div className="brand-copy">
           <div className="brand-name">D-Gen</div>
@@ -611,7 +611,7 @@ function AuthScreen({ onAuthenticated, onClose, requiredModule = 'general' }) {
   const prompt = moduleLabel ? `登录后才能使用“${moduleLabel}”。` : '登录后继续你的创作与对话。'
   return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
-  <div className="auth-brand"><span className="brand-avatar"><MascotImage alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
+  <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
     <div className="auth-heading"><span>{isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</span><h1>{isRegister ? '注册企业账号' : '登录后继续'}</h1><p>{isRegister ? '使用 onewo.com 企业邮箱注册' : prompt}</p></div>
     <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} onClick={() => switchMode('register')}>注册</button></div>
     {isRegister && <div className="auth-steps"><i className="done">1</i><span className={registerStep !== 'email' ? 'done' : ''}/><i className={registerStep !== 'email' ? 'done' : ''}>2</i><span className={registerStep === 'password' ? 'done' : ''}/><i className={registerStep === 'password' ? 'done' : ''}>3</i></div>}
@@ -1948,6 +1948,6 @@ export default function App() {
 
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
-  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><MascotImage alt="D-Gen"/></span><i/></div>
+  if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
   return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
