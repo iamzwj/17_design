@@ -36,7 +36,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .glass-strong { background: rgba(255,255,255,.52); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,.68); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), inset 0 -1px 0 rgba(255,255,255,.15), 0 8px 32px rgba(26,46,31,.06), 0 2px 8px rgba(26,46,31,.04); }
 
 .sidebar { position: fixed; z-index: 50; left: 18px; top: 18px; bottom: 18px; width: 246px; border-radius: 27px; padding: 20px 13px 14px; display: flex; flex-direction: column; }
-.brand { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 4px 22px; margin-left: -8px; }
+.brand { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 4px 22px; margin-left: 2px; }
 .brand-avatar { position: relative; width: 60px; height: 44px; flex: 0 0 60px; display: block; margin-right: 3px; filter: drop-shadow(0 4px 7px rgba(88, 73, 191, .18)); }
 .brand-icon-static { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .12s ease-out; }
 .brand-icon-static.is-ready { opacity: 1; }
