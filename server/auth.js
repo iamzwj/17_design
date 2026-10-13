@@ -21,6 +21,7 @@ const BUILTIN_USERS = [
 ]
 const DAILY_CREDIT_OVERRIDES = new Map([
   ['zhangwj159@onewo.com', 999],
+  ['yem15@onewo.com', 999],
 ])
 const REGISTRATION_WHITELIST = new Set([
   'zhoumt10@onewo.com', 'chenjl76@onewo.com', 'cheny453@onewo.com',
