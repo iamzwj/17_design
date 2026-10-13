@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createWaterfallTask, downloadGeneratedImage, generateComplianceReview, generateImage, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, generateComplianceReview, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -726,6 +726,27 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
     if (conversation.status === 'running' && !activeRequestRef.current) {
+      if (conversation.imageTaskId) {
+        activeRequestRef.current = true
+        setMessages(conversation.messages || [])
+        setLoading(true)
+        setRunningStartedAt(conversation.runningStartedAt || null)
+        void waitForConversationImageTask(conversation.imageTaskId).then((result) => {
+          if (result.user) onUserUpdate(result.user)
+          const urls = result.urls || []
+          const nextEditImage = urls[0] || conversation.editImage || null
+          const completedMessages = [...(conversation.messages || []), { role: 'assistant', urls, elapsedMs: Date.now() - new Date(conversation.runningStartedAt || Date.now()).getTime(), prompt: conversation.messages?.at(-1)?.content || '' }]
+          setMessages(completedMessages)
+          setEditImage(nextEditImage)
+          onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: nextEditImage, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: true })
+        }).catch((err) => {
+          const failedMessages = [...(conversation.messages || []), { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(conversation.runningStartedAt || Date.now()).getTime(), failedAt: new Date().toISOString() }]
+          setMessages(failedMessages)
+          setError(err.message)
+          onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: conversation.editImage || null, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
+        }).finally(() => { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) })
+        return
+      }
       const failedAt = new Date().toISOString()
       const interruptedMessages = [...(conversation.messages || []), { role: 'error', content: '上次生成请求已中断，请重新发起。', failedAt }]
       setMessages(interruptedMessages)
@@ -810,7 +831,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       const requestPrompt = editSnapshot
         ? `请基于提供的第一张图片继续编辑。保持用户没有要求改变的主体、构图、风格、光影与细节，只执行这项修改：${text}`
         : text
-      const result = await generateImage({
+      const created = await createConversationImageTask({
         prompt: requestPrompt,
         images: [...new Set([editSnapshot, ...referenceSnapshot.map((item) => item.src)].filter(Boolean))],
         aspectRatio: selectedRatio,
@@ -818,6 +839,9 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         resolution,
         quality: selectedQuality,
       })
+      if (created.user) onUserUpdate(created.user)
+      onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', imageTaskId: created.task.id, runningStartedAt: startedAt, unreadComplete: false })
+      const result = await waitForConversationImageTask(created.task.id)
       if (result.user) onUserUpdate(result.user)
       const nextEditImage = result.urls[0] || null
       const elapsedMs = Date.now() - new Date(startedAt).getTime()
@@ -825,7 +849,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       setMessages(completedMessages)
       scrollToLatestResult()
       setEditImage(nextEditImage)
-      onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: nextEditImage, status: 'idle', runningStartedAt: null, unreadComplete: true })
+      onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: nextEditImage, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: true })
     } catch (err) {
       try {
         const { user: refreshedUser } = await getCurrentAccount()
@@ -837,7 +861,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       const failedMessages = [...userMessages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
       setMessages(failedMessages)
       scrollToLatestResult()
-      onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'idle', runningStartedAt: null, unreadComplete: false })
+      onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
     } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
   }
 

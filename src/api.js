@@ -167,6 +167,50 @@ export const createWaterfallTask = async (payload) => {
   return { ...data, task: hydrateWaterfallTask(data.task) }
 }
 
+export async function getWaterfallTask(id) {
+  const response = await fetch(apiUrl(`/api/waterfall/tasks/${encodeURIComponent(id)}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(data.error || `加载任务失败 (${response.status})`)
+    error.status = response.status
+    throw error
+  }
+  return { ...data, task: hydrateWaterfallTask(data.task) }
+}
+
+export const createConversationImageTask = (payload) => createWaterfallTask({ ...payload, count: 1, surface: 'conversation' })
+
+const conversationImageWaits = new Map()
+
+export function waitForConversationImageTask(id) {
+  if (conversationImageWaits.has(id)) return conversationImageWaits.get(id)
+  const promise = (async () => {
+    const deadline = Date.now() + 11 * 60 * 1000
+    let lastNetworkError = null
+    while (Date.now() < deadline) {
+      try {
+        const result = await getWaterfallTask(id)
+        lastNetworkError = null
+        if (result.task.status === 'running') {
+          await new Promise((resolve) => setTimeout(resolve, 3_000))
+          continue
+        }
+        const urls = (result.task.slots || []).filter((slot) => slot.status === 'succeeded' && slot.url).map((slot) => slot.url)
+        if (urls.length) return { ...result, urls }
+        const message = result.task.slots?.find((slot) => slot.error)?.error || result.task.error || '图片生成失败，请稍后重试'
+        throw Object.assign(new Error(message), { terminal: true })
+      } catch (error) {
+        if (error.terminal || error.status === 401 || error.status === 404) throw error
+        lastNetworkError = error
+        await new Promise((resolve) => setTimeout(resolve, 3_000))
+      }
+    }
+    throw lastNetworkError || new Error('图片生成等待超时，请稍后查看任务结果')
+  })().finally(() => conversationImageWaits.delete(id))
+  conversationImageWaits.set(id, promise)
+  return promise
+}
+
 export async function listWaterfallTasks(offset = 0, limit = 8) {
   const response = await fetch(apiUrl(`/api/waterfall/tasks?offset=${offset}&limit=${limit}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
   const data = await response.json().catch(() => ({}))

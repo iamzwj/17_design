@@ -783,33 +783,48 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     const savedSlot = waterfallTasks.find((task) => task.id === taskId)?.slots?.[slotIndex]
     let result
     let id = savedSlot?.upstreamId
-    if (id) {
-      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'polling', lastEvent: '正在向生图服务查询结果' } : slot) }))
-      result = await requestUpstreamResult(id, controller.signal)
-    } else {
-      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: '正在提交到生图服务' } : slot) }))
-      result = await requestUpstream('/v1/api/generate', {
-        model: upstreamImageModel(config.model),
-        prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
-      images: config.images,
-      aspectRatio: config.aspectRatio,
-      quality: config.quality,
-      replyType: 'async',
-      }, controller.signal, 45_000)
-      id = upstreamId(result)
-      if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
-      updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, upstreamId: id, phase: 'polling', submittedAt: new Date().toISOString(), lastEvent: `已提交生图服务（任务 ${id}）` } : slot) }))
-    }
+    let attempt = Math.max(1, Number(savedSlot?.attempt) || 1)
+    while (true) {
+      if (id) {
+        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'polling', lastEvent: '正在向生图服务查询结果' } : slot) }))
+        result = await requestUpstreamResult(id, controller.signal)
+      } else {
+        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, phase: attempt > 1 ? 'retrying' : 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: attempt > 1 ? '上游短暂失败，正在自动重试' : '正在提交到生图服务' } : slot) }))
+        result = await requestUpstream('/v1/api/generate', {
+          model: upstreamImageModel(config.model),
+          prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
+          images: config.images,
+          aspectRatio: config.aspectRatio,
+          quality: config.quality,
+          replyType: 'async',
+        }, controller.signal, 45_000)
+        id = upstreamId(result)
+        if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
+        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: id, phase: 'polling', submittedAt: new Date().toISOString(), lastEvent: `已提交生图服务（任务 ${id}）` } : slot) }))
+      }
 
-    while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
-      await waitForPoll(5_000, controller.signal)
-      result = await requestUpstreamResult(id, controller.signal)
+      while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
+        await waitForPoll(5_000, controller.signal)
+        result = await requestUpstreamResult(id, controller.signal)
+      }
+      const status = upstreamStatus(result)
+      const sourceUrl = upstreamResultUrl(result)
+      const message = upstreamError(result)
+      const genericFailure = !message || /^(generate failed|generation failed|failed)$/i.test(message.trim())
+      if (config.retryTransientFailure && attempt < 2 && !succeededUpstreamStatuses.has(status) && genericFailure) {
+        attempt += 1
+        id = null
+        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: null, phase: 'retrying', lastEvent: '上游短暂失败，准备自动重试' } : slot) }))
+        continue
+      }
+      if (!succeededUpstreamStatuses.has(status) || !sourceUrl) {
+        throw new Error(genericFailure ? '生图服务本次处理失败，已自动重试，请稍后再次生成' : (message || `生成失败（${status || 'unknown'}）`))
+      }
+      break
     }
-    const status = upstreamStatus(result)
     const sourceUrl = upstreamResultUrl(result)
-    if (!succeededUpstreamStatuses.has(status) || !sourceUrl) throw new Error(upstreamError(result) || `生成失败（${status || 'unknown'}）`)
     const task = waterfallTasks.find((item) => item.id === taskId)
-    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio)
+    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio, { removeBackground: Boolean(task?.removeBackground), backgroundColor: task?.backgroundColor || '#ff00ff' })
     updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
@@ -860,6 +875,7 @@ async function runWaterfallTask(task, images) {
       images: upstreamImages,
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5-sunburst', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
       quality: task.quality || DEFAULT_IMAGE_QUALITY,
+      retryTransientFailure: task.surface === 'conversation',
     }
     await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
   } catch (error) {
@@ -1694,17 +1710,18 @@ app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
   cleanupExpiredFailedTasks()
   const offset = Math.max(0, Number(req.query.offset) || 0)
   const limit = Math.min(300, Math.max(6, Number(req.query.limit) || 8))
-  const ordered = waterfallTasks.filter((task) => task.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const ordered = waterfallTasks.filter((task) => task.userId === req.user.id && task.surface !== 'conversation').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   res.json({ tasks: ordered.slice(offset, offset + limit), total: ordered.length, hasMore: offset + limit < ordered.length, user: req.user })
 })
 
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
-    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, quality = DEFAULT_IMAGE_QUALITY, clientRequestId } = req.body
+    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, quality = DEFAULT_IMAGE_QUALITY, clientRequestId, surface, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
     const requestedCount = Number(count)
     if (!prompt || typeof prompt !== 'string') return res.status(400).json({ error: '提示词不能为空' })
     if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
+    if (removeBackground) chromaKeyRgb(backgroundColor)
     const settings = imageModelSettings(model, resolution, quality)
     const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
     const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
@@ -1723,6 +1740,9 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       model: settings.model,
       resolution: settings.resolution,
       quality: settings.quality,
+      surface: surface === 'conversation' ? 'conversation' : 'waterfall',
+      removeBackground: Boolean(removeBackground),
+      backgroundColor: removeBackground ? backgroundColor : null,
       generationSize: imageSize,
       count: requestedCount,
       referenceCount: images.length,
@@ -1743,6 +1763,12 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     setImmediate(() => runWaterfallTask(task, referenceImages))
     res.status(202).json({ task, user: refundCredits(req.user.id, 0) || chargedUser })
   } catch (error) { next(error) }
+})
+
+app.get('/api/waterfall/tasks/:id', requireAuth, (req, res) => {
+  const task = waterfallTasks.find((item) => item.id === req.params.id)
+  if (!task || task.userId !== req.user.id) return res.status(404).json({ error: '任务不存在或无权查看' })
+  res.json({ task, user: req.user })
 })
 
 app.delete('/api/waterfall/tasks/:id', requireAuth, async (req, res) => {
