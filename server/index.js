@@ -622,6 +622,16 @@ function upstreamError(result) {
   return typeof value === 'string' ? value : value?.message || ''
 }
 
+function minimaxVideoState(result) {
+  const state = upstreamStatus(result)
+  const videoUrl = upstreamResultUrl(result) || ''
+  if (succeededUpstreamStatuses.has(state)) {
+    return videoUrl ? { status: 'COMPLETED', videoUrl, error: '' } : { status: 'FAILED', videoUrl: '', error: 'MiniMax H3 已结束但未返回视频结果' }
+  }
+  if (!state || pendingUpstreamStatuses.has(state)) return { status: 'RUNNING', videoUrl: '', error: '' }
+  return { status: 'FAILED', videoUrl: '', error: upstreamError(result) || (state === 'violation' ? 'MiniMax H3 内容审核未通过，请调整提示词或参考图' : 'MiniMax H3 生成失败，请稍后重试') }
+}
+
 function waitForPoll(milliseconds, signal) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds)
@@ -1599,11 +1609,12 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
         seed: -1,
         resolution,
         duration: seconds,
-        replyType: 'json',
+        replyType: 'async',
       })
-      const statusMap = { succeeded: 'COMPLETED', running: 'RUNNING', failed: 'FAILED', violation: 'FAILED' }
-      const status = statusMap[String(generated.status || '').toLowerCase()] || 'FAILED'
-      const record = { id: generated.id || randomUUID(), userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, videoUrl: generated.results?.[0]?.url || '', error: generated.error || (status === 'FAILED' ? 'MiniMax H3 未返回视频结果' : ''), createdAt: Date.now() }
+      const id = upstreamId(generated)
+      if (!id) throw new Error(upstreamError(generated) || 'MiniMax H3 未返回任务 ID')
+      const status = minimaxVideoState(generated).status
+      const record = { id, userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, ...minimaxVideoState(generated), createdAt: Date.now() }
       videoTasks.set(record.id, record); saveVideoTasks()
       return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error })
     }
@@ -1672,7 +1683,16 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
   try {
     const localTask = videoTasks.get(req.params.id)
     if (!localTask || localTask.userId !== req.user.id) return res.status(404).json({ error: '视频任务不存在或无权访问' })
-    if (localTask.provider === 'minimax') return res.json({ ...localTask, taskId: req.params.id })
+    if (localTask.provider === 'minimax') {
+      if (['PENDING', 'RUNNING'].includes(localTask.status)) {
+        // Query the saved provider ID; never resubmit a generation on refresh.
+        const result = await requestUpstreamResult(localTask.id)
+        const nextTask = { ...localTask, ...minimaxVideoState(result) }
+        videoTasks.set(localTask.id, nextTask); saveVideoTasks()
+        return res.json({ ...nextTask, taskId: localTask.id })
+      }
+      return res.json({ ...localTask, taskId: localTask.id })
+    }
     if (Date.now() - localTask.createdAt > 20 * 60 * 1000 && ['PENDING', 'RUNNING'].includes(localTask.status)) {
       const failed = { ...localTask, status: 'FAILED', error: '视频生成超时，请重新生成' }
       videoTasks.set(req.params.id, failed); saveVideoTasks()

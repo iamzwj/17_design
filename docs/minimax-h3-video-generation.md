@@ -16,7 +16,7 @@
   "seed": -1,
   "resolution": "768p",
   "duration": 8,
-  "replyType": "json"
+  "replyType": "async"
 }
 ```
 
@@ -29,3 +29,5 @@
 - 时长：1–15 秒；1080p 最长 10 秒
 - 返回状态：`running`、`succeeded`、`violation`、`failed`
 - 结果视频地址：`results[0].url`
+
+异步任务：提交后保存返回的 `id`，使用 `GET /v1/api/result?id=<id>` 持续查询。`running` 仅表示已提交；只有 `succeeded` 且存在视频 URL 才视为完成。刷新或切换模块后继续查询已保存的任务，不重复提交。
