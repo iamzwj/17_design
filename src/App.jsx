@@ -1,10 +1,11 @@
+import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, generateComplianceReview, generateText, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -1507,7 +1508,8 @@ function ImageComposer({ prompt, setPrompt, ratio, setRatio, model, setModel, re
 function TextStudio({ type, conversation, onSave }) {
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
-  const [messages, setMessages] = useState(() => validTextMessages(conversation?.messages))
+  const [runtime] = useState(() => textTaskRuntime(conversationId.current, validTextMessages(conversation?.messages)))
+  const [messages, setMessages] = useState(() => runtime.messages.current)
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
@@ -1516,9 +1518,9 @@ function TextStudio({ type, conversation, onSave }) {
   const [brandOpen, setBrandOpen] = useState(false)
   const [draggingComplianceFiles, setDraggingComplianceFiles] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
-  const [runningRequests, setRunningRequests] = useState([])
-  const messagesRef = useRef(messages)
-  const activeRequestsRef = useRef(new Map())
+  const [runningRequests, setRunningRequests] = useState(() => [...runtime.active.entries()].map(([id, startedAt]) => ({ id, startedAt })))
+  const messagesRef = runtime.messages
+  const activeRequestsRef = useRef(runtime.active)
   const uploadingImageAttachmentsRef = useRef(false)
   const complianceFileRef = useRef(null)
   const brandPickerRef = useRef(null)
@@ -1562,6 +1564,7 @@ function TextStudio({ type, conversation, onSave }) {
       webSearch,
       status: activeTasks.length ? 'running' : 'idle',
       runningStartedAt: activeTasks[0]?.startedAt || null,
+      textTasks: activeTasks,
       unreadComplete,
       activate,
     })
@@ -1575,16 +1578,34 @@ function TextStudio({ type, conversation, onSave }) {
 
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
-    if (conversation.status === 'running' && activeRequestsRef.current.size === 0) {
-      const failedAt = new Date().toISOString()
-      const interruptedMessages = [...validTextMessages(conversation.messages), { role: 'error', content: '上次回复请求已中断，请重新发送。', failedAt }]
-      updateMessages(interruptedMessages)
-      onSave({ id: conversationId.current, type, messages: interruptedMessages, brand: conversation.brand || 'general', webSearch, status: 'idle', runningStartedAt: null, unreadComplete: false })
+    if (conversation.status === 'running' && activeRequestsRef.current.size === 0 && conversation.textTasks?.length) {
+      updateMessages(validTextMessages(conversation.messages))
+      for (const task of conversation.textTasks) {
+        startTask(task.id, task.startedAt)
+        void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then((result) => {
+          if (!messagesRef.current.some((message) => message.taskId === task.id)) {
+            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+          }
+        }).catch((error) => {
+          if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: error.message, failedAt: new Date().toISOString() }])
+        }).finally(() => {
+          finishTask(task.id)
+          saveTaskState(messagesRef.current, { unreadComplete: true })
+        })
+      }
+      return
+    }
+    if (conversation.status === 'running' && activeRequestsRef.current.size === 0 && !conversation.textTasks?.length) {
+      const legacyMessages = [...validTextMessages(conversation.messages), { role: 'error', content: '此旧任务未保存可恢复的任务编号，无法继续查询。请重新发送原消息。', failedAt: new Date().toISOString() }]
+      updateMessages(legacyMessages)
+      saveTaskState(legacyMessages)
       return
     }
     // While this browser is running requests, parent persistence updates can
     // arrive out of order. Keep the live message list as the source of truth.
     if (activeRequestsRef.current.size > 0) {
+      setMessages(messagesRef.current)
+      setRunningRequests(activeTaskSnapshot())
       if (conversation.brand) setBrand(conversation.brand)
       return
     }
@@ -1710,8 +1731,8 @@ function TextStudio({ type, conversation, onSave }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
-      const result = await (type === 'compliance' ? generateComplianceReview : generateText)({ messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
-      const completedMessages = [...messagesRef.current, { role: 'assistant', content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
+      const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
       completed = true

@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { installAuth } from './auth.js'
+import { installTextTasks } from './textTasks.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -1493,6 +1494,8 @@ app.get('/api/festival-posters/tasks/:id', requireAuth, (req, res) => {
 for (const task of festivalPosterTasks.filter((item) => item.status === 'running')) {
   setImmediate(() => { void (task.phase === 'generating' ? runFestivalPosterImageTask(task.id) : runFestivalPosterPlanningTask(task.id)) })
 }
+
+installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion })
 
 app.post('/api/text', requireAuth, handleTextCompletion)
 // Compliance review remains separate from account-only text chat.
