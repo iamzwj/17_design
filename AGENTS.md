@@ -6,3 +6,7 @@
 - AI generation tools must not make one planning-model timeout a hard blocker for the primary generation action. Preserve the task and use a tested high-quality model fallback; never silently substitute a low-quality local template for an intelligent prompt model.
 - In the Pulin festival and solar-term poster tool, one submit must run planning and then start both poster images automatically; never add a prompt-confirmation gate or expose a prompt display/editing module in the task card. The style selector must offer 3D cartoon, photorealistic, color ink (default), and paper-cut while preserving all composition, character, collar, service-scene, text, safety-area, overlay, and two-variant rules. Regeneration must retain the task's selected style.
 - A failed Pulin festival or solar-term poster task may remain visible in the current live session so the user can retry it, but failed tasks must be omitted when history is reloaded after a page refresh. Keep running and successful tasks in refreshed history.
+
+# Project deployment requirement
+
+- After completing and validating a user-requested change in this project, automatically commit only the scoped changes, push, deploy through the current production workflow, and verify production without asking for separate deployment approval. Do not deploy when the user explicitly requests local-only work, preview-only work, or waiting for confirmation. Keep unrelated worktree changes out of the deployment commit.
