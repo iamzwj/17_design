@@ -25,8 +25,14 @@ const MODULES = [
   { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'content', label: '内容创作', caption: '节日海报与品牌内容', icon: 'book' },
-  { id: 'assets', label: '素材库', caption: 'IP形象与品牌Logo', icon: 'library' },
+  { id: 'knowledge', label: '知识库', caption: '素材、品牌与营销知识', icon: 'library' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
+]
+
+const KNOWLEDGE_SECTIONS = [
+  { id: 'assets', label: '素材库' },
+  { id: 'brand-manual', label: '品牌手册' },
+  { id: 'marketing-strategy', label: '营销策略' },
 ]
 
 const RATIO_OPTIONS = [
@@ -477,6 +483,8 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
+  const [knowledgeExpanded, setKnowledgeExpanded] = useState(() => KNOWLEDGE_SECTIONS.some((item) => item.id === active))
+  const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
   const [moreExpanded, setMoreExpanded] = useState(false)
   const accountCloseTimer = useRef(null)
 
@@ -514,6 +522,11 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {active === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
             <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日节气海报</button>
+          </div>}
+        </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
+          <button className={knowledgeActive ? 'active' : ''} aria-expanded={knowledgeExpanded} aria-controls="knowledge-submenu" onClick={() => setKnowledgeExpanded((value) => !value)}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {knowledgeExpanded && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
+            {KNOWLEDGE_SECTIONS.map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={moreExpanded} onClick={() => { if (item.disabled) return; setMoreExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -1791,7 +1804,7 @@ export default function App() {
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
   const directContent = localPreviewParams.get('module') === 'content'
-  const directAssets = localPreviewParams.get('module') === 'assets'
+  const directKnowledgeSection = KNOWLEDGE_SECTIONS.find((item) => item.id === localPreviewParams.get('module'))?.id
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
   const localPreviewTheme = localPreviewParams.get('theme')
@@ -1799,7 +1812,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directAssets ? 'assets' : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
@@ -1870,7 +1883,7 @@ export default function App() {
   }
 
   function changeModule(type) {
-    if (!user && type !== 'more' && type !== 'compliance' && type !== 'assets') { setPendingImageMode(null); openLogin(type); return }
+    if (!user && type !== 'more' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
     startNew(type)
   }
 
@@ -1982,6 +1995,8 @@ export default function App() {
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'assets'
         ? <MaterialLibrary key={workspaceToken}/>
+      : ['brand-manual', 'marketing-strategy'].includes(active)
+        ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
       : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>

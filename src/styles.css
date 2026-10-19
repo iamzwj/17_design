@@ -463,3 +463,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
   .video-waterfall-task-info { width: 100%; }
   .video-waterfall-task > video { height: min(36vh, 300px); }
 }
+
+.knowledge-empty { margin-top: 28px; padding: 64px 24px; border-radius: 20px; text-align: center; color: var(--mid); }
+.knowledge-empty > svg { color: var(--accent); }
+.knowledge-empty h2 { margin: 16px 0 8px; font-size: 18px; color: var(--ink); }
+.knowledge-empty p { margin: 0; font-size: 14px; }
