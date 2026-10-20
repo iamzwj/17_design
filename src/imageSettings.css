@@ -1,0 +1,20 @@
+.image-settings { position: relative; flex: 0 0 auto; }
+.image-settings-panel { position: absolute; z-index: 45; bottom: calc(100% + 8px); left: 0; width: min(340px,calc(100vw - 32px)); max-height: min(610px,calc(100dvh - 180px)); overflow-y: auto; padding: 16px; border: 1px solid #dcd9e6; border-radius: 14px; background: #faf9fc; color: #252231; box-shadow: 0 12px 30px #0002; }
+.image-settings-panel > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; font-size: 13px; }
+.image-settings-panel > header button { border: 0; border-radius: 6px; background: transparent; color: #666174; padding: 4px; display: grid; place-items: center; cursor: pointer; }
+.image-settings-panel fieldset { min-width: 0; padding: 0; border: 0; margin: 0 0 16px; }
+.image-settings-panel fieldset:last-child { margin-bottom: 0; }
+.image-settings-panel legend { padding: 0; margin-bottom: 9px; color: #666174; font-size: 11px; }
+.image-settings-ratios { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; }
+.image-settings-ratios button { min-width: 0; height: 55px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.image-settings-choices { display: flex; gap: 6px; }
+.image-settings-choices button { flex: 1; min-width: 0; height: 31px; padding: 0 6px; }
+.image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button { border: 1px solid #dedbe7; border-radius: 7px; background: #fff; color: #555063; cursor: pointer; font-size: 10px; }
+.image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button:hover:not(:disabled), .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button[aria-pressed='true'] { background: #efeafa; border-color: #a58be6; color: #6240d4; }
+.image-settings-panel button:focus-visible { outline: 2px solid #9474ee; outline-offset: 2px; }
+.image-settings-panel button:disabled { opacity: .4; cursor: not-allowed; }
+.image-settings-panel small { display: block; font-size: 10px; color: #666174; margin-top: 8px; }
+:root[data-theme='dark'] .image-settings-panel { background: #282630; color: #f0ecf6; border-color: #45404f; box-shadow: 0 12px 30px #0006; }
+:root[data-theme='dark'] .image-settings-panel :is(legend,small), :root[data-theme='dark'] .image-settings-panel > header button { color: #b5afc2; }
+:root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button { background: #302d39; border-color: #484251; color: #ddd8e6; }
+:root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button:hover:not(:disabled), :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button[aria-pressed='true'] { background: #8a73ff26; border-color: #9b81e8; color: #c7bcff; }
