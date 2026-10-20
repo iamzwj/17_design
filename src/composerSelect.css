@@ -1,5 +1,5 @@
 .composer-select { position: relative; flex: 0 0 auto; min-width: 0; }
-.composer-select-trigger { height: 31px; display: flex; align-items: center; gap: 7px; max-width: 185px; padding: 0 9px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; background: rgba(255,255,255,.33); color: var(--mid); cursor: pointer; font-size: 10px; }
+.composer-select-trigger { height: 31px; display: flex; align-items: center; gap: 11px; max-width: 185px; padding: 0 12px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; background: rgba(255,255,255,.33); color: var(--mid); cursor: pointer; font-size: 10px; }
 .composer-select-trigger b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .composer-select-trigger > svg { flex-shrink: 0; }
 .composer-select-trigger > svg:last-child { width: 13px; height: 13px; margin-left: auto; transform: rotate(90deg); color: var(--muted); }

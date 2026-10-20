@@ -2,34 +2,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from './icons.jsx'
 import './materialLibrary.css'
 
-const IP_ASSETS = [
-  { id: 'onewo-yixiu', group: 'cartoon', kind: '主形象全身照', name: '一修 · 打招呼', file: '/material-library/onewo-yixiu.png', note: '万物云 3D IP' },
-  { id: 'onewo-xiaozhizhi', group: 'cartoon', kind: '主形象全身照', name: '管家小知之', file: '/material-library/onewo-xiaozhizhi.png', note: '万物云 3D IP' },
-  { id: 'onewo-keke', group: 'cartoon', kind: '主形象全身照', name: '可可 · 解说', file: '/material-library/onewo-keke.png', note: '万物云 3D IP' },
-  { id: 'onewo-ange', group: 'cartoon', kind: '主形象全身照', name: '安哥 · 敬礼', file: '/material-library/onewo-ange.png', note: '万物云 3D IP' },
-  { id: 'xiaojie', group: 'cartoon', kind: '主形象全身照', name: '小杰', file: '/material-library/xiaojie.png', note: '品线 3D IP' },
-  { id: 'yanxuanjia-painter', group: 'cartoon', kind: '主形象全身照', name: '研选家 · 刷墙师傅', file: '/material-library/yanxuanjia-painter.png', note: '研选家 3D IP' },
-  { id: 'person-main', group: 'real', kind: '主形象全身照', name: '真人 IP · 主形象', note: '标准全身照' },
-  { id: 'person-views', group: 'real', kind: '三视图', name: '真人 IP · 三视图', note: '正面 / 侧面 / 背面' },
-  { id: 'person-face', group: 'real', kind: '面部特写', name: '真人 IP · 面部特写', note: '标准面部参考' },
-  { id: 'person-clothes', group: 'real', kind: '服装', name: '真人 IP · 服装', note: '服装结构与配色' },
-  { id: 'person-detail', group: 'real', kind: '细节特写', name: '真人 IP · 细节特写', note: '配饰与局部细节' },
-]
-
-const BRANDS = ['朴邻', '研选家', '万科物业', '万科物业 × 朴里节', '万物云', '住这儿']
-const LOGO_FILES = {
-  '朴邻-彩色': '/material-library/pulin-color.png',
-  '朴邻-反白': '/material-library/pulin-white.png',
-  '研选家-彩色': '/material-library/yanxuanjia-color.png',
-  '研选家-反白': '/material-library/yanxuanjia-white.png',
-  '万科物业-反白': '/material-library/vanke-property-white.png',
-  '万科物业 × 朴里节-彩色': '/material-library/vanke-please-day-color.png',
-  '万科物业 × 朴里节-反白': '/material-library/vanke-please-day-white.png',
-}
-const LOGO_ASSETS = BRANDS.flatMap((brand) => [
-  { id: `${brand}-color`, brand, variant: '彩色', name: `${brand} · 彩色 Logo`, note: 'PNG 透明底', file: LOGO_FILES[`${brand}-彩色`] },
-  { id: `${brand}-white`, brand, variant: '反白', name: `${brand} · 反白 Logo`, note: 'PNG 透明底', file: LOGO_FILES[`${brand}-反白`] },
-])
+import { IP_ASSETS, BRANDS, LOGO_ASSETS } from '../shared/materialCatalog.js'
 
 const TYPE_LABELS = { all: '全部素材', ip: 'IP 形象', logo: '品牌 Logo' }
 
@@ -57,6 +30,7 @@ function AssetCard({ asset, onPreview }) {
       <b>{asset.name}</b>
       <small>{asset.note}</small>
     </div>
+    {available && <a className="material-link-knowledge" href={`?module=brand-knowledge&material=${encodeURIComponent(asset.id)}`}>关联品牌知识库</a>}
     <button className="material-download" type="button" disabled={!available} onClick={() => downloadAsset(asset)} aria-label={`下载 ${asset.name}`}><Icon name="download" size={15}/>{available ? '下载 PNG' : '暂无文件'}</button>
   </article>
 }
@@ -65,7 +39,7 @@ function MaterialPreview({ asset, onClose }) {
   return <div className="material-preview" role="dialog" aria-modal="true" aria-label={`${asset.name} 预览`} onClick={onClose}>
     <div className="material-preview-panel" onClick={(event) => event.stopPropagation()}>
       <div className={`material-preview-image${asset.variant === '反白' ? ' is-reversed' : ''}`}><img src={asset.file} alt={asset.name}/></div>
-      <div className="material-preview-meta"><div><span>{asset.kind || asset.variant}</span><h2>{asset.name}</h2><p>{asset.note} · PNG</p></div><div><button type="button" onClick={onClose}>关闭</button><button className="primary" type="button" onClick={() => downloadAsset(asset)}><Icon name="download" size={16}/>下载 PNG</button></div></div>
+      <div className="material-preview-meta"><div><span>{asset.kind || asset.variant}</span><h2>{asset.name}</h2><p>{asset.note} · PNG</p></div><div><button type="button" onClick={onClose}>关闭</button><a className="material-link-knowledge" href={`?module=brand-knowledge&material=${encodeURIComponent(asset.id)}`}>关联品牌知识库</a><button className="primary" type="button" onClick={() => downloadAsset(asset)}><Icon name="download" size={16}/>下载 PNG</button></div></div>
     </div>
   </div>
 }
