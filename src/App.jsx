@@ -323,7 +323,8 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview, onRetryLogo }) {
       <img className={imageState === 'loading' ? 'is-loading' : ''} src={thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={imageState === 'ready'} onLoad={() => setImageState('ready')} onError={() => setImageState('failed')} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, previewUrl); event.dataTransfer.setData('text/uri-list', previewUrl) }}/>
     </button>
     {imageState === 'loading' && <div className="waterfall-asset-loading" role="status" aria-label="图片加载中"><i/><i/><i/></div>}
-    {slot.brandWarning && <div className="waterfall-brand-warning" role="status" title={slot.brandWarning}><span>{['queued', 'running'].includes(slot.logoRepairStatus) ? '正在重新合成Logo…' : 'Logo尚未合成'}</span><button type="button" disabled={['queued', 'running'].includes(slot.logoRepairStatus)} onClick={onRetryLogo}>重试Logo</button></div>}
+    {(slot.brandWarning || ['queued', 'running'].includes(slot.logoRepairStatus)) && <div className="waterfall-brand-warning" role="status" title={slot.brandWarning}><span>{['queued', 'running'].includes(slot.logoRepairStatus) ? '正在重新合成Logo…' : 'Logo尚未合成'}</span><button type="button" disabled={['queued', 'running'].includes(slot.logoRepairStatus)} onClick={onRetryLogo}>重试Logo</button></div>}
+    {slot.logoApplied && !slot.brandWarning && !['queued', 'running'].includes(slot.logoRepairStatus) && imageState === 'ready' && <button className="waterfall-logo-recompose" type="button" onClick={onRetryLogo} title="使用保留的底图重新排放Logo，不重新生图">重排Logo</button>}
     {imageState === 'ready' && <button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(previewUrl, prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button>}
   </>
 }

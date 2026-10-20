@@ -476,3 +476,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .waterfall-brand-warning button:hover { background: rgba(152,43,64,.08); }
 .waterfall-brand-warning button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .waterfall-brand-warning button:disabled { opacity: .65; cursor: progress; }
+
+.waterfall-logo-recompose { position: absolute; left: 8px; bottom: 8px; min-height: 30px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fffafc; color: #463c50; font-size: 11px; cursor: pointer; }
+.waterfall-logo-recompose:hover { background: #f0e9fa; }
+.waterfall-logo-recompose:focus-visible { outline: 2px solid #8c73da; outline-offset: 2px; }
+:root[data-theme='dark'] .waterfall-logo-recompose { background: #28252f; color: #e9e1f6; }
+:root[data-theme='dark'] .waterfall-logo-recompose:hover { background: #393143; }
