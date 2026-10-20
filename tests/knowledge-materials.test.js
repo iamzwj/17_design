@@ -91,6 +91,10 @@ test('brand selection automatically pins library Logo, optional typed IP and fix
     const initial = (await call(`/generation-assets?brandId=${brandId}`, undefined, 'viewer')).data
     assert.equal(initial.colorReady, false); assert.equal(initial.assets.filter((a) => a.kind === 'logo').length, 2); assert.equal(initial.assets.filter((a) => a.ipType === 'cartoon').length, 1); assert.equal(initial.assets.filter((a) => a.ipType === 'real').length, 0)
     await assert.rejects(kb.prepare(users[1], { prompt: '制作海报', knowledge: { brandId, enforceBrandColors: true } }, 'image'), /颜色规范尚未发布/)
+    const emptyPalette = (await call('/documents', { brandId, title: '待补充测试色板', kind: 'palette', content: '暂无有效说明' })).data
+    await until(async () => (await call(`/documents/${emptyPalette.document.id}`)).data.versions[0].status === 'ready')
+    await call(`/documents/${emptyPalette.document.id}/publish`, { versionId: emptyPalette.document.latestVersionId })
+    assert.equal((await call(`/generation-assets?brandId=${brandId}`, undefined, 'viewer')).data.colorReady, false, 'a palette label alone must not count as grounded color specifications')
     const manual = (await call('/documents', { brandId, title: '测试品牌手册', kind: 'document', content: '品牌标准色：主色#10AC91，辅助色#FFFFFF；红色示例禁用。' })).data
     const doc = await until(async () => { const d = (await call(`/documents/${manual.document.id}`)).data; return d.versions[0].status === 'ready' ? d : null })
     assert.equal((await call(`/generation-assets?brandId=${brandId}`, undefined, 'viewer')).data.colorReady, false)
@@ -102,7 +106,7 @@ test('brand selection automatically pins library Logo, optional typed IP and fix
     const trace = (await call(`/traces/${cartoon.id}`, undefined, 'viewer')).data.trace
     assert.equal(trace.assets[0].provenance.materialId, '研选家-color'); assert.equal(trace.assets[1].ipType, 'cartoon')
     assert.ok(trace.rules.some((r) => r.fixedColor && r.versionId === doc.document.latestVersionId)); assert.match(cartoon.prompt, /#10AC91/)
-    assert.equal(kb.db.prepare('SELECT COUNT(*) AS n FROM documents').get().n, 1, 'selecting a brand must not impersonate a publisher or create knowledge documents')
+    assert.equal(kb.db.prepare('SELECT COUNT(*) AS n FROM documents').get().n, 2, 'selecting a brand must not impersonate a publisher or create knowledge documents')
     const oldHash = trace.assets[0].sha256, changed = await sharp(png).negate({ alpha: false }).png().toBuffer(); fs.writeFileSync(path.join(materialDir, 'yanxuanjia-color.png'), changed)
     const fresh = await prepare({ ipMode: 'none' }), freshTrace = (await call(`/traces/${fresh.id}`, undefined, 'viewer')).data.trace
     assert.notEqual(freshTrace.assets[0].sha256, oldHash)

@@ -391,7 +391,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     return all('documents').filter((d) => d.brandId === brandId && !d.deletedAt && d.publishedVersionId).flatMap((d) => {
       const v = get('versions', d.publishedVersionId)
       if (!['document', 'rule', 'palette'].includes(v.kind)) return []
-      return chunksFor(v.id).filter((c) => c.enabled && (v.kind === 'palette' || colorPattern.test(c.text))).map((c) => ({ documentId: d.id, versionId: v.id, version: v.number, chunkId: c.id, title: v.title, source: c.source, text: c.text, kind: v.kind, fixedColor: true }))
+      return chunksFor(v.id).filter((c) => c.enabled && colorPattern.test(c.text)).map((c) => ({ documentId: d.id, versionId: v.id, version: v.number, chunkId: c.id, title: v.title, source: c.source, text: c.text, kind: v.kind, fixedColor: true }))
     })
   }
   function generationAssets(brand) {
