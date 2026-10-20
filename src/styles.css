@@ -470,3 +470,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .knowledge-empty p { margin: 0; font-size: 14px; }
 .waterfall-brand-warning { position: absolute; left: 8px; right: 44px; bottom: 8px; padding: 8px 10px; border: 1px solid #dba4b0; border-radius: 7px; background: #fff6f8; color: #982b40; font-size: 11px; line-height: 1.6; }.waterfall-brand-progress { position: absolute; left: 8px; right: 8px; bottom: 12px; text-align: center; color: var(--muted); font-size: 12px; }:root[data-theme='dark'] .waterfall-brand-warning { background: #30252f; border-color: #865064; color: #ffb0c0; }
 .image-brand-warning { margin-top: 10px; padding: 10px 12px; border: 1px solid #dba4b0; border-radius: 7px; background: #fff6f8; color: #982b40; font-size: 12px; line-height: 1.7; }:root[data-theme='dark'] .image-brand-warning { background: #30252f; border-color: #865064; color: #ffb0c0; }
+
+.waterfall-brand-warning { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.waterfall-brand-warning button { flex: 0 0 auto; min-height: 30px; padding: 4px 10px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.waterfall-brand-warning button:hover { background: rgba(152,43,64,.08); }
+.waterfall-brand-warning button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.waterfall-brand-warning button:disabled { opacity: .65; cursor: progress; }

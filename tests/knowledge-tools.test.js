@@ -12,19 +12,22 @@ import sharp from 'sharp'
 test('real local vectors feed text, authenticated review and image requests; generation traces survive completion', { skip: !process.env.KNOWLEDGE_TEST_MODEL_CACHE }, async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-tools-'))
   const token = randomUUID(), captures = []
-  let inspectFails = false
+  let inspectFails = false, inspectDelay = 0
   const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#6240d4' } }).png().toBuffer()
+  const patterned = await sharp(png).composite([{ input: await sharp({ create: { width: 6, height: 3, channels: 3, background: 'black' } }).png().toBuffer(), left: 5, top: 4 }]).png().toBuffer()
   const mock = http.createServer(async (req, res) => {
-    if (req.method === 'GET') { res.setHeader('Content-Type', 'image/png'); res.end(png); return }
+    if (req.method === 'GET') { res.setHeader('Content-Type', 'image/png'); res.end(inspectFails ? patterned : png); return }
     let raw = ''; for await (const chunk of req) raw += chunk
     const body = JSON.parse(raw); captures.push({ path: req.url, body }); res.setHeader('Content-Type', 'application/json')
+    if (req.url.includes('chat/completions') && inspectDelay && JSON.stringify(body.messages).includes('品牌Logo位置检查')) await new Promise((r) => setTimeout(r, inspectDelay))
     if (req.url.includes('chat/completions')) res.end(JSON.stringify({ model: 'local-test-recorder', choices: [{ message: { content: JSON.stringify(body.messages).includes('品牌Logo位置检查') ? JSON.stringify({ boxes: [], uncertain: inspectFails }) : '测试品牌标志使用紫色。' } }] }))
     else res.end(JSON.stringify({ status: 'succeeded', id: 'recorded-image', results: [{ url: `http://127.0.0.1:${mock.address().port}/test.png` }] }))
   })
   mock.listen(0, '127.0.0.1'); await new Promise((r) => mock.once('listening', r))
   const portProbe = http.createServer(); portProbe.listen(0, '127.0.0.1'); await new Promise((r) => portProbe.once('listening', r)); const port = portProbe.address().port; await new Promise((r) => portProbe.close(r))
   fs.writeFileSync(path.join(dataDir, 'auth.json'), JSON.stringify({ users: [{ id: 'test-admin', email: 'zhangwj159@onewo.com', passwordHash: 'not-for-login', credits: 999 }], codes: [], sessions: [{ tokenHash: createHash('sha256').update(token).digest('hex'), userId: 'test-admin', expiresAt: Date.now() + 3600000 }] }))
-  const child = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(port), DIEFA_DATA_DIR: dataDir, KNOWLEDGE_MODEL_CACHE: process.env.KNOWLEDGE_TEST_MODEL_CACHE, GRSAI_BASE_URL: `http://127.0.0.1:${mock.address().port}`, GRSAI_API_KEY: 'local-test-only' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  const start = () => spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(port), DIEFA_DATA_DIR: dataDir, KNOWLEDGE_MODEL_CACHE: process.env.KNOWLEDGE_TEST_MODEL_CACHE, GRSAI_BASE_URL: `http://127.0.0.1:${mock.address().port}`, GRSAI_API_KEY: 'local-test-only' }, stdio: ['ignore', 'pipe', 'pipe'] })
+  let child = start()
   let logs = ''; child.stdout.on('data', (d) => { logs += d }); child.stderr.on('data', (d) => { logs += d })
   const base = `http://127.0.0.1:${port}`, headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Text-Session': 'qa-review-session' }
   async function call(p, body, auth = true) { const response = await fetch(base + p, { method: body ? 'POST' : 'GET', headers: auth ? headers : { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); const data = await response.json(); return { status: response.status, data } }
@@ -65,6 +68,25 @@ test('real local vectors feed text, authenticated review and image requests; gen
     const retained = await until(async () => { const t = (await call(`/api/waterfall/tasks/${uncertain.data.task.id}`)).data.task; assert.notEqual(t.status, 'failed', JSON.stringify(t.slots)); return t.status === 'succeeded' ? t : null })
     assert.equal(retained.slots[0].logoApplied, false); assert.match(retained.slots[0].brandWarning, /Logo未合成/); assert.ok(retained.slots[0].url)
     assert.ok(fs.existsSync(path.join(dataDir, 'waterfall-assets', `${retained.id}-0.before-logo.png`)))
+    const repairPath = `/api/waterfall/tasks/${retained.id}/slots/0/logo`
+    assert.equal((await call(repairPath, {}, false)).status, 401)
+    assert.equal((await call(`/api/waterfall/tasks/missing/slots/0/logo`, {})).status, 404)
+    assert.equal((await call(`/api/waterfall/tasks/${retained.id}/slots/99/logo`, {})).status, 400)
+    const beforeCredits = (await call(`/api/waterfall/tasks/${retained.id}`)).data.user.credits
+    const imageRequests = captures.filter((c) => c.path.includes('/generate')).length
+    inspectFails = false; inspectDelay = 700
+    const started = await call(repairPath, {}); assert.equal(started.status, 202)
+    const duplicate = await call(repairPath, {}); assert.equal(duplicate.status, 202)
+    await until(async () => (await call(`/api/waterfall/tasks/${retained.id}`)).data.task.slots[0].logoRepairStatus === 'running')
+    child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r))
+    child = start(); child.stdout.on('data', (d) => { logs += d }); child.stderr.on('data', (d) => { logs += d })
+    await until(async () => { try { return (await call('/api/health')).status === 200 } catch { return false } })
+    const repaired = await until(async () => { const t = (await call(`/api/waterfall/tasks/${retained.id}`)).data.task; return t.slots[0].logoRepairStatus === 'succeeded' ? t : null })
+    assert.equal(repaired.slots[0].logoApplied, true); assert.equal(repaired.slots[0].brandWarning, null)
+    assert.notEqual(repaired.slots[0].url, retained.slots[0].url)
+    assert.equal(captures.filter((c) => c.path.includes('/generate')).length, imageRequests)
+    assert.equal((await call(`/api/waterfall/tasks/${retained.id}`)).data.user.credits, beforeCredits)
+    assert.ok(fs.existsSync(path.join(dataDir, 'waterfall-assets', path.basename(retained.slots[0].url))), 'previous image remains preserved')
 
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)) }; mock.closeAllConnections(); await new Promise((r) => mock.close(r)); fs.rmSync(dataDir, { recursive: true, force: true })

@@ -25,7 +25,7 @@ async function backgroundAt(image, region, base, requireFlat) {
   if (!samples[0].length) throw new Error('无法读取Logo周围背景，未继续叠加')
   const rgb = samples.map((values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)])
   const noise = samples.map((values, c) => values.map((v) => Math.abs(v - rgb[c])).sort((a, b) => a - b)[Math.floor(values.length * 0.9)])
-  if (requireFlat && Math.max(...noise) > 18) throw new Error('已有Logo周围包含复杂画面或文字，未自动覆盖，请重新生成')
+  if (requireFlat && Math.max(...noise) > 18) throw new Error('已有Logo周围包含复杂画面或文字，未自动覆盖，请人工核对')
   return { r: rgb[0], g: rgb[1], b: rgb[2] }
 }
 // Only the confirmed Logo and, when safe, its detected existing footprint are changed.
@@ -36,13 +36,13 @@ export async function composeBrandLogo(image, logo, { boxes = [] } = {}) {
   const safeWidth = region ? region.left + region.width - safeLeft - 3 : 0
   const safeHeight = region ? region.top + region.height - safeTop - 3 : 0
   if (region && (safeWidth < 8 || safeHeight < 8)) throw new Error('现有Logo区域无法保留安全边距，未继续叠加')
-  const maxWidth = region ? safeWidth : Math.max(1, Math.floor(base.width * 0.24))
-  const maxHeight = region ? safeHeight : Math.max(1, Math.floor(base.height * 0.09))
+  const maxWidth = region ? Math.min(safeWidth, Math.max(1, Math.floor(base.width * 0.18))) : Math.max(1, Math.floor(base.width * 0.18))
+  const maxHeight = region ? Math.min(safeHeight, Math.max(1, Math.floor(base.height * 0.065))) : Math.max(1, Math.floor(base.height * 0.065))
   const mark = await sharp(logo).rotate().resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
   const meta = await sharp(mark).metadata(), stats = await sharp(mark).stats()
   const white = stats.channels.slice(0, 3).every((c) => c.mean > 225)
-  const left = region ? safeLeft + Math.floor((safeWidth - meta.width) / 2) : Math.floor(base.width * 0.04)
-  const top = region ? safeTop + Math.floor((safeHeight - meta.height) / 2) : Math.floor(base.height * 0.04)
+  const left = region ? safeLeft + Math.floor((safeWidth - meta.width) / 2) : Math.floor(base.width * 0.055)
+  const top = region ? safeTop + Math.floor((safeHeight - meta.height) / 2) : Math.floor(base.width * 0.055)
   const footprint = region || { left, top, width: meta.width, height: meta.height }
   const background = await backgroundAt(image, footprint, base, Boolean(region))
   const layers = []

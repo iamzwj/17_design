@@ -27,16 +27,31 @@ test('no logo uses transparent source without a white rectangle; complex backgro
 })
 test('Logo review validates boxes and uses high-quality fallback rather than blocking on one model failure', async () => {
   const image = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).png().toBuffer()
+  const patterned = await sharp(image).composite([{ input: await sharp({ create: { width: 80, height: 30, channels: 3, background: 'black' } }).png().toBuffer(), left: 40, top: 60 }]).png().toBuffer()
   const models = []
-  const review = await reviewLogo(image, image, '测试品牌', { request: async (body) => { models.push(body.model); if (models.length === 1) throw new Error('timeout'); return { choices: [{ message: { content: JSON.stringify({ boxes: [[100, 100, 500, 400]], uncertain: false }) } }] } } })
-  assert.deepEqual(models, ['gemini-3.1-pro', 'gemini-2.5-pro']); assert.equal(review.boxes[0].left, 100)
+  const review = await reviewLogo(patterned, image, '测试品牌', { request: async (body) => { models.push(body.model); if (models.length === 1) throw new Error('timeout'); return { choices: [{ message: { content: JSON.stringify({ boxes: [[100, 100, 500, 400]], uncertain: false }) } }] } } })
+  assert.deepEqual(models, ['gemini-3.1-pro', 'gemini-2.5-pro']); assert.equal(review.boxes[0].left, 36)
   assert.throws(() => validateLogoReview({ boxes: [], uncertain: true }), /无法确认/)
   assert.throws(() => validateLogoReview({ boxes: [[1, 2, 0, 4]], uncertain: false }), /无效位置/)
 })
 
 test('a canceled Logo check never launches a fallback request', async () => {
   const image = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#ddd' } }).png().toBuffer()
+  const patterned = await sharp(image).composite([{ input: await sharp({ create: { width: 10, height: 5, channels: 3, background: 'black' } }).png().toBuffer(), left: 5, top: 5 }]).png().toBuffer()
   const controller = new AbortController(); let calls = 0
-  await assert.rejects(reviewLogo(image, image, '测试品牌', { signal: controller.signal, request: async () => { calls++; controller.abort(); throw new Error('canceled') } }), /canceled/)
+  await assert.rejects(reviewLogo(patterned, image, '测试品牌', { signal: controller.signal, request: async () => { calls++; controller.abort(); throw new Error('canceled') } }), /canceled/)
   assert.equal(calls, 1)
+})
+
+test('a clean corner skips vision even when a large brand headline is on the right; placement uses a smaller mark with equal pixel margins', async () => {
+  const title = await sharp({ create: { width: 480, height: 120, channels: 3, background: '#10ac91' } }).png().toBuffer()
+  const image = await sharp({ create: { width: 1000, height: 1800, channels: 3, background: '#eee' } }).composite([{ input: title, left: 420, top: 180 }]).png().toBuffer()
+  const logo = await sharp({ create: { width: 400, height: 100, channels: 4, background: '#10ac91' } }).png().toBuffer()
+  const review = await reviewLogo(image, logo, '测试品牌', { request: async () => { throw new Error('must not call a model for an empty corner') } })
+  assert.equal(review.model, 'uniform-background-check'); assert.deepEqual(review.boxes, [])
+  const result = await composeBrandLogo(image, logo, review)
+  assert.equal(result.placement.left, 55); assert.equal(result.placement.top, 55); assert.equal(result.placement.width, 180)
+  const before = await sharp(image).extract({ left: 420, top: 180, width: 480, height: 120 }).removeAlpha().raw().toBuffer()
+  const after = await sharp(result.buffer).extract({ left: 420, top: 180, width: 480, height: 120 }).removeAlpha().raw().toBuffer()
+  assert.ok(after.equals(before), "headline pixels must remain unchanged")
 })

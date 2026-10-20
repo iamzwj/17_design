@@ -953,7 +953,30 @@ async function runWaterfallTask(task, images) {
   } finally { clearTimeout(timeout) }
 }
 
+// Logo retries reuse the immutable pre-composition image, never a new image request.
+const logoRepairs = new Set()
+async function runLogoRepair(taskId, slotIndex) {
+  const key = `${taskId}-${slotIndex}`
+  if (logoRepairs.has(key)) return
+  const task = waterfallTasks.find((t) => t.id === taskId)
+  if (!task) return
+  logoRepairs.add(key)
+  const patch = (value) => updateWaterfallTask(taskId, (t) => ({ ...t, slots: t.slots.map((s, i) => i === slotIndex ? { ...s, ...value } : s) }))
+  try {
+    patch({ logoRepairStatus: 'running' })
+    const original = await fs.promises.readFile(path.join(waterfallAssetsDir, `${key}.before-logo.png`))
+    const buffer = await knowledge.compose(task.knowledgeTraceId, original, key, { signal: AbortSignal.timeout(100_000) })
+    if (!buffer) throw new Error('此次生成未加载正式Logo原图')
+    const file = `${key}.logo-${randomUUID()}.png`, thumbnail = `${file}.thumb.webp`
+    await fs.promises.writeFile(path.join(waterfallAssetsDir, file), buffer)
+    await sharp(buffer).resize({ width: 640, withoutEnlargement: true }).webp({ quality: 78 }).toFile(path.join(waterfallAssetsDir, thumbnail))
+    patch({ url: `/api/waterfall/assets/${file}`, thumbnailUrl: `/api/waterfall/assets/${thumbnail}`, logoApplied: true, brandWarning: null, logoRepairStatus: 'succeeded' })
+  } catch (error) { patch({ logoRepairStatus: 'failed', brandWarning: `Logo未合成：${String(error.message).slice(0, 240)}` }) }
+  finally { logoRepairs.delete(key) }
+}
+
 function recoverWaterfallTasks() {
+  for (const task of waterfallTasks) for (const slot of task.slots || []) if (['queued', 'running'].includes(slot.logoRepairStatus)) setImmediate(() => runLogoRepair(task.id, slot.index))
   for (const task of waterfallTasks.filter((item) => item.status === 'running')) {
     // Deploying restarts Node. Continue polling saved upstream IDs rather
     // than leaving an already-completed image in the generating state.
@@ -1849,6 +1872,21 @@ app.get('/api/waterfall/tasks/:id', requireAuth, (req, res) => {
   const task = waterfallTasks.find((item) => item.id === req.params.id)
   if (!task || task.userId !== req.user.id) return res.status(404).json({ error: '任务不存在或无权查看' })
   res.json({ task, user: req.user })
+})
+
+app.post('/api/waterfall/tasks/:id/slots/:index/logo', requireAuth, async (req, res, next) => {
+  try {
+    const task = waterfallTasks.find((t) => t.id === req.params.id && t.userId === req.user.id)
+    if (!task) return res.status(404).json({ error: '任务不存在或无权操作' })
+    const index = Number(req.params.index), slot = task.slots[index]
+    if (!Number.isInteger(index) || index < 0 || !slot || slot.status !== 'succeeded' || !knowledge.hasLogoOverlay(task.knowledgeTraceId)) return res.status(400).json({ error: '此图片不支持Logo重试' })
+    knowledge.authorize(req.user, task.knowledgeSelection)
+    if (['queued', 'running'].includes(slot.logoRepairStatus)) return res.status(202).json({ task })
+    await fs.promises.access(path.join(waterfallAssetsDir, `${task.id}-${index}.before-logo.png`))
+    const updated = updateWaterfallTask(task.id, (t) => ({ ...t, slots: t.slots.map((s, i) => i === index ? { ...s, logoRepairStatus: 'queued' } : s) }))
+    setImmediate(() => runLogoRepair(task.id, index))
+    res.status(202).json({ task: updated })
+  } catch (error) { next(error) }
 })
 
 app.delete('/api/waterfall/tasks/:id', requireAuth, async (req, res) => {

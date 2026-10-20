@@ -19,6 +19,7 @@ import MaterialLibrary from './MaterialLibrary.jsx'
 import KnowledgeStudio from './KnowledgeStudio.jsx'
 import KnowledgeContext from './KnowledgeContext.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
+import { retryWaterfallLogo } from './logoRepair.js'
 import ImageSettings from './ImageSettings.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, imageQualityForModel, supportsImageRatio, supportsImageResolution, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
@@ -312,7 +313,7 @@ function QuietReferenceImage({ src }) {
   return <img className={`quiet-reference-image${loaded ? ' is-ready' : ''}`} src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => setLoaded(false)}/>
 }
 
-function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
+function WaterfallResultImage({ slot, prompt, urls, onPreview, onRetryLogo }) {
   const [imageState, setImageState] = useState('loading')
   const previewUrl = waterfallThumbnailUrl(slot.url)
   const thumbnailUrl = waterfallDisplayUrl(slot)
@@ -322,7 +323,7 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview }) {
       <img className={imageState === 'loading' ? 'is-loading' : ''} src={thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={imageState === 'ready'} onLoad={() => setImageState('ready')} onError={() => setImageState('failed')} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, previewUrl); event.dataTransfer.setData('text/uri-list', previewUrl) }}/>
     </button>
     {imageState === 'loading' && <div className="waterfall-asset-loading" role="status" aria-label="图片加载中"><i/><i/><i/></div>}
-    {slot.brandWarning && <div className="waterfall-brand-warning" role="status" title={slot.brandWarning}>Logo待核对：未继续叠加，请重新生成</div>}
+    {slot.brandWarning && <div className="waterfall-brand-warning" role="status" title={slot.brandWarning}><span>{['queued', 'running'].includes(slot.logoRepairStatus) ? '正在重新合成Logo…' : 'Logo尚未合成'}</span><button type="button" disabled={['queued', 'running'].includes(slot.logoRepairStatus)} onClick={onRetryLogo}>重试Logo</button></div>}
     {imageState === 'ready' && <button className="waterfall-download" type="button" onClick={() => void downloadGeneratedImage(previewUrl, prompt)} title="下载图片" aria-label="下载图片"><Icon name="download" size={15}/></button>}
   </>
 }
@@ -1005,7 +1006,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         // A waterfall task is asynchronous, so the result endpoint is the
         // source of truth.  Check active work frequently so a completed
         // upstream image replaces its loading card without a noticeable wait.
-        if (active && (result.tasks || []).some((task) => task.status === 'running')) timer = window.setTimeout(refresh, 1_000)
+        if (active && (result.tasks || []).some((task) => task.status === 'running' || task.slots?.some((s) => ['queued', 'running'].includes(s.logoRepairStatus)))) timer = window.setTimeout(refresh, 1_000)
       } catch (err) {
         if (!active) return
         // History refresh is retried on the next entry/poll.  Do not surface a
@@ -1239,7 +1240,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
           return <article className="waterfall-task" key={task.id}>
           <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <QuietReferenceImage src={url} key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url: referenceThumbnails[index], prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><QuietReferenceImage src={referenceThumbnails[index]}/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {imageModelLabel(task.model)} · {task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO} · {waterfallPixelSize(task)}</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{isFailedWaterfallTask(task) && <span className="waterfall-task-status failed" title={task.error || task.slots?.find((slot) => slot.error)?.error || '生成失败'}>生图失败</span>}{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status}`} style={{ aspectRatio: (task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO).replace(':', ' / ') }} key={slot.index}>
-            {slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage} onRetryLogo={async () => { try { await retryWaterfallLogo(task.id, slot.index); setRefreshToken((v) => v + 1) } catch (err) { setError(err.message) } }}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}
