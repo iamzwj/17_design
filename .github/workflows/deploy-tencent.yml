@@ -95,7 +95,7 @@ jobs:
             fi
             install -m 600 .env.next .env
             rm .env.next
-            npm ci
+            ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci
             # Warm and validate the local multilingual model before restarting production.
             DIEFA_DATA_DIR=/home/ubuntu/17_design/data node server/knowledge/warmModel.js
             npm run build
