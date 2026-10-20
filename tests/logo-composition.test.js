@@ -1,0 +1,42 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import sharp from 'sharp'
+import { composeBrandLogo } from '../server/knowledge/compose.js'
+import { reviewLogo, validateLogoReview } from '../server/knowledge/logoReview.js'
+
+test('replace two overlapping header marks once, preserve all pixels outside the detected region', async () => {
+  const logo = await sharp({ create: { width: 200, height: 60, channels: 4, background: '#10ac91' } }).png().toBuffer()
+  const old = await sharp({ create: { width: 220, height: 64, channels: 3, background: '#226644' } }).png().toBuffer()
+  const plate = await sharp({ create: { width: 215, height: 70, channels: 3, background: 'white' } }).composite([{ input: await sharp(logo).resize(190, 57).toBuffer(), left: 10, top: 7 }]).png().toBuffer()
+  const source = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).composite([{ input: old, left: 40, top: 40 }, { input: plate, left: 24, top: 60 }]).png().toBuffer()
+  const { buffer, placement } = await composeBrandLogo(source, logo, { boxes: [{ left: 40, top: 40, width: 220, height: 64 }, { left: 24, top: 60, width: 215, height: 70 }] })
+  assert.ok(placement.clearedRegion); assert.equal(placement.backdrop, null)
+  const a = await sharp(source).removeAlpha().raw().toBuffer(), b = await sharp(buffer).removeAlpha().raw().toBuffer(), r = placement.clearedRegion
+  for (let y = 0; y < 1500; y++) for (let x = 0; x < 1000; x++) if (!(x >= r.left && x < r.left + r.width && y >= r.top && y < r.top + r.height)) { const n = (y * 1000 + x) * 3; assert.equal(a[n], b[n]); assert.equal(a[n + 1], b[n + 1]); assert.equal(a[n + 2], b[n + 2]) }
+  const residual = await sharp(buffer).extract(r).removeAlpha().raw().toBuffer()
+  for (let i = 0; i < residual.length; i += 3) assert.ok(residual[i] === 221 || residual[i] === 16, 'only the background and single confirmed Logo remain')
+})
+test('no logo uses transparent source without a white rectangle; complex background and unsafe boxes refuse blind overlay', async () => {
+  const logo = await sharp({ create: { width: 100, height: 40, channels: 4, background: '#10ac91' } }).png().toBuffer()
+  const base = await sharp({ create: { width: 800, height: 1200, channels: 3, background: '#ddd' } }).png().toBuffer()
+  const composed = await composeBrandLogo(base, logo)
+  assert.equal(composed.placement.backdrop, null); assert.equal(composed.placement.clearedRegion, null)
+  await assert.rejects(composeBrandLogo(base, logo, { boxes: [{ left: 0, top: 400, width: 100, height: 50 }] }), /安全处理区域/)
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200"><defs><linearGradient id="g"><stop stop-color="black"/><stop offset="1" stop-color="white"/></linearGradient></defs><rect width="800" height="1200" fill="url(#g)"/></svg>')
+  await assert.rejects(composeBrandLogo(await sharp(svg).png().toBuffer(), logo, { boxes: [{ left: 100, top: 40, width: 220, height: 70 }] }), /复杂画面/)
+})
+test('Logo review validates boxes and uses high-quality fallback rather than blocking on one model failure', async () => {
+  const image = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).png().toBuffer()
+  const models = []
+  const review = await reviewLogo(image, image, '测试品牌', { request: async (body) => { models.push(body.model); if (models.length === 1) throw new Error('timeout'); return { choices: [{ message: { content: JSON.stringify({ boxes: [[100, 100, 500, 400]], uncertain: false }) } }] } } })
+  assert.deepEqual(models, ['gemini-3.1-pro', 'gemini-2.5-pro']); assert.equal(review.boxes[0].left, 100)
+  assert.throws(() => validateLogoReview({ boxes: [], uncertain: true }), /无法确认/)
+  assert.throws(() => validateLogoReview({ boxes: [[1, 2, 0, 4]], uncertain: false }), /无效位置/)
+})
+
+test('a canceled Logo check never launches a fallback request', async () => {
+  const image = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#ddd' } }).png().toBuffer()
+  const controller = new AbortController(); let calls = 0
+  await assert.rejects(reviewLogo(image, image, '测试品牌', { signal: controller.signal, request: async () => { calls++; controller.abort(); throw new Error('canceled') } }), /canceled/)
+  assert.equal(calls, 1)
+})

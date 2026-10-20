@@ -45,7 +45,7 @@ test('persisted vision tasks, permission isolation, safe import, original-logo c
   const auth = (req, res, next) => { req.user = users.find((u) => u.id === req.headers['x-user']); if (!req.user) return res.status(401).json({ error: 'login' }); next() }
   let calls = 0
   const result = { text: '主营墙面修缮，正式紫色Logo，禁止拉伸和改色', business: '墙面修缮', rules: ['禁止拉伸、改色'], assets: [{ title: '正式Logo', kind: 'logo', description: '正式标志原图', box: [100, 100, 900, 900] }, { title: '禁用示例', kind: 'prohibited', box: [0, 0, 1000, 1000] }] }
-  const opts = { dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]), analyze: async () => { calls++; if (calls === 1) throw new Error('mock transient'); return result } }
+  const opts = { reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]), analyze: async () => { calls++; if (calls === 1) throw new Error('mock transient'); return result } }
   let kb = installKnowledge(app, opts)
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r)); const base = `http://127.0.0.1:${server.address().port}/api/knowledge`
@@ -78,7 +78,7 @@ test('persisted vision tasks, permission isolation, safe import, original-logo c
     await until(async () => (await call(`/documents/${logo.document.id}`)).data.versions[0].status === 'ready')
     await call(`/documents/${logo.document.id}/publish`, { versionId: logo.document.latestVersionId })
     const prepared = await kb.prepare(users[0], { knowledge: { brandId: brand.id }, prompt: '制作品牌海报' }, 'image')
-    assert.equal(prepared.images.length, 1); assert.match(prepared.prompt, /禁止模型重画Logo/); assert.match(prepared.prompt, /主营墙面修缮/)
+    assert.equal(prepared.images.length, 1); assert.match(prepared.prompt, /禁止模型绘制任何品牌Logo/); assert.match(prepared.prompt, /主营墙面修缮/)
     const baseImage = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).png().toBuffer()
     const composed = await kb.compose(prepared.id, baseImage, 'test-output')
     const pixel = await sharp(composed).extract({ left: 60, top: 80, width: 1, height: 1 }).removeAlpha().raw().toBuffer()

@@ -12,12 +12,13 @@ import sharp from 'sharp'
 test('real local vectors feed text, authenticated review and image requests; generation traces survive completion', { skip: !process.env.KNOWLEDGE_TEST_MODEL_CACHE }, async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-tools-'))
   const token = randomUUID(), captures = []
+  let inspectFails = false
   const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#6240d4' } }).png().toBuffer()
   const mock = http.createServer(async (req, res) => {
     if (req.method === 'GET') { res.setHeader('Content-Type', 'image/png'); res.end(png); return }
     let raw = ''; for await (const chunk of req) raw += chunk
     const body = JSON.parse(raw); captures.push({ path: req.url, body }); res.setHeader('Content-Type', 'application/json')
-    if (req.url.includes('chat/completions')) res.end(JSON.stringify({ model: 'local-test-recorder', choices: [{ message: { content: '测试品牌标志使用紫色。' } }] }))
+    if (req.url.includes('chat/completions')) res.end(JSON.stringify({ model: 'local-test-recorder', choices: [{ message: { content: JSON.stringify(body.messages).includes('品牌Logo位置检查') ? JSON.stringify({ boxes: [], uncertain: inspectFails }) : '测试品牌标志使用紫色。' } }] }))
     else res.end(JSON.stringify({ status: 'succeeded', id: 'recorded-image', results: [{ url: `http://127.0.0.1:${mock.address().port}/test.png` }] }))
   })
   mock.listen(0, '127.0.0.1'); await new Promise((r) => mock.once('listening', r))
@@ -55,11 +56,16 @@ test('real local vectors feed text, authenticated review and image requests; gen
     await until(async () => { const t = (await call(`/api/waterfall/tasks/${taskId}`)).data.task; assert.notEqual(t.status, 'failed', JSON.stringify(t.slots)); if (t.status === 'succeeded') assert.equal(t.slots[0].logoApplied, true); return t.status === 'succeeded' ? t : null })
     const imageCall = captures.find((x) => x.path.includes('/generate'))
     assert.equal(imageCall.body.model, 'gpt-image-2.5')
-    assert.ok(imageCall.body.prompt.includes('禁止模型重画Logo'))
-    assert.ok(imageCall.body.prompt.includes('Logo必须使用紫色')); assert.equal(imageCall.body.images.length, 1); assert.ok(imageCall.body.images[0].startsWith('data:image/png;base64,'))
-    assert.ok((await sharp(Buffer.from(imageCall.body.images[0].split(',')[1], 'base64')).metadata()).width === 64)
+    assert.ok(imageCall.body.prompt.includes('禁止模型绘制任何品牌Logo'))
+    assert.ok(imageCall.body.prompt.includes('Logo必须使用紫色')); assert.equal(imageCall.body.images.length, 0, 'Logo used for post-composition must never be passed to the image model')
     const traces = (await call(`/api/knowledge/traces?brandId=${brand.id}`)).data.traces
     assert.equal(traces.length, 3); assert.ok(traces.every((t) => t.status === 'succeeded')); assert.ok(traces.some((t) => t.taskId === taskId && t.assets[0].documentId === imageId && t.compositions[`${taskId}-0`]))
+    inspectFails = true
+    const uncertain = await call('/api/waterfall/tasks', { prompt: '测试检查失败时保留底图', count: 1, model: 'gpt-image-2.5', knowledge: { brandId: brand.id } })
+    const retained = await until(async () => { const t = (await call(`/api/waterfall/tasks/${uncertain.data.task.id}`)).data.task; assert.notEqual(t.status, 'failed', JSON.stringify(t.slots)); return t.status === 'succeeded' ? t : null })
+    assert.equal(retained.slots[0].logoApplied, false); assert.match(retained.slots[0].brandWarning, /Logo未合成/); assert.ok(retained.slots[0].url)
+    assert.ok(fs.existsSync(path.join(dataDir, 'waterfall-assets', `${retained.id}-0.before-logo.png`)))
+
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)) }; mock.closeAllConnections(); await new Promise((r) => mock.close(r)); fs.rmSync(dataDir, { recursive: true, force: true })
   }

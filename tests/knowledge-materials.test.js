@@ -20,7 +20,7 @@ test('library Logos and IP link without uploads, preserve snapshots, publish und
   const app = express(); app.use(express.json())
   const auth = (req, res, next) => { req.user = users.find((u) => u.id === req.headers['x-user']); if (!req.user) return res.status(401).json({ error: 'login' }); next() }
   const admin = (req, res, next) => auth(req, res, () => req.user.id === 'admin' ? next() : res.status(403).json({ error: 'admin' }))
-  const kb = installKnowledge(app, { dataDir: dir, materialDir, requireAuth: auth, requireAdmin: admin, listUsers: () => users, embed: async (texts) => { if (block) { embeddingStarted(); await gate }; return texts.map(() => [1, 0]) } })
+  const kb = installKnowledge(app, { reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir: dir, materialDir, requireAuth: auth, requireAdmin: admin, listUsers: () => users, embed: async (texts) => { if (block) { embeddingStarted(); await gate }; return texts.map(() => [1, 0]) } })
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r)); const base = `http://127.0.0.1:${server.address().port}/api/knowledge`
   const call = async (url, body, user = 'admin') => { const response = await fetch(base + url, { method: body ? 'POST' : 'GET', headers: { 'X-User': user, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: response.status, data: await response.json() } }
@@ -80,7 +80,7 @@ test('brand selection automatically pins library Logo, optional typed IP and fix
   for (const file of ['yanxuanjia-color.png', 'yanxuanjia-white.png', 'yanxuanjia-painter.png']) fs.writeFileSync(path.join(materialDir, file), png)
   const app = express(); app.use(express.json({ limit: '20mb' }))
   const auth = (req, res, next) => { req.user = users.find((u) => u.id === req.headers['x-user']); if (!req.user) return res.status(401).json({ error: 'login' }); next() }
-  const kb = installKnowledge(app, { dataDir: dir, materialDir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]) })
+  const kb = installKnowledge(app, { reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir: dir, materialDir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]) })
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r)); const base = `http://127.0.0.1:${server.address().port}/api/knowledge`
   const call = async (url, body, user = 'admin') => { const response = await fetch(base + url, { method: body ? 'POST' : 'GET', headers: { 'X-User': user, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: response.status, data: await response.json() } }
@@ -102,7 +102,7 @@ test('brand selection automatically pins library Logo, optional typed IP and fix
     assert.equal((await call(`/generation-assets?brandId=${brandId}`, undefined, 'viewer')).data.colorReady, true)
     const prepare = (extra = {}) => kb.prepare(users[1], { prompt: '场景摄影，查询中没有任何颜色关键词', knowledge: { brandId, enforceBrandColors: true, ...extra } }, 'image')
     const noIP = await prepare({ ipMode: 'none' }); assert.equal(noIP.images.length, 1)
-    const cartoon = await prepare({ ipMode: 'cartoon' }); assert.equal(cartoon.images.length, 2)
+    const cartoon = await prepare({ ipMode: 'cartoon' }); assert.equal(cartoon.images.length, 2); assert.equal((await kb.restoreImages(cartoon.id, true)).length, 1, 'only IP, not the composite Logo, enters the image model')
     const trace = (await call(`/traces/${cartoon.id}`, undefined, 'viewer')).data.trace
     assert.equal(trace.assets[0].provenance.materialId, '研选家-color'); assert.equal(trace.assets[1].ipType, 'cartoon')
     assert.ok(trace.rules.some((r) => r.fixedColor && r.versionId === doc.document.latestVersionId)); assert.match(cartoon.prompt, /#10AC91/)

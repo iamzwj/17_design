@@ -15,7 +15,7 @@ test('brand knowledge permissions, version publishing, index changes, images and
   const app = express(); app.use(express.json({ limit: '20mb' }))
   const requireAuth = (req, res, next) => { req.user = users.find((u) => u.id === req.headers['x-user']); if (!req.user) return res.status(401).json({ error: 'login' }); next() }
   const requireAdmin = (req, res, next) => requireAuth(req, res, () => req.user.id === 'admin' ? next() : res.status(403).json({ error: 'admin' }))
-  let kb = installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers: () => users, embed })
+  let kb = installKnowledge(app, { reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir, requireAuth, requireAdmin, listUsers: () => users, embed })
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r)); const base = `http://127.0.0.1:${server.address().port}/api/knowledge`
   async function call(url, data, user = 'admin', method = data ? 'POST' : 'GET') { const r = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', 'X-User': user }, ...(data ? { body: JSON.stringify(data) } : {}) }); return { status: r.status, data: await r.json() } }

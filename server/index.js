@@ -703,7 +703,7 @@ async function removeChromaBackground(imageBuffer, backgroundColor) {
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
 }
 
-async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio, { removeBackground = false, backgroundColor = '#ff00ff', knowledgeTraceId = null } = {}) {
+async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio, { removeBackground = false, backgroundColor = '#ff00ff', knowledgeTraceId = null, signal = undefined } = {}) {
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`保存生成图片失败（HTTP ${response.status}）`)
   const contentType = response.headers.get('content-type') || 'image/png'
@@ -731,14 +731,14 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
   }
 
-  let logoApplied = false
-  if (knowledgeTraceId && !removeBackground) {
-    const composed = await knowledge.compose(knowledgeTraceId, imageBuffer, `${taskId}-${slotIndex}`)
-    if (composed) {
-      await fs.promises.writeFile(path.join(waterfallAssetsDir, `${taskId}-${slotIndex}.before-logo.png`), await sharp(imageBuffer).png().toBuffer())
-      imageBuffer = composed; logoApplied = true
-      metadata = await sharp(imageBuffer).metadata()
-    }
+  let logoApplied = false, brandWarning = null
+  if (knowledgeTraceId && !removeBackground && knowledge.hasLogoOverlay(knowledgeTraceId)) {
+    await fs.promises.writeFile(path.join(waterfallAssetsDir, `${taskId}-${slotIndex}.before-logo.png`), await sharp(imageBuffer).png().toBuffer())
+    updateWaterfallTask(taskId, (current) => ({ ...current, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'brand-logo', lastEvent: '检查已有Logo并合成正式原图' } : slot) }))
+    try {
+      const composed = await knowledge.compose(knowledgeTraceId, imageBuffer, `${taskId}-${slotIndex}`, { signal })
+      if (composed) { imageBuffer = composed; logoApplied = true; metadata = await sharp(imageBuffer).metadata() }
+    } catch (error) { brandWarning = `Logo未合成：${String(error.message).slice(0, 240)}` }
   }
   const extension = removeBackground ? 'png' : imageExtensionForFormat(metadata.format, upstreamExtension)
   const fileName = `${taskId}-${slotIndex}.${extension}`
@@ -754,7 +754,7 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     console.warn('Unable to create generated-image thumbnail:', error?.message || error)
   }
   const size = metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : null
-  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl, size, logoApplied }
+  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl, size, logoApplied, brandWarning }
 }
 
 function imageExtension(mimeType) {
@@ -874,8 +874,9 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     }
     const sourceUrl = upstreamResultUrl(result)
     const task = waterfallTasks.find((item) => item.id === taskId)
-    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio, { removeBackground: Boolean(task?.removeBackground), backgroundColor: task?.backgroundColor || '#ff00ff', knowledgeTraceId: task?.knowledgeTraceId })
-    updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, logoApplied: localImage.logoApplied, completedAt: new Date().toISOString() } : slot) }))
+    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio, { removeBackground: Boolean(task?.removeBackground), backgroundColor: task?.backgroundColor || '#ff00ff', knowledgeTraceId: task?.knowledgeTraceId, signal: controller.signal })
+    if (waterfallTasks.find((item) => item.id === taskId)?.status !== 'running') return
+    updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, logoApplied: localImage.logoApplied, brandWarning: localImage.brandWarning, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
     const status = task?.status === 'cancelled' ? 'cancelled' : task?.status === 'timeout' ? 'timeout' : 'failed'
@@ -922,16 +923,16 @@ async function runWaterfallTask(task, images) {
       updateWaterfallTask(task.id, (current) => ({ ...current, slots: current.slots.map((slot) => ({ ...slot, phase: 'knowledge', lastEvent: '检索品牌资料' })) }))
       const user = listUsers().find((u) => u.id === task.userId)
       const context = await knowledge.prepare(user, { prompt: task.prompt, model: task.model, removeBackground: task.removeBackground, knowledge: task.knowledgeSelection }, 'image')
-      if (images.length + context.images.length > 9) throw new Error('品牌素材与上传参考图合计最多 9 张，请减少参考图')
+      if (images.length + context.referenceImages.length > 9) throw new Error('品牌素材与上传参考图合计最多 9 张，请减少参考图')
       if (task.prompt.length + context.prompt.length > 29000) throw new Error('品牌规则和提示词超过长度预算，请精简提示词')
-      task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.images.length }))
+      task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.referenceImages.length }))
       knowledge.finish(context.id, { taskId: task.id, model: task.model, status: task.status })
     }
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
       model: task.model || 'gpt-image-2.5',
       prompt: task.effectivePrompt || task.prompt,
-      images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId) : [])],
+      images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId, true) : [])],
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
       quality: task.quality || DEFAULT_IMAGE_QUALITY,
       retryTransientFailure: task.surface === 'conversation',
