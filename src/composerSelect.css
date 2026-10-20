@@ -1,0 +1,22 @@
+.composer-select { position: relative; flex: 0 0 auto; min-width: 0; }
+.composer-select-trigger { height: 31px; display: flex; align-items: center; gap: 7px; max-width: 185px; padding: 0 9px; border: 1px solid rgba(61,79,63,.08); border-radius: 9px; background: rgba(255,255,255,.33); color: var(--mid); cursor: pointer; font-size: 10px; }
+.composer-select-trigger b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.composer-select-trigger > svg { flex-shrink: 0; }
+.composer-select-trigger > svg:last-child { width: 13px; height: 13px; margin-left: auto; transform: rotate(90deg); color: var(--muted); }
+.composer-select-trigger:hover { background: rgba(255,255,255,.68); }
+.composer-select-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.composer-select-trigger:disabled { opacity: .5; cursor: default; }
+.composer-select-menu { position: absolute; z-index: 45; left: 0; bottom: calc(100% + 8px); min-width: 100%; width: max-content; max-width: min(330px,calc(100vw - 40px)); max-height: min(400px,55vh); overflow-y: auto; padding: 5px; border: 1px solid #dcd9e6; border-radius: 12px; background: #faf9fc; box-shadow: 0 12px 30px #0002; color: #252231; }
+.composer-select-options button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 0; padding: 9px 10px; border-radius: 7px; background: transparent; text-align: left; color: inherit; cursor: pointer; font-size: 11px; }
+.composer-select-options button:hover, .composer-select-options button:focus-visible, .composer-select-options button[aria-selected='true'] { background: #6b4eff12; color: #6240d4; outline: none; }
+.composer-select-footer { border-top: 1px solid #dcd9e6; margin-top: 5px; padding: 10px; font-size: 11px; line-height: 1.7; }
+.composer-select-footer p { margin: 0 0 8px; }
+.composer-tools .tool-group { flex-wrap: wrap; min-width: 0; }
+.composer-tools :is(.ratio-trigger,.quality-trigger,.skill-trigger,.brand-trigger) { padding-right: 9px; gap: 7px; }
+.composer-tools :is(.ratio-trigger,.quality-trigger,.skill-trigger,.brand-trigger) > svg:last-child { width: 13px; height: 13px; flex-shrink: 0; margin-left: auto; transform: rotate(90deg); }
+:root[data-theme='dark'] .composer-select-trigger { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.045); color: #ddd8e6; }
+:root[data-theme='dark'] .composer-select-trigger:hover { background: rgba(255,255,255,.1); }
+:root[data-theme='dark'] .composer-select-menu { background: #282630; border-color: #45404f; color: #f0ecf6; box-shadow: 0 12px 30px #0006; }
+:root[data-theme='dark'] .composer-select-options button:hover, :root[data-theme='dark'] .composer-select-options button:focus-visible, :root[data-theme='dark'] .composer-select-options button[aria-selected='true'] { background: #8a73ff26; color: #c7bcff; }
+:root[data-theme='dark'] .composer-select-footer { border-color: #45404f; color: #b5afc2; }
+@media(max-width:520px) { .composer-select-menu { max-width: min(270px,calc(100vw - 40px)); }.composer-tools .tool-group { flex: 1; }.composer-tools { gap: 8px; align-items: flex-end; }.composer-select-trigger { max-width: 175px; } }
