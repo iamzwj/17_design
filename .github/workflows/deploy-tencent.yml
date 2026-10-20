@@ -87,7 +87,7 @@ jobs:
             # A UI-only deployment must not briefly take the whole site offline.
             # Restart Node only when its runtime files or configuration changed.
             restart_required=0
-            if ! git diff --quiet "$previous_revision" HEAD -- server package.json package-lock.json; then
+            if ! git diff --quiet "$previous_revision" HEAD -- server package.json package-lock.json .github/workflows/deploy-tencent.yml; then
               restart_required=1
             fi
             if ! cmp -s .env .env.next 2>/dev/null; then
@@ -95,6 +95,11 @@ jobs:
             fi
             install -m 600 .env.next .env
             rm .env.next
+            # Native SQLite needs a C++ compiler if its prebuilt binary is unavailable.
+            if ! command -v g++ >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends g++
+            fi
             ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci
             # Warm and validate the local multilingual model before restarting production.
             DIEFA_DATA_DIR=/home/ubuntu/17_design/data node server/knowledge/warmModel.js
