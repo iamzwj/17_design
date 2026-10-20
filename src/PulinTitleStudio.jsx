@@ -107,7 +107,7 @@ async function startGeneration(draft, onUserUpdate, onRequireLogin) {
   const task = {
     id: `pulin-title-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title, subtitle, layout: draft.layout, hands: Boolean(draft.hands), transparentOutput: true, backgroundColor: '#ff00ff', status: 'running',
-    createdAt: new Date().toISOString(), model: 'GPT Image 2.5 Sunburst', error: '', urls: [],
+    createdAt: new Date().toISOString(), model: 'GPT Image 2.5', error: '', urls: [],
   }
   emit({ creating: true, error: '' })
   putTask(task)
@@ -117,19 +117,14 @@ async function startGeneration(draft, onUserUpdate, onRequireLogin) {
       const images = await titleReferenceImages(task)
       const variants = await Promise.allSettled([1, 2].map(async (scheme) => {
         const prompt = titlePrompt(task, scheme)
-        try {
-          const result = await generateImage({ prompt, images, aspectRatio: ratio, model: 'gpt-image-2.5-sunburst', resolution: '2k', quality: 'high', removeBackground: task.transparentOutput, backgroundColor: task.backgroundColor })
-          return { scheme, urls: result.urls || [], model: 'GPT Image 2.5 Sunburst', fallbackUsed: false, user: result.user }
-        } catch {
-          const result = await generateImage({ prompt, images, aspectRatio: ratio, model: 'gpt-image-2.5', resolution: '1k', quality: 'high', removeBackground: task.transparentOutput, backgroundColor: task.backgroundColor })
-          return { scheme, urls: result.urls || [], model: 'GPT Image 2.5', fallbackUsed: true, user: result.user }
-        }
+        const result = await generateImage({ prompt, images, aspectRatio: ratio, model: 'gpt-image-2.5', resolution: '1k', quality: 'high', removeBackground: task.transparentOutput, backgroundColor: task.backgroundColor })
+        return { scheme, urls: result.urls || [], model: 'GPT Image 2.5', fallbackUsed: false, user: result.user }
       }))
       const completed = variants.filter((item) => item.status === 'fulfilled').flatMap((item) => item.value.urls.map((url) => ({ url, scheme: item.value.scheme, model: item.value.model, fallbackUsed: item.value.fallbackUsed })))
       if (!completed.length) throw variants.find((item) => item.status === 'rejected')?.reason || new Error('两个标题方案都未生成成功')
       const updatedUser = variants.find((item) => item.status === 'fulfilled' && item.value.user)?.value.user
       if (updatedUser) onUserUpdate?.(updatedUser)
-      putTask({ ...task, status: 'succeeded', urls: completed.map((item) => item.url), results: completed, model: completed.every((item) => item.fallbackUsed) ? 'GPT Image 2.5' : 'GPT Image 2.5 Sunburst', fallbackUsed: completed.some((item) => item.fallbackUsed), completedAt: new Date().toISOString() })
+      putTask({ ...task, status: 'succeeded', urls: completed.map((item) => item.url), results: completed, model: 'GPT Image 2.5', fallbackUsed: completed.some((item) => item.fallbackUsed), completedAt: new Date().toISOString() })
     } catch (error) {
       if (error.status === 401) onRequireLogin?.()
       putTask({ ...task, status: 'failed', error: error.message || '标题生成失败，请重试', completedAt: new Date().toISOString() })
@@ -175,12 +170,12 @@ export default function PulinTitleStudio({ onUserUpdate, onRequireLogin }) {
       {store.error && <div className="pulin-title-error">{store.error}</div>}
     </div>
     <div className="pulin-title-task-list">
-      {store.tasks.length === 0 ? <div className="pulin-title-empty"><div><Icon name="spark" size={27}/></div><b>开始制作你的第一个标题</b><span>标题会使用 Sunburst 生成；服务不可用时自动改用 Image 2.5。</span></div> : store.tasks.map((task) => <article className={`pulin-title-task status-${task.status}`} key={task.id}>
+      {store.tasks.length === 0 ? <div className="pulin-title-empty"><div><Icon name="spark" size={27}/></div><b>开始制作你的第一个标题</b><span>标题默认使用 GPT Image 2.5 生成。</span></div> : store.tasks.map((task) => <article className={`pulin-title-task status-${task.status}`} key={task.id}>
         <header><div><b>{task.title}</b>{task.subtitle && <span>{task.subtitle}</span>}<small>{new Date(task.createdAt).toLocaleString('zh-CN')} · {task.layout === 'horizontal' ? '一行字' : '两行字'} · 拍手图标{task.hands ? '有' : '无'} · {task.transparentOutput !== false ? '透明 PNG' : '含背景'} · {task.model}</small></div><em>{taskStatus(task)}</em></header>
         {task.status === 'running' && <div className="pulin-title-running"><i/><span>正在生成标题视觉，切换页面后任务会保留。</span></div>}
         {task.status === 'failed' && <div className="pulin-title-error task-error">{task.error}<button type="button" onClick={() => { void startGeneration(task, onUserUpdate, onRequireLogin) }}>重新生成</button></div>}
         {task.urls?.length > 0 && <div className={`pulin-title-results ${task.layout}`}>
-          {(task.results || task.urls.map((url, index) => ({ url, scheme: index + 1, model: task.fallbackUsed ? 'GPT Image 2.5' : 'GPT Image 2.5 Sunburst' }))).map((result, index) => <figure key={result.url}><button type="button" onClick={() => setPreview({ url: result.url, urls: task.urls, prompt: titlePrompt(task, result.scheme) })}><img src={result.url} alt={`${task.title} 标题方案 ${result.scheme || index + 1}`}/></button><figcaption><span>方案 {result.scheme || index + 1} · {result.model}</span><button type="button" onClick={() => downloadGeneratedImage(result.url, `${task.title}-朴里节标题-方案${result.scheme || index + 1}`)}><Icon name="download" size={15}/>下载</button></figcaption></figure>)}
+          {(task.results || task.urls.map((url, index) => ({ url, scheme: index + 1, model: task.model || 'GPT Image 2.5' }))).map((result, index) => <figure key={result.url}><button type="button" onClick={() => setPreview({ url: result.url, urls: task.urls, prompt: titlePrompt(task, result.scheme) })}><img src={result.url} alt={`${task.title} 标题方案 ${result.scheme || index + 1}`}/></button><figcaption><span>方案 {result.scheme || index + 1} · {result.model}</span><button type="button" onClick={() => downloadGeneratedImage(result.url, `${task.title}-朴里节标题-方案${result.scheme || index + 1}`)}><Icon name="download" size={15}/>下载</button></figcaption></figure>)}
         </div>}
       </article>)}
     </div>

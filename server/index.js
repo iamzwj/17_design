@@ -78,8 +78,7 @@ const FESTIVAL_PROMPT_MODEL = 'gemini-3.1-pro'
 const FESTIVAL_PROMPT_FALLBACK_MODEL = 'gpt-6-astra'
 const FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL = 'gpt-5.5'
 const FESTIVAL_PROMPT_REASONING = 'high'
-const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
-const FESTIVAL_FALLBACK_IMAGE_MODEL = 'gpt-image-2.5'
+const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5'
 const FESTIVAL_IMAGE_QUALITY = 'high'
 const TEXT_REVIEW_MODEL = 'gemini-3.1-pro'
 const TEXT_REVIEW_FALLBACK_MODEL = 'gpt-5.6-terra'
@@ -127,7 +126,7 @@ function upstreamImageModel(model) {
 }
 
 function imageModelSettings(model, resolution, quality) {
-  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5-sunburst'))
+  const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
   const selectedQuality = String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
   if (!imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
@@ -704,7 +703,7 @@ async function removeChromaBackground(imageBuffer, backgroundColor) {
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
 }
 
-async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio, { removeBackground = false, backgroundColor = '#ff00ff' } = {}) {
+async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio, { removeBackground = false, backgroundColor = '#ff00ff', knowledgeTraceId = null } = {}) {
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`保存生成图片失败（HTTP ${response.status}）`)
   const contentType = response.headers.get('content-type') || 'image/png'
@@ -732,6 +731,15 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
   }
 
+  let logoApplied = false
+  if (knowledgeTraceId && !removeBackground) {
+    const composed = await knowledge.compose(knowledgeTraceId, imageBuffer, `${taskId}-${slotIndex}`)
+    if (composed) {
+      await fs.promises.writeFile(path.join(waterfallAssetsDir, `${taskId}-${slotIndex}.before-logo.png`), await sharp(imageBuffer).png().toBuffer())
+      imageBuffer = composed; logoApplied = true
+      metadata = await sharp(imageBuffer).metadata()
+    }
+  }
   const extension = removeBackground ? 'png' : imageExtensionForFormat(metadata.format, upstreamExtension)
   const fileName = `${taskId}-${slotIndex}.${extension}`
   await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), imageBuffer)
@@ -746,7 +754,7 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     console.warn('Unable to create generated-image thumbnail:', error?.message || error)
   }
   const size = metadata.width && metadata.height ? `${metadata.width}x${metadata.height}` : null
-  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl, size }
+  return { url: `/api/waterfall/assets/${fileName}`, thumbnailUrl, size, logoApplied }
 }
 
 function imageExtension(mimeType) {
@@ -866,8 +874,8 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     }
     const sourceUrl = upstreamResultUrl(result)
     const task = waterfallTasks.find((item) => item.id === taskId)
-    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio, { removeBackground: Boolean(task?.removeBackground), backgroundColor: task?.backgroundColor || '#ff00ff' })
-    updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, completedAt: new Date().toISOString() } : slot) }))
+    const localImage = await persistWaterfallImage(sourceUrl, taskId, slotIndex, task?.resolvedAspectRatio || task?.aspectRatio, { removeBackground: Boolean(task?.removeBackground), backgroundColor: task?.backgroundColor || '#ff00ff', knowledgeTraceId: task?.knowledgeTraceId })
+    updateWaterfallTask(taskId, (current) => ({ ...current, actualGenerationSize: localImage.size || current.actualGenerationSize || current.generationSize, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, status: 'succeeded', phase: 'completed', lastEvent: '图片已保存', url: localImage.url, thumbnailUrl: localImage.thumbnailUrl, actualSize: localImage.size, logoApplied: localImage.logoApplied, completedAt: new Date().toISOString() } : slot) }))
   } catch (error) {
     const task = waterfallTasks.find((item) => item.id === taskId)
     const status = task?.status === 'cancelled' ? 'cancelled' : task?.status === 'timeout' ? 'timeout' : 'failed'
@@ -913,7 +921,7 @@ async function runWaterfallTask(task, images) {
     if (task.knowledgeSelection?.brandId && !task.knowledgePrepared) {
       updateWaterfallTask(task.id, (current) => ({ ...current, slots: current.slots.map((slot) => ({ ...slot, phase: 'knowledge', lastEvent: '检索品牌资料' })) }))
       const user = listUsers().find((u) => u.id === task.userId)
-      const context = await knowledge.prepare(user, { prompt: task.prompt, model: task.model, knowledge: task.knowledgeSelection }, 'image')
+      const context = await knowledge.prepare(user, { prompt: task.prompt, model: task.model, removeBackground: task.removeBackground, knowledge: task.knowledgeSelection }, 'image')
       if (images.length + context.images.length > 9) throw new Error('品牌素材与上传参考图合计最多 9 张，请减少参考图')
       if (task.prompt.length + context.prompt.length > 29000) throw new Error('品牌规则和提示词超过长度预算，请精简提示词')
       task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.images.length }))
@@ -921,10 +929,10 @@ async function runWaterfallTask(task, images) {
     }
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
-      model: task.model || 'gpt-image-2.5-sunburst',
+      model: task.model || 'gpt-image-2.5',
       prompt: task.effectivePrompt || task.prompt,
       images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId) : [])],
-      aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5-sunburst', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
+      aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
       quality: task.quality || DEFAULT_IMAGE_QUALITY,
       retryTransientFailure: task.surface === 'conversation',
     }
@@ -1362,9 +1370,7 @@ async function buildFestivalPlans(festival, styleKey = FESTIVAL_DEFAULT_STYLE) {
 }
 
 async function requestFestivalImage(prompt, references, model) {
-  const settings = model === FESTIVAL_PRIMARY_IMAGE_MODEL
-    ? { model, resolution: '2k', size: '1440x2560' }
-    : { model: FESTIVAL_FALLBACK_IMAGE_MODEL, resolution: '1k', size: '720x1280' }
+  const settings = { model, resolution: '1k', size: '720x1280' }
   const data = await requestUpstream('/v1/api/generate', {
     model: settings.model,
     prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
@@ -1451,15 +1457,8 @@ async function runFestivalPosterImageTask(taskId) {
     if (templateMetadata.width !== 1080 || templateMetadata.height !== 1920) throw new Error('朴邻蒙版必须保持1080×1920原尺寸')
     updateFestivalPosterTask(taskId, { phase: 'generating', message: '正在生成两套海报并叠加品牌蒙版' })
     const posters = await Promise.all(task.plans.map(async (plan, index) => {
-      let generated
-      let fallbackUsed = false
-      try {
-        generated = await requestFestivalImage(plan.prompt, imageReferences, FESTIVAL_PRIMARY_IMAGE_MODEL)
-      } catch (primaryError) {
-        console.warn(`Festival poster ${index + 1}: Sunburst unavailable, falling back to Image 2.5:`, primaryError?.message || primaryError)
-        generated = await requestFestivalImage(plan.prompt, imageReferences, FESTIVAL_FALLBACK_IMAGE_MODEL)
-        fallbackUsed = true
-      }
+      const generated = await requestFestivalImage(plan.prompt, imageReferences, FESTIVAL_PRIMARY_IMAGE_MODEL)
+      const fallbackUsed = false
       return {
         title: plan.title,
         scene: plan.scene,
@@ -1477,7 +1476,7 @@ async function runFestivalPosterImageTask(taskId) {
       styleLabel: festivalPosterStyles[normalizedStyle].label,
       promptModel: task.promptModel || FESTIVAL_PROMPT_MODEL,
       promptModelLabel: `GRS AI · ${task.promptModel || FESTIVAL_PROMPT_MODEL} · 高质量`,
-      imageModelLabel: posters.some((poster) => poster.fallbackUsed) ? 'Image 2.5（Sunburst 不可用，已自动降级）' : 'Image 2.5 Sunburst · high',
+      imageModelLabel: 'GPT Image 2.5 · high',
       posters,
     }
     updateFestivalPosterTask(taskId, { status: 'succeeded', phase: 'completed', message: '两套海报已完成', result, completedAt: new Date().toISOString() })

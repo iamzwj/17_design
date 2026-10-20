@@ -1,7 +1,7 @@
 export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
-export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
-export const DEFAULT_IMAGE_RESOLUTION = '2k'
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5'
+export const DEFAULT_IMAGE_RESOLUTION = '1k'
 export const DEFAULT_IMAGE_QUALITY = 'high'
 const EXTREME_RATIO_MODELS = new Set([VIP_IMAGE_MODEL, 'gpt-image-2.5-sunburst', 'image-2.5-sunburst'])
 const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'])

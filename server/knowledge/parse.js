@@ -20,7 +20,7 @@ export function splitSections(sections) {
       offset = Math.max(end - 40, offset + 1)
     }
   }
-  if (!chunks.length) throw new Error('未提取到文字。扫描件请先 OCR，图片请补充文字说明。')
+  if (!chunks.length) throw new Error('未提取到文字。可在资料详情使用图文解析，或补充文字说明。')
   if (chunks.length > 2000) throw new Error('单份资料最多 2000 个分段，请拆分文档后上传')
   return chunks
 }

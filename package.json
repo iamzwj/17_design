@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@napi-rs/canvas": "^0.1.100",
     "better-sqlite3": "^11.10.0",
     "express": "^5.1.0",
     "jszip": "^3.10.1",

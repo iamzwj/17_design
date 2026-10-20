@@ -38,7 +38,7 @@ test('real local vectors feed text, authenticated review and image requests; gen
       await call(`/api/knowledge/documents/${detail.document.id}/publish`, { versionId: detail.document.latestVersionId }); return detail.document.id
     }
     await create({ title: '合成规则', content: '公开测试品牌的Logo必须使用紫色。', kind: 'rule' })
-    const imageId = await create({ title: '合成参考色块', content: '用于测试图片传递的纯紫色方块', kind: 'style', file: { name: 'test.png', base64: png.toString('base64') } })
+    const imageId = await create({ title: '合成参考色块', content: '用于测试图片传递的纯紫色方块', kind: 'logo', file: { name: 'test.png', base64: png.toString('base64') } })
     const input = { requestId: randomUUID(), systemPrompt: '测试回答', messages: [{ role: 'user', content: '标志应该用什么颜色？' }], knowledge: { brandId: brand.id } }
     const posted = await call('/api/text/tasks', input); assert.equal(posted.status, 202)
     await call('/api/text/tasks', input)
@@ -50,14 +50,16 @@ test('real local vectors feed text, authenticated review and image requests; gen
     const reviewId = randomUUID(); assert.equal((await call('/api/compliance/tasks', { ...input, requestId: reviewId })).status, 202)
     await until(async () => (await call(`/api/compliance/tasks/${reviewId}`)).data.task.status === 'succeeded')
     assert.equal((await call(`/api/compliance/tasks/${reviewId}`, undefined, false)).status, 404)
-    const generated = await call('/api/waterfall/tasks', { prompt: '只输出合成测试色块', count: 1, model: 'gpt-image-2.5', aspectRatio: '1:1', resolution: '1k', quality: 'low', knowledge: { brandId: brand.id, assetIds: [imageId] } })
+    const generated = await call('/api/waterfall/tasks', { prompt: '只输出合成测试色块', count: 1, aspectRatio: '1:1', resolution: '1k', quality: 'low', knowledge: { brandId: brand.id, assetIds: [imageId] } })
     assert.equal(generated.status, 202, JSON.stringify(generated.data)); assert.equal(generated.data.task.referenceImages.length, 0, 'private brand source must not be copied into public waterfall asset URLs'); const taskId = generated.data.task.id
-    await until(async () => { const t = (await call(`/api/waterfall/tasks/${taskId}`)).data.task; assert.notEqual(t.status, 'failed', JSON.stringify(t.slots)); return t.status === 'succeeded' ? t : null })
+    await until(async () => { const t = (await call(`/api/waterfall/tasks/${taskId}`)).data.task; assert.notEqual(t.status, 'failed', JSON.stringify(t.slots)); if (t.status === 'succeeded') assert.equal(t.slots[0].logoApplied, true); return t.status === 'succeeded' ? t : null })
     const imageCall = captures.find((x) => x.path.includes('/generate'))
+    assert.equal(imageCall.body.model, 'gpt-image-2.5')
+    assert.ok(imageCall.body.prompt.includes('禁止模型重画Logo'))
     assert.ok(imageCall.body.prompt.includes('Logo必须使用紫色')); assert.equal(imageCall.body.images.length, 1); assert.ok(imageCall.body.images[0].startsWith('data:image/png;base64,'))
     assert.ok((await sharp(Buffer.from(imageCall.body.images[0].split(',')[1], 'base64')).metadata()).width === 64)
     const traces = (await call(`/api/knowledge/traces?brandId=${brand.id}`)).data.traces
-    assert.equal(traces.length, 3); assert.ok(traces.every((t) => t.status === 'succeeded')); assert.ok(traces.some((t) => t.taskId === taskId && t.assets[0].documentId === imageId))
+    assert.equal(traces.length, 3); assert.ok(traces.every((t) => t.status === 'succeeded')); assert.ok(traces.some((t) => t.taskId === taskId && t.assets[0].documentId === imageId && t.compositions[`${taskId}-0`]))
   } finally {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)) }; mock.closeAllConnections(); await new Promise((r) => mock.close(r)); fs.rmSync(dataDir, { recursive: true, force: true })
   }
