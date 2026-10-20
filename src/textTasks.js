@@ -1,3 +1,4 @@
+import { getKnowledgeSelection } from './knowledgeApi.js'
 import { getAuthToken } from './api.js'
 
 const liveWaits = new Map()
@@ -12,7 +13,7 @@ async function request(kind, id, payload) {
   const response = await fetch(`${base}/api/${kind}/tasks${payload ? '' : `/${encodeURIComponent(id)}`}`, {
     method: payload ? 'POST' : 'GET', cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'X-Text-Session': session(), ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}) },
-    ...(payload ? { body: JSON.stringify({ ...payload, requestId: id }) } : {}),
+    ...(payload ? { body: JSON.stringify({ ...payload, knowledge: getKnowledgeSelection(), requestId: id }) } : {}),
     signal: AbortSignal.timeout(30_000),
   })
   const data = await response.json()

@@ -1,3 +1,4 @@
+import { getKnowledgeSelection } from './knowledgeApi.js'
 const configuredApiBase = typeof window !== 'undefined'
   ? window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || ''
   : import.meta.env.VITE_API_BASE_URL || ''
@@ -53,6 +54,7 @@ function hydrateWaterfallTask(task) {
 }
 
 async function post(path, body, signal) {
+  if (['/api/image', '/api/waterfall/tasks', '/api/text', '/api/compliance/review'].includes(path) && !Object.hasOwn(body, 'knowledge')) body = { ...body, knowledge: getKnowledgeSelection() }
   let response
   try {
     response = await fetch(apiUrl(path), {

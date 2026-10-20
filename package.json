@@ -11,6 +11,8 @@
     "check": "eslint ."
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "better-sqlite3": "^11.10.0",
     "express": "^5.1.0",
     "jszip": "^3.10.1",
     "mammoth": "^1.10.0",

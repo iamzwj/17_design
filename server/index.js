@@ -1,4 +1,5 @@
 import express from 'express'
+import { installKnowledge } from './knowledge/index.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -459,8 +460,36 @@ app.use('/api/compliance/review', express.json({ limit: '1mb' }))
 app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 // Video references may be up to 200 MB. They are immediately persisted and
 // then sent to the provider as public URLs, never forwarded as base64.
+app.use('/api/knowledge', express.json({ limit: '18mb' }))
 app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
+const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
+async function prepareKnowledgeInput(req, tool) {
+  const input = { ...req.body }
+  delete input.__knowledge
+  delete input.__userPrompt
+  input.__knowledge = await knowledge.prepare(req.user, input, tool)
+  return input
+}
+function knowledgeMiddleware(tool) {
+  return async (req, res, next) => {
+    try {
+      req.body = await prepareKnowledgeInput(req, tool)
+      const context = req.body.__knowledge
+      if (context && tool === 'image') {
+        const images = req.body.images || []
+        const limit = req.path === '/api/image' ? 4 : 9
+        if (!Array.isArray(images) || images.length + context.images.length > limit) throw Object.assign(new Error(`品牌素材和上传参考图合计最多 ${limit} 张，请减少参考图`), { status: 400 })
+        if (String(req.body.prompt || '').length + context.prompt.length > 29000) throw Object.assign(new Error('提示词和品牌规则超过长度预算，请精简提示词'), { status: 400 })
+        req.body.__userPrompt = req.body.prompt
+        if (req.path === '/api/image') req.body.images = [...images, ...context.images]
+        req.body.prompt = `${req.body.prompt}\n\n${context.prompt}`
+      }
+      next()
+    } catch (error) { next(error) }
+  }
+}
+
 
 async function refundWaterfallCredits(taskId, amount) {
   if (!amount) return null
@@ -646,7 +675,9 @@ function waitForPoll(milliseconds, signal) {
 function updateWaterfallTask(id, transform) {
   waterfallTasks = waterfallTasks.map((task) => task.id === id ? { ...transform(task), updatedAt: new Date().toISOString() } : task)
   saveWaterfallTasks()
-  return waterfallTasks.find((task) => task.id === id)
+  const updated = waterfallTasks.find((task) => task.id === id)
+  if (updated?.knowledgeTraceId) knowledge.finish(updated.knowledgeTraceId, { status: updated.status, taskId: updated.id })
+  return updated
 }
 
 function chromaKeyRgb(value) {
@@ -879,17 +910,28 @@ async function runWaterfallTask(task, images) {
   const remainingTime = Math.max(5_000, 10 * 60 * 1000 - (Date.now() - new Date(task.createdAt).getTime()))
   const timeout = setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, remainingTime)
   try {
+    if (task.knowledgeSelection?.brandId && !task.knowledgePrepared) {
+      updateWaterfallTask(task.id, (current) => ({ ...current, slots: current.slots.map((slot) => ({ ...slot, phase: 'knowledge', lastEvent: '检索品牌资料' })) }))
+      const user = listUsers().find((u) => u.id === task.userId)
+      const context = await knowledge.prepare(user, { prompt: task.prompt, model: task.model, knowledge: task.knowledgeSelection }, 'image')
+      if (images.length + context.images.length > 9) throw new Error('品牌素材与上传参考图合计最多 9 张，请减少参考图')
+      if (task.prompt.length + context.prompt.length > 29000) throw new Error('品牌规则和提示词超过长度预算，请精简提示词')
+      task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.images.length }))
+      knowledge.finish(context.id, { taskId: task.id, model: task.model, status: task.status })
+    }
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
       model: task.model || 'gpt-image-2.5-sunburst',
-      prompt: task.prompt,
-      images: upstreamImages,
+      prompt: task.effectivePrompt || task.prompt,
+      images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId) : [])],
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5-sunburst', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
       quality: task.quality || DEFAULT_IMAGE_QUALITY,
       retryTransientFailure: task.surface === 'conversation',
     }
+    if (waterfallTasks.find((item) => item.id === task.id)?.status !== 'running') return
     await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
   } catch (error) {
+    if (waterfallTasks.find((item) => item.id === task.id)?.status !== 'running') return
     const runningCount = waterfallTasks.find((item) => item.id === task.id)?.slots.filter((slot) => slot.status === 'running').length || 0
     updateWaterfallTask(task.id, (current) => ({
       ...current,
@@ -1169,8 +1211,10 @@ async function handleTextCompletion(req, res, next) {
       .map(normalizeTextMessage)))
       .filter(Boolean)
     const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
-    const sources = webResult.sources
-    const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(sources, webResult.available) : ''].filter(Boolean).join('\n\n')
+    const context = req.body.__knowledge
+    const sources = [...webResult.sources, ...(context?.sources || [])]
+    const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(webResult.sources, webResult.available) : '', context?.prompt].filter(Boolean).join('\n\n')
+    if (context && combinedSystemPrompt.length > 18000) throw Object.assign(new Error('品牌规则与系统指令超过长度预算，请精简后重试'), { status: 400 })
     const upstreamRequest = {
       model: TEXT_REVIEW_MODEL,
       stream: false,
@@ -1205,8 +1249,10 @@ async function handleTextCompletion(req, res, next) {
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
-    res.json({ content, sources, usage: data.usage || null, model: data.model || TEXT_REVIEW_MODEL })
+    if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model || TEXT_REVIEW_MODEL, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model || TEXT_REVIEW_MODEL })
   } catch (error) {
+    if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
   }
 }
@@ -1495,11 +1541,11 @@ for (const task of festivalPosterTasks.filter((item) => item.status === 'running
   setImmediate(() => { void (task.phase === 'generating' ? runFestivalPosterImageTask(task.id) : runFestivalPosterPlanningTask(task.id)) })
 }
 
-installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion })
+installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion, prepareInput: (req) => prepareKnowledgeInput(req, req.path.includes('compliance') ? 'compliance' : 'text') })
 
-app.post('/api/text', requireAuth, handleTextCompletion)
+app.post('/api/text', requireAuth, knowledgeMiddleware('text'), handleTextCompletion)
 // Compliance review remains separate from account-only text chat.
-app.post('/api/compliance/review', handleTextCompletion)
+app.post('/api/compliance/review', (req, res, next) => req.body.knowledge?.brandId ? requireAuth(req, res, next) : next(), knowledgeMiddleware('compliance'), handleTextCompletion)
 
 // On the server deployment, user reference images are stored on the instance
 // instead of passing through Cloudflare KV or requiring a Google Drive session.
@@ -1527,7 +1573,7 @@ app.post('/api/compliance/uploads', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-app.post('/api/image', requireAuth, async (req, res, next) => {
+app.post('/api/image', requireAuth, knowledgeMiddleware('image'), async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0
   try {
@@ -1562,7 +1608,7 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
     directImageRecords = [{
       id: randomUUID(),
       userId: req.user.id,
-      prompt: prompt.trim().slice(0, 30_000),
+      prompt: String(req.body.__userPrompt || prompt).trim().slice(0, 30_000),
       model: settings.model,
       resolution: settings.resolution,
       quality: settings.quality,
@@ -1574,9 +1620,11 @@ app.post('/api/image', requireAuth, async (req, res, next) => {
       images: localImages,
     }, ...directImageRecords]
     saveDirectImageRecords()
+    if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'succeeded', taskId: directImageRecords[0].id, model: settings.model })
     res.json({ id: upstreamId(data), status, aspectRatio: resolvedAspectRatio, model: settings.model, resolution: settings.resolution, quality: settings.quality, removeBackground: Boolean(removeBackground), urls: localImages.map((image) => image.url), user: chargedUser })
   } catch (error) {
     if (chargedUser) refundCredits(req.user.id, creditCost)
+    if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
   }
 })
@@ -1739,10 +1787,12 @@ app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
 
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
+    delete req.body.__knowledge; delete req.body.__userPrompt
+    knowledge.authorize(req.user, req.body.knowledge)
     const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, quality = DEFAULT_IMAGE_QUALITY, clientRequestId, surface, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
     const requestedCount = Number(count)
     if (!prompt || typeof prompt !== 'string') return res.status(400).json({ error: '提示词不能为空' })
-    if (!Array.isArray(images) || images.length > 9) return res.status(400).json({ error: '参考图最多 9 张' })
+    if (!Array.isArray(images) || images.length + (Array.isArray(req.body.knowledge?.assetIds) ? req.body.knowledge.assetIds.length : 0) > 9) return res.status(400).json({ error: '品牌素材和上传参考图合计最多 9 张' })
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
     if (removeBackground) chromaKeyRgb(backgroundColor)
     const settings = imageModelSettings(model, resolution, quality)
@@ -1757,7 +1807,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     const task = {
       id,
       userId: req.user.id,
-      prompt: prompt.trim().slice(0, 30_000),
+      prompt: String(req.body.__userPrompt || prompt).trim().slice(0, 30_000),
       aspectRatio,
       resolvedAspectRatio,
       model: settings.model,
@@ -1768,7 +1818,10 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       backgroundColor: removeBackground ? backgroundColor : null,
       generationSize: imageSize,
       count: requestedCount,
-      referenceCount: images.length,
+      effectivePrompt: req.body.__knowledge ? prompt : null,
+      knowledgeTraceId: req.body.__knowledge?.id || null,
+      knowledgeSelection: req.body.knowledge || null,
+      referenceCount: images.length + (req.body.__knowledge?.images.length || 0),
       referenceImages,
       status: 'running',
       clientRequestId: typeof clientRequestId === 'string' ? clientRequestId.slice(0, 96) : null,
@@ -1783,9 +1836,13 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     }
     waterfallTasks = [task, ...waterfallTasks]
     saveWaterfallTasks()
+    if (task.knowledgeTraceId) knowledge.finish(task.knowledgeTraceId, { taskId: task.id, status: 'running', model: settings.model })
     setImmediate(() => runWaterfallTask(task, referenceImages))
     res.status(202).json({ task, user: refundCredits(req.user.id, 0) || chargedUser })
-  } catch (error) { next(error) }
+  } catch (error) {
+    if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
+    next(error)
+  }
 })
 
 app.get('/api/waterfall/tasks/:id', requireAuth, (req, res) => {

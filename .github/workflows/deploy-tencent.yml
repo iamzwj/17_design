@@ -96,6 +96,8 @@ jobs:
             install -m 600 .env.next .env
             rm .env.next
             npm ci
+            # Warm and validate the local multilingual model before restarting production.
+            DIEFA_DATA_DIR=/home/ubuntu/17_design/data node server/knowledge/warmModel.js
             npm run build
 
             # Emergency rollback for the first static-site attempt. The app

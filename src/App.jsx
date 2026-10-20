@@ -16,6 +16,8 @@ import VideoStudio from './VideoStudio.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import MaterialLibrary from './MaterialLibrary.jsx'
+import KnowledgeStudio from './KnowledgeStudio.jsx'
+import KnowledgeContext from './KnowledgeContext.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, imageQualityForModel, imageQualityOptions, supportsImageRatio, supportsImageResolution, VIP_IMAGE_RESOLUTION_OPTIONS, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
@@ -30,6 +32,7 @@ const MODULES = [
 ]
 
 const KNOWLEDGE_SECTIONS = [
+  { id: 'brand-knowledge', label: '团队品牌知识库' },
   { id: 'assets', label: '素材库' },
   { id: 'brand-manual', label: '品牌手册' },
   { id: 'marketing-strategy', label: '营销策略' },
@@ -1176,6 +1179,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
     const retrySources = sessionReferenceImages.current.get(task.id) || task.referenceImages || []
     const request = {
       prompt: task.prompt,
+      knowledge: task.knowledgeSelection || null,
       images: retrySources.map(waterfallReferenceForRequest),
       aspectRatio: task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO,
       count: task.count || 2,
@@ -1993,6 +1997,8 @@ export default function App() {
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'content'
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
+      : active === 'brand-knowledge'
+        ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'
         ? <MaterialLibrary key={workspaceToken}/>
       : ['brand-manual', 'marketing-strategy'].includes(active)
@@ -2009,5 +2015,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{user && ['image', 'strategy', 'compliance'].includes(active) && <KnowledgeContext key={`${user.id}:${active}`} tool={active === 'image' ? 'image' : active === 'compliance' ? 'compliance' : 'text'}/>}{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
