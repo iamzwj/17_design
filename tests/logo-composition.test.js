@@ -10,7 +10,7 @@ test('replace two overlapping header marks once, preserve all pixels outside the
   const plate = await sharp({ create: { width: 215, height: 70, channels: 3, background: 'white' } }).composite([{ input: await sharp(logo).resize(190, 57).toBuffer(), left: 10, top: 7 }]).png().toBuffer()
   const source = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).composite([{ input: old, left: 40, top: 40 }, { input: plate, left: 24, top: 60 }]).png().toBuffer()
   const { buffer, placement } = await composeBrandLogo(source, logo, { boxes: [{ left: 40, top: 40, width: 220, height: 64 }, { left: 24, top: 60, width: 215, height: 70 }] })
-  assert.ok(placement.clearedRegion); assert.equal(placement.backdrop, null)
+  assert.equal(placement.left, 55); assert.equal(placement.top, 55); assert.ok(placement.clearedRegion); assert.equal(placement.backdrop, null)
   const a = await sharp(source).removeAlpha().raw().toBuffer(), b = await sharp(buffer).removeAlpha().raw().toBuffer(), r = placement.clearedRegion
   for (let y = 0; y < 1500; y++) for (let x = 0; x < 1000; x++) if (!(x >= r.left && x < r.left + r.width && y >= r.top && y < r.top + r.height)) { const n = (y * 1000 + x) * 3; assert.equal(a[n], b[n]); assert.equal(a[n + 1], b[n + 1]); assert.equal(a[n + 2], b[n + 2]) }
   const residual = await sharp(buffer).extract(r).removeAlpha().raw().toBuffer()
@@ -54,4 +54,30 @@ test('a clean corner skips vision even when a large brand headline is on the rig
   const before = await sharp(image).extract({ left: 420, top: 180, width: 480, height: 120 }).removeAlpha().raw().toBuffer()
   const after = await sharp(result.buffer).extract({ left: 420, top: 180, width: 480, height: 120 }).removeAlpha().raw().toBuffer()
   assert.ok(after.equals(before), "headline pixels must remain unchanged")
+})
+
+test('moving an old mark uses equal margins measured from visible pixels, strips only transparent padding and preserves the poster', async () => {
+  const logo = await sharp({ create: { width: 300, height: 120, channels: 4, background: '#00000000' } }).composite([{ input: await sharp({ create: { width: 200, height: 60, channels: 4, background: '#10ac91' } }).png().toBuffer(), left: 70, top: 20 }]).png().toBuffer()
+  for (const [width, height] of [[1000, 1800], [1800, 1000], [1000, 1000]]) {
+    const old = { left: Math.floor(width * .22), top: Math.floor(height * .075), width: 160, height: 45 }
+    const source = await sharp({ create: { width, height, channels: 3, background: '#ddd' } }).composite([{ input: await sharp({ create: { width: old.width, height: old.height, channels: 3, background: '#336644' } }).png().toBuffer(), left: old.left, top: old.top }]).png().toBuffer()
+    const result = await composeBrandLogo(source, logo, { boxes: [old] }), m = Math.floor(width * .055)
+    assert.equal(result.placement.left, m); assert.equal(result.placement.top, m)
+    const { data, info } = await sharp(result.buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+    let visibleLeft = width, visibleTop = height
+    const r = result.placement.clearedRegion, p = result.placement
+    const before = await sharp(source).removeAlpha().raw().toBuffer()
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * info.channels
+      if (data[i] < 40 && data[i + 1] > 150 && data[i + 2] > 100) { visibleLeft = Math.min(visibleLeft, x); visibleTop = Math.min(visibleTop, y) }
+      if (!(x >= r.left && x < r.left + r.width && y >= r.top && y < r.top + r.height) && !(x >= p.left && x < p.left + p.width && y >= p.top && y < p.top + p.height)) assert.ok(data.subarray(i, i + 3).equals(before.subarray(i, i + 3)))
+    }
+    assert.equal(visibleLeft, m); assert.equal(visibleTop, m)
+  }
+})
+test('repositioning never covers text at the equal-margin anchor', async () => {
+  const logo = await sharp({ create: { width: 200, height: 60, channels: 4, background: '#10ac91' } }).png().toBuffer()
+  const old = { left: 300, top: 100, width: 150, height: 45 }
+  const source = await sharp({ create: { width: 1000, height: 1800, channels: 3, background: '#ddd' } }).composite([{ input: logo, left: 55, top: 60 }, { input: await sharp(logo).resize(150, 45).png().toBuffer(), left: old.left, top: old.top }]).png().toBuffer()
+  await assert.rejects(composeBrandLogo(source, logo, { boxes: [old] }), /等距Logo位置包含文字/)
 })

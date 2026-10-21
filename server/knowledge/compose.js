@@ -28,28 +28,41 @@ async function backgroundAt(image, region, base, requireFlat) {
   if (requireFlat && Math.max(...noise) > 18) throw new Error('已有Logo周围包含复杂画面或文字，未自动覆盖，请人工核对')
   return { r: rgb[0], g: rgb[1], b: rgb[2] }
 }
-// Only the confirmed Logo and, when safe, its detected existing footprint are changed.
+// Remove only fully transparent source padding; preserve every nontransparent pixel.
+async function tightLogo(logo) {
+  const oriented = await sharp(logo).rotate().png().toBuffer()
+  const { data, info } = await sharp(oriented).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  let left = info.width, top = info.height, right = -1, bottom = -1
+  for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) if (data[(y * info.width + x) * info.channels + info.channels - 1] > 0) {
+    left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y)
+  }
+  if (right < left) throw new Error('Logo原图完全透明，无法合成')
+  return sharp(oriented).extract({ left, top, width: right - left + 1, height: bottom - top + 1 }).png().toBuffer()
+}
+// Change only the old mark's confirmed footprint and the new mark's footprint.
 export async function composeBrandLogo(image, logo, { boxes = [] } = {}) {
   const base = await sharp(image).metadata(), region = unionRegion(boxes, base)
-  const safeLeft = region ? Math.max(region.left + 3, Math.floor(base.width * 0.04)) : 0
-  const safeTop = region ? Math.max(region.top + 3, Math.floor(base.height * 0.04)) : 0
-  const safeWidth = region ? region.left + region.width - safeLeft - 3 : 0
-  const safeHeight = region ? region.top + region.height - safeTop - 3 : 0
-  if (region && (safeWidth < 8 || safeHeight < 8)) throw new Error('现有Logo区域无法保留安全边距，未继续叠加')
-  const maxWidth = region ? Math.min(safeWidth, Math.max(1, Math.floor(base.width * 0.18))) : Math.max(1, Math.floor(base.width * 0.18))
-  const maxHeight = region ? Math.min(safeHeight, Math.max(1, Math.floor(base.height * 0.065))) : Math.max(1, Math.floor(base.height * 0.065))
-  const mark = await sharp(logo).rotate().resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+  const margin = Math.floor(base.width * 0.055)
+  const maxWidth = Math.max(1, Math.floor(base.width * 0.18))
+  const maxHeight = Math.min(Math.max(1, Math.floor(base.height * 0.065)), base.height - margin)
+  if (maxHeight < 1) throw new Error('画布高度不足以保留Logo等距边距')
+  const mark = await sharp(await tightLogo(logo)).resize(maxWidth, maxHeight, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
   const meta = await sharp(mark).metadata(), stats = await sharp(mark).stats()
   const white = stats.channels.slice(0, 3).every((c) => c.mean > 225)
-  const left = region ? safeLeft + Math.floor((safeWidth - meta.width) / 2) : Math.floor(base.width * 0.055)
-  const top = region ? safeTop + Math.floor((safeHeight - meta.height) / 2) : Math.floor(base.width * 0.055)
-  const footprint = region || { left, top, width: meta.width, height: meta.height }
-  const background = await backgroundAt(image, footprint, base, Boolean(region))
+  const left = margin, top = margin
+  let cleaned = image
+  if (region) {
+    const background = await backgroundAt(image, region, base, true)
+    cleaned = await sharp(image).composite([{ input: await sharp({ create: { width: region.width, height: region.height, channels: 3, background } }).png().toBuffer(), left: region.left, top: region.top }]).png().toBuffer()
+    // Moving an old mark must not cover a title or subject at the new anchor.
+    const area = await sharp(cleaned).extract({ left, top, width: meta.width, height: meta.height }).removeAlpha().stats()
+    if (area.channels.slice(0, 3).some((c) => c.max - c.min > 18)) throw new Error('等距Logo位置包含文字或复杂画面，未自动覆盖，请人工核对')
+  }
+  const background = await backgroundAt(cleaned, { left, top, width: meta.width, height: meta.height }, base, false)
   const layers = []
-  if (region) layers.push({ input: await sharp({ create: { width: region.width, height: region.height, channels: 3, background } }).png().toBuffer(), left: region.left, top: region.top })
   // A white mark on a light background needs a compact charcoal plate; colored marks stay transparent.
   const backdrop = white && (background.r + background.g + background.b) / 3 > 120 ? '#24222a' : null
   if (backdrop) layers.push({ input: await sharp({ create: { width: meta.width, height: meta.height, channels: 3, background: backdrop } }).png().toBuffer(), left, top })
   layers.push({ input: mark, left, top })
-  return { buffer: await sharp(image).composite(layers).png().toBuffer(), placement: { left, top, width: meta.width, height: meta.height, backdrop, clearedRegion: region } }
+  return { buffer: await sharp(cleaned).composite(layers).png().toBuffer(), placement: { left, top, width: meta.width, height: meta.height, backdrop, clearedRegion: region } }
 }
