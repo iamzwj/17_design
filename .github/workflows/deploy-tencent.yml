@@ -36,6 +36,8 @@ jobs:
             printf '%s\n' 'DIEFA_DATA_DIR=/home/ubuntu/17_design/data'
             printf '%s\n' "GRSAI_BASE_URL=${{ secrets.GRSAI_BASE_URL }}"
             printf '%s\n' "GRSAI_API_KEY=${{ secrets.GRSAI_API_KEY }}"
+            printf '%s\n' "MAIZI_API_KEY=${{ secrets.MAIZI_API_KEY }}"
+            printf '%s\n' 'MAIZI_BASE_URL=https://api.maizitech.ai'
             printf '%s\n' "VIBBIT_OPENAPI_KEY=${{ secrets.VIBBIT_OPENAPI_KEY }}"
             printf '%s\n' "VIBBIT_OPENAPI_BASE_URL=${{ secrets.VIBBIT_OPENAPI_BASE_URL }}"
             printf '%s\n' "VIBBIT_PUBLIC_BASE_URL=${{ secrets.VIBBIT_PUBLIC_BASE_URL }}"
