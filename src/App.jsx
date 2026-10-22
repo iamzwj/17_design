@@ -21,7 +21,7 @@ import KnowledgeContext from './KnowledgeContext.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
 import { retryWaterfallLogo } from './logoRepair.js'
 import ImageSettings from './ImageSettings.jsx'
-import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, imageQualityForModel, supportsImageRatio, supportsImageResolution, imageCreditCost, imageResolutionForModel } from './imageModels.js'
+import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, availableImageModel, imageQualityForModel, supportsImageRatio, supportsImageResolution, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
@@ -720,7 +720,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   const [messages, setMessages] = useState(conversation?.messages || [])
   const [prompt, setPrompt] = useState('')
   const [ratio, setRatio] = useState(conversation?.ratio || DEFAULT_IMAGE_ASPECT_RATIO)
-  const [model, setModel] = useState(conversation?.imageModel || DEFAULT_IMAGE_MODEL)
+  const [model, setModel] = useState(() => availableImageModel(conversation?.imageModel))
   const [resolution, setResolution] = useState(() => imageResolutionForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageResolution || DEFAULT_IMAGE_RESOLUTION))
   const [quality, setQuality] = useState(() => imageQualityForModel(conversation?.imageModel || DEFAULT_IMAGE_MODEL, conversation?.imageQuality || DEFAULT_IMAGE_QUALITY))
   const [references, setReferences] = useState([])
@@ -781,7 +781,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     setMessages(conversation.messages || [])
     setLoading(conversation.status === 'running')
     setRunningStartedAt(conversation.runningStartedAt || null)
-    const nextModel = conversation.imageModel || DEFAULT_IMAGE_MODEL
+    const nextModel = availableImageModel(conversation.imageModel)
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, conversation.imageResolution))
     setQuality(imageQualityForModel(nextModel, conversation.imageQuality || DEFAULT_IMAGE_QUALITY))
@@ -1162,7 +1162,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   function editTask(task) {
     setPrompt(task.prompt || '')
     setRatio(normalizedImageRatio(task.model || DEFAULT_IMAGE_MODEL, task.resolution || DEFAULT_IMAGE_RESOLUTION, task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO))
-    const nextModel = task.model || DEFAULT_IMAGE_MODEL
+    const nextModel = availableImageModel(task.model)
     setModel(nextModel)
     setResolution(imageResolutionForModel(nextModel, task.resolution))
     setQuality(imageQualityForModel(nextModel, task.quality || DEFAULT_IMAGE_QUALITY))
@@ -1173,6 +1173,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
   }
 
   function generateAgain(task) {
+    if (task.model && !IMAGE_MODEL_OPTIONS.some((item) => item.value === task.model)) { editTask(task); setError('原模型已移除，请选择可用模型后重新生成'); return }
     if (!getAuthToken()) { onRequireLogin(); return }
     const retrySources = sessionReferenceImages.current.get(task.id) || task.referenceImages || []
     const request = {

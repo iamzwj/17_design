@@ -1,3 +1,4 @@
+import { BANANA_IMAGE_MODEL, BANANA_RATIOS, imageModelInput } from './imageModelInput.js'
 import express from 'express'
 import { installKnowledge } from './knowledge/index.js'
 import fs from 'node:fs'
@@ -67,7 +68,7 @@ const vipImageSizes = {
     '3:1': '3840x1280', '1:3': '1280x3840',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', BANANA_IMAGE_MODEL])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
@@ -109,6 +110,7 @@ const festivalAssetFiles = {
 }
 
 function supportsImageRatio(model, resolution, ratio) {
+  if (model === BANANA_IMAGE_MODEL) return BANANA_RATIOS.has(ratio)
   if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
   return ['gpt-image-2-vip', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) && ['2k', '4k'].includes(String(resolution).toLowerCase())
 }
@@ -132,7 +134,7 @@ function imageModelSettings(model, resolution, quality) {
   if (!imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
   const supportsExtendedQuality = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)
   if (!supportsExtendedQuality && ['xhigh', 'max'].includes(selectedQuality)) throw Object.assign(new Error('此模型仅支持 low、medium 或 high 质量'), { status: 400 })
-  if (!['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
+  if (![BANANA_IMAGE_MODEL, 'gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
   return { model: selectedModel, resolution: selectedResolution, quality: selectedQuality }
@@ -844,8 +846,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
           model: upstreamImageModel(config.model),
           prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
           images: config.images,
-          aspectRatio: config.aspectRatio,
-          quality: config.quality,
+          ...imageModelInput({ model: config.model, resolution: config.resolution, ratio: config.ratio, size: config.aspectRatio, quality: config.quality }),
           replyType: 'async',
         }, controller.signal, 45_000)
         id = upstreamId(result)
@@ -931,6 +932,8 @@ async function runWaterfallTask(task, images) {
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const config = {
       model: task.model || 'gpt-image-2.5',
+      resolution: task.resolution || '1k',
+      ratio: task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO,
       prompt: task.effectivePrompt || task.prompt,
       images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId, true) : [])],
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
@@ -1617,8 +1620,7 @@ app.post('/api/image', requireAuth, knowledgeMiddleware('image'), async (req, re
       model: upstreamImageModel(settings.model),
       prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
       images: upstreamImages,
-      aspectRatio: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
-      quality: settings.quality,
+      ...imageModelInput({ model: settings.model, resolution: settings.resolution, ratio: resolvedAspectRatio, size: generationSize(settings.model, settings.resolution, resolvedAspectRatio), quality: settings.quality }),
       replyType: 'json',
     })
     const urls = upstreamResultUrls(data)

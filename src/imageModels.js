@@ -1,3 +1,6 @@
+export const BANANA_IMAGE_MODEL = 'nano-banana-2.1'
+const BANANA_RATIOS = new Set(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'])
+
 export const STANDARD_IMAGE_MODEL = 'gpt-image-2'
 export const VIP_IMAGE_MODEL = 'gpt-image-2-vip'
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5'
@@ -15,18 +18,20 @@ export const IMAGE_QUALITY_OPTIONS = [
 ]
 
 export function supportsImageResolution(model) {
-  return [VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
+  return [BANANA_IMAGE_MODEL, VIP_IMAGE_MODEL, 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model)
 }
 
 // The upstream accepts the two 3:1 canvases only from the 2K tier onward.
 // Keeping this rule alongside the model metadata prevents the picker from
 // advertising a size that would be silently substituted by the provider.
 export function supportsImageRatio(model, resolution, ratio) {
+  if (model === BANANA_IMAGE_MODEL) return BANANA_RATIOS.has(ratio)
   if (!['1:3', '3:1'].includes(ratio)) return true
   return EXTREME_RATIO_MODELS.has(model) && ['2k', '4k'].includes(String(resolution).toLowerCase())
 }
 
 export function imageQualityOptions(model) {
+  if (model === BANANA_IMAGE_MODEL) return []
   return EXTENDED_QUALITY_MODELS.has(model) ? IMAGE_QUALITY_OPTIONS : IMAGE_QUALITY_OPTIONS.slice(0, 3)
 }
 
@@ -48,8 +53,7 @@ export const IMAGE_MODEL_OPTIONS = [
   { value: STANDARD_IMAGE_MODEL, label: 'GPT Image 2' },
   { value: VIP_IMAGE_MODEL, label: 'GPT Image 2 VIP' },
   { value: 'gpt-image-2.5', label: 'GPT Image 2.5' },
-  { value: 'gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare' },
-  { value: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst' },
+  { value: BANANA_IMAGE_MODEL, label: 'nano-banana-2.1' },
 ]
 
 export const VIP_IMAGE_RESOLUTION_OPTIONS = [
@@ -61,4 +65,8 @@ export const VIP_IMAGE_RESOLUTION_OPTIONS = [
 export function imageResolutionForModel(model, resolution) {
   if (!supportsImageResolution(model)) return '1k'
   return VIP_IMAGE_RESOLUTION_OPTIONS.some((item) => item.value === resolution) ? resolution : '2k'
+}
+
+export function availableImageModel(model) {
+  return IMAGE_MODEL_OPTIONS.some((item) => item.value === model) ? model : DEFAULT_IMAGE_MODEL
 }
