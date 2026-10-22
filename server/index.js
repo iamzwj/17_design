@@ -965,7 +965,7 @@ async function runLogoRepair(taskId, slotIndex) {
   try {
     patch({ logoRepairStatus: 'running' })
     const original = await fs.promises.readFile(path.join(waterfallAssetsDir, `${key}.before-logo.png`))
-    const buffer = await knowledge.compose(task.knowledgeTraceId, original, key, { signal: AbortSignal.timeout(100_000) })
+    const buffer = await knowledge.compose(task.knowledgeTraceId, original, key, { signal: AbortSignal.timeout(150_000) })
     if (!buffer) throw new Error('此次生成未加载正式Logo原图')
     const file = `${key}.logo-${randomUUID()}.png`, thumbnail = `${file}.thumb.webp`
     await fs.promises.writeFile(path.join(waterfallAssetsDir, file), buffer)

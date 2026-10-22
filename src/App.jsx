@@ -997,7 +997,7 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
             if (!previous || task.id !== previous.id || task.updatedAt !== previous.updatedAt || task.status !== previous.status) return false
             return task.slots?.length === previous.slots?.length && task.slots.every((slot, slotIndex) => {
               const oldSlot = previous.slots[slotIndex]
-              return oldSlot && slot.status === oldSlot.status && slot.url === oldSlot.url && slot.error === oldSlot.error
+              return oldSlot && slot.status === oldSlot.status && slot.url === oldSlot.url && slot.error === oldSlot.error && slot.logoRepairStatus === oldSlot.logoRepairStatus && slot.logoApplied === oldSlot.logoApplied && slot.brandWarning === oldSlot.brandWarning && slot.thumbnailUrl === oldSlot.thumbnailUrl
             })
           })
           return unchanged ? current : merged
@@ -1010,9 +1010,10 @@ function WaterfallStudio({ storageKey, onUserUpdate, onRequireLogin }) {
         if (active && (result.tasks || []).some((task) => task.status === 'running' || task.slots?.some((s) => ['queued', 'running'].includes(s.logoRepairStatus)))) timer = window.setTimeout(refresh, 1_000)
       } catch (err) {
         if (!active) return
-        // History refresh is retried on the next entry/poll.  Do not surface a
-        // generic transport message such as “Load failed” in the composer.
+        // A transient network failure must not stop polling an in-flight Logo
+        // repair and leave its button disabled until the module is reopened.
         console.warn('瀑布流历史刷新失败', err)
+        timer = window.setTimeout(refresh, 3_000)
     } finally {
       historyLoadingMore.current = false
       if (active) {

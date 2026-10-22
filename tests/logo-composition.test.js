@@ -29,8 +29,8 @@ test('Logo review validates boxes and uses high-quality fallback rather than blo
   const image = await sharp({ create: { width: 1000, height: 1500, channels: 3, background: '#ddd' } }).png().toBuffer()
   const patterned = await sharp(image).composite([{ input: await sharp({ create: { width: 80, height: 30, channels: 3, background: 'black' } }).png().toBuffer(), left: 40, top: 60 }]).png().toBuffer()
   const models = []
-  const review = await reviewLogo(patterned, image, '测试品牌', { request: async (body) => { models.push(body.model); if (models.length === 1) throw new Error('timeout'); return { choices: [{ message: { content: JSON.stringify({ boxes: [[100, 100, 500, 400]], uncertain: false }) } }] } } })
-  assert.deepEqual(models, ['gemini-3.1-pro', 'gemini-2.5-pro']); assert.equal(review.boxes[0].left, 36)
+  const review = await reviewLogo(patterned, image, '测试品牌', { request: async (body) => { models.push(body.model); assert.equal(body.messages[0].content.filter((part) => part.type === 'image_url').length, 3); assert.match(body.messages[0].content[0].text, /相对于图2/); assert.equal(body.reasoning_effort, 'low'); if (models.length === 1) throw new Error('timeout'); return { choices: [{ message: { content: JSON.stringify({ boxes: [[100, 100, 500, 400]], uncertain: false }) } }] } } })
+  assert.deepEqual(models, ['gpt-5.6-sol', 'gpt-6-astra']); assert.equal(review.boxes[0].left, 36)
   assert.throws(() => validateLogoReview({ boxes: [], uncertain: true }), /无法确认/)
   assert.throws(() => validateLogoReview({ boxes: [[1, 2, 0, 4]], uncertain: false }), /无效位置/)
 })
