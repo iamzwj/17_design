@@ -1,3 +1,4 @@
+import { MAIZI_IMAGE_MODELS, isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
 import { BANANA_IMAGE_MODEL, BANANA_RATIOS, imageModelInput } from './imageModelInput.js'
 import express from 'express'
 import { installKnowledge } from './knowledge/index.js'
@@ -68,7 +69,7 @@ const vipImageSizes = {
     '3:1': '3840x1280', '1:3': '1280x3840',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', BANANA_IMAGE_MODEL])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', BANANA_IMAGE_MODEL, ...MAIZI_IMAGE_MODELS])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
@@ -110,7 +111,7 @@ const festivalAssetFiles = {
 }
 
 function supportsImageRatio(model, resolution, ratio) {
-  if (model === BANANA_IMAGE_MODEL) return BANANA_RATIOS.has(ratio)
+  if (model === BANANA_IMAGE_MODEL || isMaiziImageModel(model)) return BANANA_RATIOS.has(ratio)
   if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
   return ['gpt-image-2-vip', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) && ['2k', '4k'].includes(String(resolution).toLowerCase())
 }
@@ -130,11 +131,11 @@ function upstreamImageModel(model) {
 function imageModelSettings(model, resolution, quality) {
   const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
-  const selectedQuality = String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
+  const selectedQuality = isMaiziImageModel(selectedModel) ? 'low' : String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
   if (!imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
   const supportsExtendedQuality = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)
   if (!supportsExtendedQuality && ['xhigh', 'max'].includes(selectedQuality)) throw Object.assign(new Error('此模型仅支持 low、medium 或 high 质量'), { status: 400 })
-  if (![BANANA_IMAGE_MODEL, 'gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
+  if (!isMaiziImageModel(selectedModel) && ![BANANA_IMAGE_MODEL, 'gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
   return { model: selectedModel, resolution: selectedResolution, quality: selectedQuality }
@@ -150,6 +151,7 @@ function imageCreditCost(model, count = 1) {
 }
 
 function generationSize(model, resolution, ratio) {
+  if (isMaiziImageModel(model)) return String(resolution).toUpperCase()
   const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
 }
@@ -623,6 +625,14 @@ async function requestUpstreamResult(id, signal) {
   return data
 }
 
+
+function maiziImages() {
+  return createMaiziImageClient({ baseUrl: process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai', apiKey: process.env.MAIZI_API_KEY })
+}
+function imageResult(id, model, signal) {
+  return isMaiziImageModel(model) ? maiziImages().poll(id, signal) : requestUpstreamResult(id, signal)
+}
+
 const pendingUpstreamStatuses = new Set(['running', 'pending', 'queued', 'processing', 'in_progress'])
 const succeededUpstreamStatuses = new Set(['succeeded', 'completed', 'success'])
 
@@ -839,10 +849,10 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     while (true) {
       if (id) {
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'polling', lastEvent: '正在向生图服务查询结果' } : slot) }))
-        result = await requestUpstreamResult(id, controller.signal)
+        result = await imageResult(id, config.model, controller.signal)
       } else {
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, phase: attempt > 1 ? 'retrying' : 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: attempt > 1 ? '上游短暂失败，正在自动重试' : '正在提交到生图服务' } : slot) }))
-        result = await requestUpstream('/v1/api/generate', {
+        result = isMaiziImageModel(config.model) ? await maiziImages().generate({ ...config, n: 1 }, { signal: controller.signal }) : await requestUpstream('/v1/api/generate', {
           model: upstreamImageModel(config.model),
           prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
           images: config.images,
@@ -856,13 +866,13 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
 
       while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
         await waitForPoll(5_000, controller.signal)
-        result = await requestUpstreamResult(id, controller.signal)
+        result = await imageResult(id, config.model, controller.signal)
       }
       const status = upstreamStatus(result)
       const sourceUrl = upstreamResultUrl(result)
       const message = upstreamError(result)
       const genericFailure = !message || /^(generate failed|generation failed|failed)$/i.test(message.trim())
-      if (config.retryTransientFailure && attempt < 2 && !succeededUpstreamStatuses.has(status) && genericFailure) {
+      if (config.retryTransientFailure && !isMaiziImageModel(config.model) && attempt < 2 && !succeededUpstreamStatuses.has(status) && genericFailure) {
         attempt += 1
         id = null
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: null, phase: 'retrying', lastEvent: '上游短暂失败，准备自动重试' } : slot) }))
@@ -1616,7 +1626,7 @@ app.post('/api/image', requireAuth, knowledgeMiddleware('image'), async (req, re
     chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
-    const data = await requestUpstream('/v1/api/generate', {
+    const data = isMaiziImageModel(settings.model) ? await maiziImages().generate({ model: settings.model, prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000), images: upstreamImages, ratio: resolvedAspectRatio, resolution: settings.resolution, n: 1 }, { sync: true }) : await requestUpstream('/v1/api/generate', {
       model: upstreamImageModel(settings.model),
       prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
       images: upstreamImages,

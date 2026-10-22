@@ -4,7 +4,7 @@ import { IMAGE_MODEL_OPTIONS, supportsImageResolution, supportsImageRatio, image
 import { imageModelInput } from '../server/imageModelInput.js'
 
 test('available models replace Flare/Sunburst with the exact Banana provider ID', () => {
-  assert.deepEqual(IMAGE_MODEL_OPTIONS.map((x) => x.value), ['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'nano-banana-2.1'])
+  assert.deepEqual(IMAGE_MODEL_OPTIONS.map((x) => x.value), ['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'nano-banana-2.1', 'gpt-image-2.5-flare-t', 'gpt-image-2.5-sunburst-t'])
   assert.equal(supportsImageResolution('nano-banana-2.1'), true)
   assert.equal(supportsImageRatio('nano-banana-2.1', '4k', '9:21'), false)
   assert.equal(supportsImageRatio('nano-banana-2.1', '1k', '9:16'), true)
