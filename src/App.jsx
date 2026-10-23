@@ -17,6 +17,7 @@ import ImagePreview from './ImagePreview.jsx'
 import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import MaterialLibrary from './MaterialLibrary.jsx'
 import KnowledgeStudio from './KnowledgeStudio.jsx'
+import SkillLibrary from './SkillLibrary.jsx'
 import KnowledgeContext from './KnowledgeContext.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
 import { retryWaterfallLogo } from './logoRepair.js'
@@ -30,6 +31,7 @@ const MODULES = [
   { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'content', label: '内容创作', caption: '节日海报与品牌内容', icon: 'book' },
+  { id: 'skills', label: 'Skill 库', caption: '把经验变成可复用的方法', icon: 'blocks' },
   { id: 'knowledge', label: '知识库', caption: '素材、品牌与营销知识', icon: 'library' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
 ]
@@ -1747,6 +1749,7 @@ export default function App() {
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
   const directContent = localPreviewParams.get('module') === 'content'
+  const directSkills = localPreviewParams.get('module') === 'skills'
   const directKnowledgeSection = KNOWLEDGE_SECTIONS.find((item) => item.id === localPreviewParams.get('module'))?.id
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
@@ -1755,7 +1758,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directSkills ? 'skills' : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
@@ -1826,7 +1829,7 @@ export default function App() {
   }
 
   function changeModule(type) {
-    if (!user && type !== 'more' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
+    if (!user && type !== 'more' && type !== 'skills' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
     startNew(type)
   }
 
@@ -1936,6 +1939,8 @@ export default function App() {
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'content'
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
+      : active === 'skills'
+        ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')}/>
       : active === 'brand-knowledge'
         ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'

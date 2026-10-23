@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { installAuth } from './auth.js'
 import { installTextTasks } from './textTasks.js'
+import { installSkills } from './skills.js'
+import { createSkillCompletion } from './skillCompletion.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -464,9 +466,11 @@ app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 // Video references may be up to 200 MB. They are immediately persisted and
 // then sent to the provider as public URLs, never forwarded as base64.
 app.use('/api/knowledge', express.json({ limit: '18mb' }))
+app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
+installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
 async function prepareKnowledgeInput(req, tool) {
   const input = { ...req.body }
   delete input.__knowledge
