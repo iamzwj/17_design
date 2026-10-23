@@ -9,7 +9,7 @@ const initial = { view: 'all', editor: null, step: 0, instruction: '', handled: 
 function readSession(key) { try { return { ...initial, ...JSON.parse(localStorage.getItem(key) || 'null') } } catch { return initial } }
 function Markdown({ text = '' }) {
   // Render text only: shared files never execute HTML, scripts or embedded URLs.
-  return <div className="skill-markdown">{text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').split('\n').map((line, i) => /^#{1,4} /.test(line) ? <h3 key={i}>{line.replace(/^#+ /, '')}</h3> : <p key={i}>{line || '\u00a0'}</p>)}</div>
+  return <div className="skill-markdown">{text.replace(/^\uFEFF?\s*---\r?\n[\s\S]*?\r?\n---\r?\n/, '').split('\n').map((line, i) => /^#{1,4} /.test(line) ? <h3 key={i}>{line.replace(/^#+ /, '')}</h3> : <p key={i}>{line || '\u00a0'}</p>)}</div>
 }
 export default function SkillLibrary({ user, onLogin }) {
   const key = `dgen-skills:${user?.id || 'guest'}`
@@ -18,7 +18,7 @@ export default function SkillLibrary({ user, onLogin }) {
   const [query, setQuery] = useState(''), [category, setCategory] = useState('全部')
   const [detail, setDetail] = useState(null), [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(Boolean(user)), [source, setSource] = useState(false)
-  const sessionRef = useRef(session), lock = useRef(false)
+  const sessionRef = useRef(session), lock = useRef(false), importInput = useRef(null)
   const update = (patch) => setSession((s) => ({ ...s, ...patch }))
   const edit = (patch) => setSession((s) => ({ ...s, editor: { ...s.editor, ...patch } }))
   useEffect(() => { sessionRef.current = session; localStorage.setItem(key, JSON.stringify(session)) }, [session, key])
@@ -39,6 +39,22 @@ export default function SkillLibrary({ user, onLogin }) {
     if (lock.current) return
     lock.current = true; setBusy(true); setError(''); setNotice('')
     try { await fn() } catch (e) { setError(e.message) } finally { lock.current = false; setBusy(false) }
+  }
+  async function importFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    await action(async () => {
+      if (!/\.md$/i.test(file.name)) throw new Error('请选择一个 .md 文件')
+      if (!file.size || file.size > 240000) throw new Error('请选择非空的 Markdown 文件，最大 240KB')
+      let markdown
+      try { markdown = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await file.arrayBuffer()) } catch { throw new Error('文件需要使用 UTF-8 编码，请另存为 UTF-8 后重试') }
+      if (sessionRef.current.editor) await saveDraft()
+      const { skill, warning } = await skillRequest('/import', { fileName: file.name, markdown })
+      openDraft(skill)
+      setNotice(warning ? `已导入为私有草稿。发布前还需完善：${warning}。可以直接编辑文件，或让 AI 帮你整理。` : '已导入为私有草稿，文件原文已保留。可以继续编辑、让 AI 修改或发布。')
+      await load()
+    })
   }
   async function saveDraft() {
     const current = sessionRef.current.editor
@@ -78,10 +94,10 @@ export default function SkillLibrary({ user, onLogin }) {
   const editor = session.editor
   return <section className="skill-workspace">
     <div className="skill-page">
-      <header className="skill-header"><div><h1>Skill 库<span>把经验，变成下一次的起点。</span></h1><p>把好用的方法整理成 Skill，和团队一起积累、复用。</p></div><button className="skill-primary" disabled={busy} onClick={() => user ? action(async () => {
+      <header className="skill-header"><div><h1>Skill 库<span>把经验，变成下一次的起点。</span></h1><p>把好用的方法整理成 Skill，和团队一起积累、复用。</p></div><div className="skill-header-actions"><input ref={importInput} type="file" accept=".md,text/markdown" hidden aria-label="上传 Skill Markdown 文件" onChange={importFile}/><button disabled={busy} onClick={() => user ? importInput.current?.click() : onLogin()}>导入 Skill</button><button className="skill-primary" disabled={busy} onClick={() => user ? action(async () => {
         if (editor) await saveDraft()
         const { skill } = await skillRequest('', {}); openDraft(skill)
-      }) : onLogin()}><Icon name="plus" size={16}/>新增 Skill</button></header>
+      }) : onLogin()}><Icon name="plus" size={16}/>新增 Skill</button></div></header>
       {error && <div className="skill-alert" role="alert">{error}<button onClick={() => { setError(''); void action(load) }}>重新加载</button></div>}
       {notice && <div className="skill-notice" role="status">{notice}</div>}
       {!user ? <div className="skill-empty"><Icon name="blocks" size={40}/><h2>让每个人的好方法，都能被复用</h2><p>登录后浏览团队 Skill，也可以用自己的话描述需求，让 AI 帮你整理第一份 Skill。</p><button className="skill-primary" onClick={onLogin}>登录并进入 Skill 库</button></div> : <>
@@ -105,7 +121,7 @@ export default function SkillLibrary({ user, onLogin }) {
         </div> : detail ? <article className="skill-detail"><button onClick={() => setDetail(null)}>返回 Skill 库</button><div className="skill-detail-heading"><span>{detail.category}</span><h2>{detail.title}</h2><p>{detail.summary}</p><small>{detail.author} · {new Date(detail.updatedAt).toLocaleDateString('zh-CN')}</small></div><div className="skill-actions"><button className="skill-primary" onClick={() => action(() => downloadSkill(detail.id, session.view === 'mine' && detail.canEdit))}>下载 SKILL.md</button>{detail.canEdit && <button onClick={() => action(() => openOwn(detail.id))}>编辑我的 Skill</button>}</div><Markdown text={detail.markdown}/></article> : <>
           <div className="skill-toolbar"><div className="skill-tabs" role="group" aria-label="Skill 范围">{[['all', '全部 Skill'], ['mine', '我创建的']].map(([value, label]) => <button key={value} aria-pressed={session.view === value} onClick={() => changeView(value)}>{label}</button>)}</div><label className="skill-search"><Icon name="search" size={16}/><input aria-label="搜索 Skill" placeholder="搜索名称、用途或作者" value={query} onChange={(e) => setQuery(e.target.value)}/></label></div>
           <div className="skill-categories" aria-label="分类筛选">{['全部', ...CATEGORIES].map((c) => <button key={c} aria-pressed={category === c} onClick={() => setCategory(c)}>{c}</button>)}</div>
-          {loading ? <div className="skill-empty" role="status">正在加载 Skill…</div> : filtered.length ? <div className="skill-waterfall">{filtered.map((skill) => <button className="skill-card" key={skill.id} onClick={() => { setDetail(skill); setError(''); setNotice('') }}><div className="skill-card-top"><span>{skill.category}</span>{session.view === 'mine' && <small>{skill.publishedAt ? '已发布' : '草稿'}</small>}</div><h2>{skill.title}</h2><p>{skill.summary || skill.purpose || '继续完善你的方法，让 AI 帮你整理成 Skill。'}</p>{skill.markdown && <div className="skill-card-excerpt">{skill.markdown.replace(/^---[\s\S]*?---\s*/, '').replace(/[#*`]/g, '').slice(0, 180)}</div>}<footer><span>{skill.author}</span><span>{new Date(skill.updatedAt).toLocaleDateString('zh-CN')}</span></footer></button>)}</div> : <div className="skill-empty"><Icon name="blocks" size={36}/><h2>{query || category !== '全部' ? '没有找到匹配的 Skill' : session.view === 'mine' ? '从你熟悉的一件事开始' : '团队的第一份 Skill，等你来写'}</h2><p>{query || category !== '全部' ? '换一个关键词，或试试其他分类。' : '描述用途、补充经验，让 AI 帮你整理成可编辑的 Skill 文件。'}</p></div>}
+          {loading ? <div className="skill-empty" role="status">正在加载 Skill…</div> : filtered.length ? <div className="skill-waterfall">{filtered.map((skill) => <button className="skill-card" key={skill.id} onClick={() => { setDetail(skill); setError(''); setNotice('') }}><div className="skill-card-top"><span>{skill.category}</span>{session.view === 'mine' && <small>{skill.publishedAt ? '已发布' : '草稿'}</small>}</div><h2>{skill.title}</h2><p>{skill.summary || skill.purpose || '继续完善你的方法，让 AI 帮你整理成 Skill。'}</p>{skill.markdown && <div className="skill-card-excerpt">{skill.markdown.replace(/^\uFEFF?\s*---[\s\S]*?---\s*/, '').replace(/[#*`]/g, '').slice(0, 180)}</div>}<footer><span>{skill.author}</span><span>{new Date(skill.updatedAt).toLocaleDateString('zh-CN')}</span></footer></button>)}</div> : <div className="skill-empty"><Icon name="blocks" size={36}/><h2>{query || category !== '全部' ? '没有找到匹配的 Skill' : session.view === 'mine' ? '从你熟悉的一件事开始' : '团队的第一份 Skill，等你来写'}</h2><p>{query || category !== '全部' ? '换一个关键词，或试试其他分类。' : '描述用途、补充经验，让 AI 帮你整理成可编辑的 Skill 文件。'}</p></div>}
         </>}
       </>}
     </div>

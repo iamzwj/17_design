@@ -74,3 +74,7 @@
 
 .skill-page .composer-select-options button { border:0; border-radius:7px; padding:9px 10px; background:transparent; color:inherit; }
 .skill-page .composer-select-options button:is(:hover,:focus-visible,[aria-selected='true']) { background:var(--sk-panel); color:var(--accent); }
+
+.skill-header-actions { display:flex; flex-shrink:0; align-items:center; gap:10px; margin-top:3px; }
+.skill-header-actions > button { padding:12px 17px; white-space:nowrap; }
+@media(max-width:650px) { .skill-header { flex-wrap:wrap; }.skill-header-actions { width:100%; margin-top:0; }.skill-header-actions > button { flex:1; padding:10px 12px; } }

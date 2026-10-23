@@ -18,7 +18,7 @@ async function boot(dataDir, complete = async () => ({ content: rawSkill, model:
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r))
   return { server, async call(route = '', body, user = 'alice', method = body === undefined ? 'GET' : 'POST') {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/api/skills${route}`, { method, headers: { 'Content-Type': 'application/json', ...(user ? { 'X-User': user } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
-    return { status: response.status, data: response.headers.get('Content-Type')?.includes('application/json') ? await response.json() : await response.text() }
+    return { status: response.status, data: response.headers.get('Content-Type')?.includes('application/json') ? await response.json() : new TextDecoder('utf-8', { ignoreBOM: true }).decode(await response.arrayBuffer()) }
   }, async close() { server.closeAllConnections(); await new Promise((r) => server.close(r)) } }
 }
 test('Skill drafts, publication snapshots, authorship, revision conflicts, version history and downloads', async () => {
@@ -96,4 +96,31 @@ test('Skill model fallback handles primary timeout and invalid output, while pre
   await assert.rejects(unavailable([], 'generate'), /unavailable/)
   assert.throws(() => validateSkillMarkdown('---\nname: Bad Name\ndescription: bad\n---\nbody'))
   assert.throws(() => normalizeSkillResult('guide', '{"questions":[1]}'))
+})
+
+test('Markdown import preserves the original file, supports YAML metadata, remains private and can be edited, published and downloaded', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dgen-skill-import-')); const api = await boot(dir)
+  const original = '\uFEFF---\r\nname: imported-review\r\ndescription: >-\r\n  审核活动方案，\r\n  并给出明确意见。\r\nmetadata:\r\n  version: 1\r\nallowed-tools: Read\r\n---\r\n\r\n# 我自己的审核方法\r\n\r\n保持名称、数据和事实。\r\n'
+  try {
+    assert.equal((await api.call('/import', { fileName: 'SKILL.md', markdown: original }, null)).status, 401)
+    const imported = await api.call('/import', { fileName: 'SKILL.MD', markdown: original })
+    assert.equal(imported.status, 201); assert.equal(imported.data.warning, '')
+    let skill = imported.data.skill
+    assert.equal(skill.title, '我自己的审核方法'); assert.equal(skill.summary, '审核活动方案， 并给出明确意见。')
+    assert.equal(skill.markdown, original); assert.equal(skill.publishedAt, null)
+    assert.equal((await api.call('', undefined, 'bob')).data.skills.length, 0)
+    assert.equal((await api.call(`/${skill.id}/download?draft=1`)).data, original)
+    assert.equal((await api.call(`/${skill.id}/download?draft=1`, undefined, 'bob')).status, 404)
+    skill = (await api.call(`/${skill.id}`, { ...skill, markdown: original + '\r\n按页码列出问题。' }, 'alice', 'PUT')).data.skill
+    assert.equal(skill.history[0].markdown, original)
+    await api.call(`/${skill.id}/publish`, { revision: skill.revision })
+    assert.equal((await api.call(`/${skill.id}/download`, undefined, 'bob')).data, original + '\r\n按页码列出问题。')
+    const plain = await api.call('/import', { fileName: '个人经验.md', markdown: '# 个人经验\n\n请按这份方法处理。\n' })
+    assert.equal(plain.status, 201); assert.equal(plain.data.skill.title, '个人经验'); assert.ok(plain.data.warning)
+    assert.equal((await api.call(`/${plain.data.skill.id}/publish`, { revision: plain.data.skill.revision })).status, 400)
+    for (const body of [{ fileName: 'bad.txt', markdown: original }, { fileName: 'empty.md', markdown: ' ' }, { fileName: 'binary.md', markdown: '\0test' }, { fileName: 'big.md', markdown: 'a'.repeat(60001) }, { fileName: 'invalid.md', markdown: '---\nname: [broken\ndescription: desc\n---\nbody' }]) {
+      assert.equal((await api.call('/import', body)).status, 400)
+    }
+    assert.equal((await api.call('?mine=1')).data.skills.length, 2)
+  } finally { await api.close(); fs.rmSync(dir, { recursive: true, force: true }) }
 })
