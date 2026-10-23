@@ -1,0 +1,16 @@
+.generation-skill-picker { min-width:0; }
+.generation-skill-picker .composer-select-trigger { position:relative; padding-right:38px; min-width:88px; }
+.generation-skill-picker .composer-select-trigger > svg:last-child { position:absolute; right:13px; top:50%; transform:translateY(-50%) rotate(90deg); margin:0; }
+.generation-skill-picker .composer-select-menu { max-height:min(390px,60vh); }
+.skill-tool-targets { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:0 0 22px; padding:14px; background:var(--sk-panel); border-radius:9px; }
+.skill-editor .skill-tool-targets label { display:flex; align-items:center; gap:6px; margin:0; }
+.skill-tool-targets input[type='checkbox'] { width:16px; height:16px; padding:0; margin:0; accent-color:var(--accent); }
+.skill-tool-targets p { flex-basis:100%; margin:0; font-size:11px; color:var(--sk-muted); }
+.skill-tool-badges { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; font-size:11px; color:var(--sk-muted); }
+.skill-tool-badges span { padding:4px 8px; border:1px solid var(--sk-border); border-radius:7px; }
+/* Keep every video parameter selector on the same shared component and arrow geometry. */
+.video-waterfall-workspace .video-select .composer-select-trigger { min-height:34px; position:relative; padding-right:38px; width:100%; max-width:210px; }
+.video-waterfall-workspace .video-select .composer-select-trigger > svg:last-child { position:absolute; right:13px; top:50%; transform:translateY(-50%) rotate(90deg); margin:0; }
+
+.skill-reference-preview { width:100%; max-height:230px; object-fit:contain; display:block; margin:18px 0 0; padding:12px; background:var(--sk-panel); border-radius:9px; }
+.skill-reference-preview.detail { max-width:620px; max-height:320px; margin-top:28px; }

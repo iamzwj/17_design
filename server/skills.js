@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { load as loadYaml, JSON_SCHEMA } from 'js-yaml'
+import { BUILTIN_SKILLS, skillTargets, generationSkillPrompt } from './builtinSkills.js'
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status })
 function parseSkillMarkdown(value) {
@@ -69,23 +70,24 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
     const own = s.ownerId === user.id
     const visible = mine && own ? s : s.published
     if (!visible) return null
-    return { id: s.id, ownerId: s.ownerId, author: s.author, canEdit: own, title: visible.title, summary: visible.summary, category: visible.category, markdown: visible.markdown, updatedAt: visible.updatedAt, publishedAt: s.published?.updatedAt || null, revision: own ? s.revision : undefined, ...(mine && own ? { purpose: s.purpose, notes: s.notes, questions: s.questions, answers: s.answers, history: s.history } : {}) }
+    return { targets: skillTargets(visible), referenceCount: 0, id: s.id, ownerId: s.ownerId, author: s.author, canEdit: own, title: visible.title, summary: visible.summary, category: visible.category, markdown: visible.markdown, updatedAt: visible.updatedAt, publishedAt: s.published?.updatedAt || null, revision: own ? s.revision : undefined, ...(mine && own ? { purpose: s.purpose, notes: s.notes, questions: s.questions, answers: s.answers, history: s.history } : {}) }
   }
   const taskView = ({ id, skillId, mode, status, result, error, model, createdAt }) => ({ id, skillId, mode, status, result, error, model, createdAt })
   const route = (fn) => async (req, res, next) => { try { await fn(req, res) } catch (error) { next(error) } }
   app.get('/api/skills', requireAuth, (req, res) => {
-    res.set('Cache-Control', 'no-store').json({ skills: store.skills.filter((s) => req.query.mine !== '1' || s.ownerId === req.user.id).map((s) => snapshot(s, req.user, req.query.mine === '1')).filter(Boolean) })
+    const list = [...(req.query.mine === '1' ? [] : BUILTIN_SKILLS), ...store.skills.filter((s) => req.query.mine !== '1' || s.ownerId === req.user.id).map((s) => snapshot(s, req.user, req.query.mine === '1')).filter(Boolean)]
+    res.set('Cache-Control', 'no-store').json({ skills: list.filter((s) => !req.query.target || skillTargets(s).includes(req.query.target)) })
   })
   app.post('/api/skills', requireAuth, route((req, res) => {
     if (store.skills.filter((s) => s.ownerId === req.user.id).length >= 200) throw fail('每个账号最多保存 200 个 Skill')
     const now = new Date().toISOString()
-    const skill = { id: randomUUID(), ownerId: req.user.id, author: String(req.user.email || '创作者').split('@')[0], title: '未命名 Skill', summary: '', category: '其他', purpose: '', notes: '', questions: [], answers: [], markdown: '', revision: 1, updatedAt: now, history: [], published: null }
+    const skill = { id: randomUUID(), ownerId: req.user.id, author: String(req.user.email || '创作者').split('@')[0], title: '未命名 Skill', summary: '', category: '其他', targets: ['image', 'video'], purpose: '', notes: '', questions: [], answers: [], markdown: '', revision: 1, updatedAt: now, history: [], published: null }
     store.skills.push(skill); save(); res.status(201).json({ skill: snapshot(skill, req.user, true) })
   }))
   app.post('/api/skills/import', requireAuth, route((req, res) => {
     if (store.skills.filter((s) => s.ownerId === req.user.id).length >= 200) throw fail('每个账号最多保存 200 个 Skill')
     const { warning, ...content } = readImportedSkill(req.body?.fileName, req.body?.markdown)
-    const skill = { id: randomUUID(), ownerId: req.user.id, author: String(req.user.email || '创作者').split('@')[0], ...content, category: '其他', notes: '', questions: [], answers: [], revision: 1, updatedAt: new Date().toISOString(), history: [], published: null }
+    const skill = { id: randomUUID(), ownerId: req.user.id, author: String(req.user.email || '创作者').split('@')[0], ...content, category: '其他', targets: ['image', 'video'], notes: '', questions: [], answers: [], revision: 1, updatedAt: new Date().toISOString(), history: [], published: null }
     store.skills.push(skill); save(); res.status(201).json({ skill: snapshot(skill, req.user, true), warning })
   }))
   app.put('/api/skills/:id', requireAuth, route((req, res) => {
@@ -94,9 +96,11 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
     const limits = { title: 80, summary: 500, category: 30, purpose: 8000, notes: 12000, markdown: 60000 }
     for (const [key, limit] of Object.entries(limits)) if (typeof input[key] !== 'string' || input[key].length > limit) throw fail(`${key} 内容为空或超过长度限制`)
     for (const key of ['questions', 'answers']) if (!Array.isArray(input[key]) || input[key].length > 3 || input[key].some((v) => typeof v !== 'string' || v.length > 8000)) throw fail('引导回答格式无效')
+    if (input.targets !== undefined && (!Array.isArray(input.targets) || input.targets.length > 2 || input.targets.some((value) => !['image', 'video'].includes(value)))) throw fail('适用工具只能选择生图或生视频')
     if (!input.title.trim()) throw fail('请填写 Skill 名称')
     if (input.markdown !== skill.markdown && skill.markdown) skill.history = [{ title: skill.title, summary: skill.summary, markdown: skill.markdown, updatedAt: skill.updatedAt }, ...skill.history].slice(0, 10)
     for (const key of [...Object.keys(limits), 'questions', 'answers']) skill[key] = input[key]
+    skill.targets = [...new Set(input.targets || skillTargets(skill))]
     skill.revision++; skill.updatedAt = new Date().toISOString(); save()
     res.json({ skill: snapshot(skill, req.user, true) })
   }))
@@ -105,7 +109,7 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
     if (req.body.revision !== skill.revision) throw fail('内容已更新，请先重新保存草稿', 409)
     validateSkillMarkdown(skill.markdown)
     if (!skill.summary.trim() || skill.title === '未命名 Skill') throw fail('发布前请填写名称与用途简介')
-    skill.published = { title: skill.title, summary: skill.summary, category: skill.category, markdown: skill.markdown, updatedAt: new Date().toISOString() }
+    skill.published = { targets: skillTargets(skill), title: skill.title, summary: skill.summary, category: skill.category, markdown: skill.markdown, updatedAt: new Date().toISOString() }
     skill.revision++; save(); res.json({ skill: snapshot(skill, req.user, true) })
   }))
   app.post('/api/skills/:id/unpublish', requireAuth, route((req, res) => {
@@ -114,8 +118,9 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
     skill.published = null; skill.revision++; save(); res.json({ skill: snapshot(skill, req.user, true) })
   }))
   app.get('/api/skills/:id/download', requireAuth, route((req, res) => {
+    const builtin = BUILTIN_SKILLS.find((s) => s.id === req.params.id)
     const skill = store.skills.find((s) => s.id === req.params.id)
-    const visible = skill && (req.query.draft === '1' && skill.ownerId === req.user.id ? skill : skill.published)
+    const visible = builtin || skill && (req.query.draft === '1' && skill.ownerId === req.user.id ? skill : skill.published)
     if (!visible) throw fail('文件不存在或无权访问', 404)
     validateSkillMarkdown(visible.markdown)
     res.set({ 'Content-Type': 'text/markdown; charset=utf-8', 'Content-Disposition': 'attachment; filename="SKILL.md"', 'Cache-Control': 'no-store' }).send(visible.markdown)
@@ -152,4 +157,17 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
     store.tasks.push(task); save(); setImmediate(() => { void run(task) }); res.status(202).json({ task: taskView(task) })
   }))
   for (const task of store.tasks.filter((t) => t.status === 'running')) setImmediate(() => { void run(task) })
+  return {
+    resolve(_user, id, target) {
+      if (!id) return null
+      const builtin = BUILTIN_SKILLS.find((s) => s.id === id)
+      const record = store.skills.find((s) => s.id === id)
+      const skill = builtin || record?.published
+      if (!skill) throw fail('所选 Skill 已取消发布或不存在，请重新选择', 404)
+      if (!skillTargets(skill).includes(target)) throw fail('所选 Skill 不适用于当前生成工具')
+      validateSkillMarkdown(skill.markdown)
+      return { id, title: skill.title, markdown: skill.markdown, targets: skillTargets(skill), builtIn: Boolean(builtin), publishedAt: skill.updatedAt, referenceCount: builtin?.referenceCount || 0 }
+    },
+    prompt: generationSkillPrompt,
+  }
 }

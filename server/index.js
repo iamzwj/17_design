@@ -470,7 +470,23 @@ app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
-installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
+const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
+function prepareGenerationSkill(req, target, previous = null) {
+  const originalPrompt = req.body?.prompt
+  if (typeof originalPrompt !== 'string' || !originalPrompt.trim()) return
+  const snapshot = previous || skillLibrary.resolve(req.user, req.body.skillId, target)
+  req.skillSnapshot = snapshot
+  req.skillUserPrompt = originalPrompt
+  req.body.prompt = skillLibrary.prompt(snapshot, originalPrompt, target)
+  if (target === 'image' && snapshot?.id === 'pulin-title' && snapshot.builtIn && !previous) {
+    if (req.body.images !== undefined && !Array.isArray(req.body.images)) throw Object.assign(new Error('参考图参数无效'), { status: 400 })
+    const reference = fs.readFileSync(path.join(rootDir, 'public/pulin-title/stacked-subtitle-hands.png'))
+    req.body.images = [...(req.body.images || []), `data:image/png;base64,${reference.toString('base64')}`]
+  }
+}
+function imageSkillMiddleware(req, _res, next) {
+  try { prepareGenerationSkill(req, 'image'); next() } catch (error) { next(error) }
+}
 async function prepareKnowledgeInput(req, tool) {
   const input = { ...req.body }
   delete input.__knowledge
@@ -939,8 +955,8 @@ async function runWaterfallTask(task, images) {
       const user = listUsers().find((u) => u.id === task.userId)
       const context = await knowledge.prepare(user, { prompt: task.prompt, model: task.model, removeBackground: task.removeBackground, knowledge: task.knowledgeSelection }, 'image')
       if (images.length + context.referenceImages.length > 9) throw new Error('品牌素材与上传参考图合计最多 9 张，请减少参考图')
-      if (task.prompt.length + context.prompt.length > 29000) throw new Error('品牌规则和提示词超过长度预算，请精简提示词')
-      task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.referenceImages.length }))
+      if ((task.effectivePrompt || task.prompt).length + context.prompt.length > 29000) throw new Error('品牌规则和提示词超过长度预算，请精简提示词')
+      task = updateWaterfallTask(task.id, (current) => ({ ...current, knowledgePrepared: true, knowledgeTraceId: context.id, effectivePrompt: `${task.effectivePrompt || task.prompt}\n\n${context.prompt}`, referenceCount: images.length + context.referenceImages.length }))
       knowledge.finish(context.id, { taskId: task.id, model: task.model, status: task.status })
     }
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
@@ -1613,7 +1629,7 @@ app.post('/api/compliance/uploads', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
-app.post('/api/image', requireAuth, knowledgeMiddleware('image'), async (req, res, next) => {
+app.post('/api/image', requireAuth, imageSkillMiddleware, knowledgeMiddleware('image'), async (req, res, next) => {
   let chargedUser = null
   let creditCost = 0
   try {
@@ -1647,7 +1663,8 @@ app.post('/api/image', requireAuth, knowledgeMiddleware('image'), async (req, re
     directImageRecords = [{
       id: randomUUID(),
       userId: req.user.id,
-      prompt: String(req.body.__userPrompt || prompt).trim().slice(0, 30_000),
+      prompt: String(req.skillUserPrompt || req.body.__userPrompt || prompt).trim().slice(0, 30_000),
+      skillSnapshot: req.skillSnapshot || null,
       model: settings.model,
       resolution: settings.resolution,
       quality: settings.quality,
@@ -1679,6 +1696,7 @@ app.post('/api/video/references', requireAuth, async (req, res, next) => {
 
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
   try {
+    prepareGenerationSkill(req, 'video')
     const { model, prompt, durationSeconds, resolution, aspectRatio, referenceMode = 'text', imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], referenceVideoUrls = [], omniReferenceTaskType } = req.body || {}
     if (model === 'minimax-h3') {
       if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
@@ -1704,7 +1722,7 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       const id = upstreamId(generated)
       if (!id) throw new Error(upstreamError(generated) || 'MiniMax H3 未返回任务 ID')
       const status = minimaxVideoState(generated).status
-      const record = { id, userId: req.user.id, provider: 'minimax', prompt: String(prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, ...minimaxVideoState(generated), createdAt: Date.now() }
+      const record = { id, userId: req.user.id, provider: 'minimax', skillSnapshot: req.skillSnapshot, prompt: String(req.skillUserPrompt || prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, ...minimaxVideoState(generated), createdAt: Date.now() }
       videoTasks.set(record.id, record); saveVideoTasks()
       return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error })
     }
@@ -1754,7 +1772,7 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
     }
     const created = await vibbitApi('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(input) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, prompt: input.prompt, model, resolution, durationSeconds: input.duration_seconds, aspectRatio: input.aspect_ratio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceMode === 'frames' ? [firstFrameImageUrl, lastFrameImageUrl].filter(Boolean) : referenceImageUrls, referenceVideos: referenceVideoUrls, status: 'PENDING', createdAt: Date.now() })
+    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, skillSnapshot: req.skillSnapshot, prompt: req.skillUserPrompt || input.prompt, model, resolution, durationSeconds: input.duration_seconds, aspectRatio: input.aspect_ratio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceMode === 'frames' ? [firstFrameImageUrl, lastFrameImageUrl].filter(Boolean) : referenceImageUrls, referenceVideos: referenceVideoUrls, status: 'PENDING', createdAt: Date.now() })
     saveVideoTasks()
     res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
   } catch (error) { next(error) }
@@ -1827,6 +1845,16 @@ app.get('/api/waterfall/tasks', requireAuth, (req, res) => {
 app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
   try {
     delete req.body.__knowledge; delete req.body.__userPrompt
+    let previousSkill = null
+    if (req.body.retryOf) {
+      const original = waterfallTasks.find((task) => task.id === req.body.retryOf && task.userId === req.user.id)
+      if (!original) return res.status(404).json({ error: '原生成任务不存在或无权访问' })
+      previousSkill = original.skillSnapshot || null
+      req.body.images = original.referenceImages || []
+      // Reuse the server-side snapshot. Client-provided rules never replace history.
+      req.body.skillId = previousSkill?.id || ''
+    }
+    prepareGenerationSkill(req, 'image', previousSkill)
     knowledge.authorize(req.user, req.body.knowledge)
     const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, count = 2, model, resolution, quality = DEFAULT_IMAGE_QUALITY, clientRequestId, surface, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
     const requestedCount = Number(count)
@@ -1846,7 +1874,8 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     const task = {
       id,
       userId: req.user.id,
-      prompt: String(req.body.__userPrompt || prompt).trim().slice(0, 30_000),
+      prompt: String(req.skillUserPrompt || req.body.__userPrompt || prompt).trim().slice(0, 30_000),
+      skillSnapshot: req.skillSnapshot || null,
       aspectRatio,
       resolvedAspectRatio,
       model: settings.model,
@@ -1857,7 +1886,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       backgroundColor: removeBackground ? backgroundColor : null,
       generationSize: imageSize,
       count: requestedCount,
-      effectivePrompt: req.body.__knowledge ? prompt : null,
+      effectivePrompt: req.skillSnapshot || req.body.__knowledge ? prompt : null,
       knowledgeTraceId: req.body.__knowledge?.id || null,
       knowledgeSelection: req.body.knowledge || null,
       referenceCount: images.length + (req.body.__knowledge?.images.length || 0),

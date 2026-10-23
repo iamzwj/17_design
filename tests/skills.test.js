@@ -26,25 +26,25 @@ test('Skill drafts, publication snapshots, authorship, revision conflicts, versi
   try {
     assert.equal((await api.call('', undefined, null)).status, 401)
     let skill = (await api.call('', {})).data.skill
-    assert.equal((await api.call('', undefined, 'bob')).data.skills.length, 0)
+    assert.equal((await api.call('', undefined, 'bob')).data.skills.filter((s) => !s.builtIn).length, 0)
     assert.equal((await api.call('?mine=1')).data.skills.length, 1)
     assert.equal((await api.call(`/${skill.id}`, skill, 'bob', 'PUT')).status, 404)
     skill = (await api.call(`/${skill.id}`, { ...skill, title: '审核', purpose: '审核方案', summary: '找问题', markdown }, 'alice', 'PUT')).data.skill
     assert.equal((await api.call(`/${skill.id}/publish`, { revision: 1 })).status, 409)
     skill = (await api.call(`/${skill.id}/publish`, { revision: skill.revision })).data.skill
-    const publicSkill = (await api.call('', undefined, 'bob')).data.skills[0]
-    assert.equal((await api.call('?mine=1', undefined, 'bob')).data.skills.length, 0)
+    const publicSkill = (await api.call('', undefined, 'bob')).data.skills.find((s) => s.id === skill.id)
+    assert.equal((await api.call('?mine=1', undefined, 'bob')).data.skills.filter((s) => !s.builtIn).length, 0)
     assert.equal(publicSkill.title, '审核'); assert.equal(publicSkill.history, undefined); assert.equal(publicSkill.purpose, undefined)
     assert.equal((await api.call(`/${skill.id}/download`, undefined, 'bob')).data, markdown)
     skill = (await api.call(`/${skill.id}`, { ...skill, title: '未发布修改', markdown: markdown + '\n新规则' }, 'alice', 'PUT')).data.skill
     assert.equal(skill.history.length, 1); assert.equal(skill.history[0].markdown, markdown)
-    assert.equal((await api.call('', undefined, 'bob')).data.skills[0].title, '审核')
+    assert.equal((await api.call('', undefined, 'bob')).data.skills.find((s) => s.id === skill.id).title, '审核')
     assert.equal((await api.call(`/${skill.id}/download?draft=1`, undefined, 'bob')).data, markdown)
     assert.equal((await api.call(`/${skill.id}/download?draft=1`)).data, markdown + '\n新规则')
     skill = (await api.call(`/${skill.id}/unpublish`, { revision: skill.revision })).data.skill
-    assert.equal((await api.call('', undefined, 'bob')).data.skills.length, 0)
+    assert.equal((await api.call('', undefined, 'bob')).data.skills.filter((s) => !s.builtIn).length, 0)
     assert.equal((await api.call(`/${skill.id}/download`, undefined, 'bob')).status, 404)
-    assert.equal((await api.call('?mine=1', undefined, 'bob')).data.skills.length, 0)
+    assert.equal((await api.call('?mine=1', undefined, 'bob')).data.skills.filter((s) => !s.builtIn).length, 0)
     const incomplete = (await api.call(`/${skill.id}`, { ...skill, markdown: 'unfinished' }, 'alice', 'PUT')).data.skill
     assert.equal((await api.call(`/${skill.id}/publish`, { revision: incomplete.revision })).status, 400)
   } finally { await api.close(); fs.rmSync(dir, { recursive: true, force: true }) }
@@ -108,7 +108,7 @@ test('Markdown import preserves the original file, supports YAML metadata, remai
     let skill = imported.data.skill
     assert.equal(skill.title, '我自己的审核方法'); assert.equal(skill.summary, '审核活动方案， 并给出明确意见。')
     assert.equal(skill.markdown, original); assert.equal(skill.publishedAt, null)
-    assert.equal((await api.call('', undefined, 'bob')).data.skills.length, 0)
+    assert.equal((await api.call('', undefined, 'bob')).data.skills.filter((s) => !s.builtIn).length, 0)
     assert.equal((await api.call(`/${skill.id}/download?draft=1`)).data, original)
     assert.equal((await api.call(`/${skill.id}/download?draft=1`, undefined, 'bob')).status, 404)
     skill = (await api.call(`/${skill.id}`, { ...skill, markdown: original + '\r\n按页码列出问题。' }, 'alice', 'PUT')).data.skill
