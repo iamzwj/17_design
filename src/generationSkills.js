@@ -9,14 +9,16 @@ export function selectGenerationSkill(target, id) {
 }
 export function useGenerationSkill(target) {
   const [id, setId] = useState(() => localStorage.getItem(key(target)) || '')
+  const [externalRecords, setExternalRecords] = useState([])
   const [skills, setSkills] = useState([]), [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const reload = useCallback(async () => {
     const token = getAuthToken()
-    if (!token) { setSkills([]); setId(''); setError(''); setLoading(false); return }
+    if (!token) { setSkills([]); setExternalRecords([]); setId(''); setError(''); setLoading(false); return }
     setLoading(true)
     try {
       const [data, external] = await Promise.all([skillRequest(`?target=${target}`), installedLocalSkills(token)])
       if (getAuthToken() !== token) return
+      setExternalRecords(external)
       setSkills([...data.skills, ...external.filter((s) => s.compatibility.usable && s.localReady && s.targets.includes(target))]); setError('')
     } catch (e) { if (getAuthToken() === token) setError(e.message) } finally { if (getAuthToken() === token) setLoading(false) }
   }, [target])
@@ -27,5 +29,7 @@ export function useGenerationSkill(target) {
     events.forEach((event) => window.addEventListener(event, changed))
     return () => events.forEach((event) => window.removeEventListener(event, changed))
   }, [target, reload])
-  return { id, skills, loading, selected: skills.find((s) => s.id === id), error, reload, select: (value) => selectGenerationSkill(target, value) }
+  const local = externalRecords.find((s) => s.id === id)
+  const unavailableReason = local ? !local.localReady ? local.localError : !local.compatibility.usable ? local.compatibility.reason : !local.targets.includes(target) ? local.fit?.reason || '此 Skill 尚未适配当前工具' : '' : ''
+  return { id, skills, loading, unavailableReason, selected: skills.find((s) => s.id === id), error, reload, select: (value) => selectGenerationSkill(target, value) }
 }
