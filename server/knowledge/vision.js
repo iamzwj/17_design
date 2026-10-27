@@ -64,6 +64,7 @@ export async function extractPages(version, originals, range, save) {
     const zip = await JSZip.loadAsync(await fs.readFile(file))
     if (Object.values(zip.files).reduce((sum, f) => sum + (f._data?.uncompressedSize || 0), 0) > 60 * 1024 * 1024) throw new Error('文档解压超过60MB，请拆分')
     const media = Object.values(zip.files).filter((f) => !f.dir && /^word\/media\/.*\.(png|jpe?g|webp)$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    if (range.allowEmpty && media.length > 100) throw new Error('单份 DOCX 最多自动识别100张内嵌图片，请拆分后上传')
     if (range.start > media.length && range.allowEmpty) return pages
     if (range.start > media.length) throw new Error('此范围没有可读取的内嵌图片；DOCX暂支持PNG/JPG/WebP图片，不支持矢量WMF/EMF')
     const text = (await mammoth.extractRawText({ path: file })).value.slice(0, 14000)
