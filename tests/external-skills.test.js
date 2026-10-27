@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import express from 'express'
 import fs from 'node:fs'
 import os from 'node:os'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { externalSkillFit } from '../shared/externalSkillFit.js'
 import { installExternalSkills, externalSkillCompatibility } from '../server/externalSkills.js'
@@ -62,4 +63,21 @@ test('purpose filters restrict generator targets and distinguish related referen
   assert.deepEqual(externalSkillFit({ name: 'marketing-strategy' }).targets, [])
   assert.equal(externalSkillFit({ name: 'frontend-design', summary: 'Build web image galleries with React' }).category, 'other')
   assert.deepEqual(externalSkillFit({ name: 'unknown-method' }).targets, [])
+})
+
+test('popular catalog is immediately visible behind login and preview reuses its verified pinned version', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'popular-skill-route-'))
+  const markdown = '---\nname: poster-rules\ndescription: 海报规则\n---\n\n使用紫色。'
+  const skill = { name: 'poster-rules', source: 'example/skills', title: 'poster-rules', commit: 'a'.repeat(40), path: 'skills/poster-rules/SKILL.md', sha256: createHash('sha256').update(markdown).digest('hex'), installs: 123, compatibility: { usable: true, dependencies: [] }, fit: { targets: ['image'], category: 'image' } }
+  const seedFile = path.join(dir, 'seed.json'); fs.writeFileSync(seedFile, JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), skills: [skill] }))
+  const app = express(); app.use(express.json()); const requested = []
+  installExternalSkills(app, { dataDir: dir, recommendationSeedFile: seedFile, requireAuth(req,res,next) { if (!req.headers.authorization) return res.status(401).json({ error: 'login' }); req.user = { id: 'alice' }; next() }, fetchImpl: async (url) => { requested.push(url); return new Response(markdown) } })
+  app.use((e,_req,res,_next) => res.status(e.status || 500).json({ error: e.message }))
+  const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r)); const base=`http://127.0.0.1:${server.address().port}/api/skills/external`
+  try {
+    assert.equal((await fetch(base+'/recommendations')).status,401)
+    const catalog=await fetch(base+'/recommendations',{headers:{Authorization:'test'}}).then(r=>r.json()); assert.equal(catalog.status,'ready'); assert.equal(catalog.skills[0].installs,123); assert.equal(catalog.skills[0].markdown,undefined)
+    const response=await fetch(base+'/preview',{method:'POST',headers:{Authorization:'test','Content-Type':'application/json'},body:JSON.stringify({source:skill.source,name:skill.name,commit:skill.commit})}); assert.equal(response.status,200); assert.equal((await response.json()).preview.markdown,markdown)
+    assert.equal(requested.length,1); assert.ok(requested[0].includes(skill.commit)); assert.ok(requested[0].startsWith('https://raw.githubusercontent.com/'))
+  } finally { server.closeAllConnections(); await new Promise(r=>server.close(r)); fs.rmSync(dir,{recursive:true,force:true}) }
 })

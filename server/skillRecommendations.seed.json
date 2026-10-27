@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-27T03:24:51.354Z",
+  "skills": [
+    {
+      "source": "agentara/skills",
+      "name": "video-storyboard",
+      "title": "video-storyboard",
+      "path": "skills/aigc/video-storyboard/SKILL.md",
+      "commit": "950e1bfb11e1df67b46df19804ed85ada9012c33",
+      "summary": "Generate storyboard image boards and matching video-generation prompt scripts for specific scenes in a short video plan. Use this skill whenever the user asks to create a storyboard, storyboard image, video prompt script, scene prompt, image-to-video prompt, shot board, or per-scene video-generation package, especially when they specify a scene number, duration, or an existing video plan. This skill saves outputs as storyboard/scene-XX.png and storyboard/scene-XX.md and enforces grid sizing, tim",
+      "fit": {
+        "category": "image",
+        "label": "图像 / 视频",
+        "targets": [
+          "image",
+          "video"
+        ],
+        "reason": "用途与生成工具相关；通过文件依赖检查后，可作为对应工具的文字规则使用。"
+      },
+      "compatibility": {
+        "usable": true,
+        "reason": "可作为生图、生视频的文字规则使用，不执行脚本。",
+        "dependencies": []
+      },
+      "sha256": "8677b67defe936545217c5a7004566b9da26b873ae8084d82897463f7f9e2dd8",
+      "installs": 871,
+      "url": "https://skills.sh/agentara/skills/video-storyboard",
+      "verifiedAt": "2026-10-27T03:24:47.434Z"
+    },
+    {
+      "source": "agentara/skills",
+      "name": "video-character-design",
+      "title": "video-character-design",
+      "path": "skills/aigc/video-character-design/SKILL.md",
+      "commit": "950e1bfb11e1df67b46df19804ed85ada9012c33",
+      "summary": "Create character design documentation and character design sheet images for video, storyboard, advertising, animation, or AI video-generation workflows. Use this skill whenever the user asks to design a character, extract a character from a reference image, make a character sheet, create a turnaround sheet, keep a person consistent across scenes, or generate character assets for a video project. This skill first writes a confirmable {character-name}.md design spec, waits for user approval or rev",
+      "fit": {
+        "category": "image",
+        "label": "图像 / 视频",
+        "targets": [
+          "image",
+          "video"
+        ],
+        "reason": "用途与生成工具相关；通过文件依赖检查后，可作为对应工具的文字规则使用。"
+      },
+      "compatibility": {
+        "usable": true,
+        "reason": "可作为生图、生视频的文字规则使用，不执行脚本。",
+        "dependencies": []
+      },
+      "sha256": "6c1c19089c7322aa1485feb8a506c356222b99fc241ae53110f57dd2dcdb8e26",
+      "installs": 353,
+      "url": "https://skills.sh/agentara/skills/video-character-design",
+      "verifiedAt": "2026-10-27T03:24:51.353Z"
+    },
+    {
+      "source": "agentara/skills",
+      "name": "video-poster-design",
+      "title": "video-poster-design",
+      "path": "skills/aigc/video-poster-design/SKILL.md",
+      "commit": "950e1bfb11e1df67b46df19804ed85ada9012c33",
+      "summary": "Create cinematic movie poster concepts and final poster images from a user's brief, existing video plan, storyboard, character design, or project context. Use this skill whenever the user asks to generate a film poster, movie poster, key art, campaign poster, teaser poster, title poster, or promotional visual for a video project. This skill proposes several creative directions first when appropriate, defaults to a 3:4 poster ratio when no ratio is specified, and ensures typography, title treatme",
+      "fit": {
+        "category": "image",
+        "label": "图像 / 视频",
+        "targets": [
+          "image",
+          "video"
+        ],
+        "reason": "用途与生成工具相关；通过文件依赖检查后，可作为对应工具的文字规则使用。"
+      },
+      "compatibility": {
+        "usable": true,
+        "reason": "可作为生图、生视频的文字规则使用，不执行脚本。",
+        "dependencies": []
+      },
+      "sha256": "4441cdbac4128fb00d8201fa9086e7eb100685e7b5dbc992de6d094947ce8370",
+      "installs": 255,
+      "url": "https://skills.sh/agentara/skills/video-poster-design",
+      "verifiedAt": "2026-10-27T03:24:47.531Z"
+    },
+    {
+      "source": "agentara/skills",
+      "name": "gunpla-poster",
+      "title": "gunpla-poster",
+      "path": "skills/aigc/gunpla-poster/SKILL.md",
+      "commit": "950e1bfb11e1df67b46df19804ed85ada9012c33",
+      "summary": "Create premium collectible Gunpla model-photography posters through a guided, language-aware interview and image-generation workflow. Use this skill whenever a user asks for a Gundam, Gunpla, mobile-suit model, MG, RG, PG, MGEX, or collector-catalog poster, portrait, showcase image, or studio photograph. Ask for the mobile suit, crop, pose, environment, and aspect ratio one at a time, then generate a faithful, polished poster with restrained technical typography.",
+      "fit": {
+        "category": "image",
+        "label": "图像创作",
+        "targets": [
+          "image"
+        ],
+        "reason": "用途与生成工具相关；通过文件依赖检查后，可作为对应工具的文字规则使用。"
+      },
+      "compatibility": {
+        "usable": true,
+        "reason": "可作为生图、生视频的文字规则使用，不执行脚本。",
+        "dependencies": []
+      },
+      "sha256": "f99199fb5bf7e0f0377bf336606c3ce5e3f6ce73c155cc05e56f216c480e6335",
+      "installs": 31,
+      "url": "https://skills.sh/agentara/skills/gunpla-poster",
+      "verifiedAt": "2026-10-27T03:24:51.105Z"
+    },
+    {
+      "source": "mrg123/film-cinematography-master",
+      "name": "film-cinematography-master",
+      "title": "film-cinematography-master",
+      "path": "SKILL.md",
+      "commit": "77c08e06e646d003455e2c699e72aebb2328c402",
+      "summary": "用于分析、讲解和指导电影运镜技巧——涵盖所有基础运镜（推拉摇移跟升降甩）和进阶技法（滑动变焦、斯坦尼康、长镜头等），以及希区柯克、库布里克等10+位导演的标志性运镜风格。当用户询问镜头语言、导演风格、场景分析或拍摄建议时使用。",
+      "fit": {
+        "category": "image",
+        "label": "图像 / 视频",
+        "targets": [
+          "image",
+          "video"
+        ],
+        "reason": "用途与生成工具相关；通过文件依赖检查后，可作为对应工具的文字规则使用。"
+      },
+      "compatibility": {
+        "usable": true,
+        "reason": "可作为生图、生视频的文字规则使用，不执行脚本。",
+        "dependencies": []
+      },
+      "sha256": "d84788b8d4f1324f84bb1d603a566311c058de20c1d11e390eadf38a59d74d7c",
+      "installs": 7,
+      "url": "https://skills.sh/mrg123/film-cinematography-master/film-cinematography-master",
+      "verifiedAt": "2026-10-27T03:23:26.491Z"
+    }
+  ]
+}

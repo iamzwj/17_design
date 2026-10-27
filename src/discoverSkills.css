@@ -18,3 +18,6 @@
 .discover-filters button[aria-pressed="true"] { color:var(--accent); border-color:var(--accent); background:var(--sk-panel); }
 .discover-filters button:hover { color:var(--sk-text); }.discover-filters button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 .discover-filter-note { font-size:12px; line-height:1.9; color:var(--sk-muted); margin:10px 0; }.discover-purpose { font-size:11px; color:var(--accent); }
+.discover-rank { color:var(--accent); font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; }
+.discover-list-heading > div { min-width:0; }.discover-list-heading > button { flex-shrink:0; }
+.discover-card .discover-usage { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }.discover-card .discover-purpose { margin-top:8px; }

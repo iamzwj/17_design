@@ -25,7 +25,7 @@ export async function externalSkillPayload(id, token = getAuthToken()) {
   return { markdown }
 }
 const key = (owner) => `dgen-discover-state:${owner}`
-const initial = { tab: 'discover', filter: 'related', query: '', results: [], preview: null, jobs: {}, error: '', notice: '' }
+const initial = { tab: 'discover', filter: 'related', mode: 'recommended', recommendations: [], recommendedAt: null, query: '', results: [], preview: null, jobs: {}, error: '', notice: '' }
 export function readDiscovery(owner) { try { return { ...initial, ...JSON.parse(localStorage.getItem(key(owner)) || 'null') } } catch { return { ...initial } } }
 export function updateDiscovery(owner, patch) {
   const next = { ...readDiscovery(owner), ...patch }; localStorage.setItem(key(owner), JSON.stringify(next)); window.dispatchEvent(new CustomEvent('dgen-discovery-change', { detail: owner })); return next
@@ -48,8 +48,16 @@ export function recoverDiscovery(owner) {
   for (const [id, value] of Object.entries(jobs)) if (value.status === 'running' && !inFlight.has(`${owner}:${id}`)) { jobs[id] = { ...value, status: 'failed', error: '上次操作已中断，请重新搜索或下载' }; changed = true }
   if (changed) updateDiscovery(owner, { jobs, error: '上次操作已中断；已完成的安装不会丢失，请重试未完成的操作。' })
 }
-export function searchExternal(owner, query) { return job(owner, 'search', async (token) => { const data = await externalRequest(`/search?q=${encodeURIComponent(query.trim())}`, undefined, 'GET', token); updateDiscovery(owner, { results: data.skills, notice: data.skills.length ? '' : '未找到匹配结果，可以换个关键词。' }) }) }
-export function previewExternal(owner, record) { return job(owner, 'preview', async (token) => { const data = await externalRequest('/preview', { source: record.source, name: record.name }, 'POST', token); updateDiscovery(owner, { preview: data.preview }) }) }
+export function searchExternal(owner, query) { return job(owner, 'search', async (token) => { const data = await externalRequest(`/search?q=${encodeURIComponent(query.trim())}`, undefined, 'GET', token); updateDiscovery(owner, { mode: 'search', results: data.skills, notice: data.skills.length ? '' : '未找到匹配结果，可以换个关键词。' }) }) }
+export function loadRecommendations(owner) { return job(owner, 'recommendations', async (token) => {
+  for (let attempt = 0; attempt < 180; attempt++) {
+    const data = await externalRequest('/recommendations', undefined, 'GET', token)
+    if (data.status === 'ready') { updateDiscovery(owner, { recommendations: data.skills, recommendedAt: data.updatedAt }); return }
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  throw new Error('热门 Skill 仍在检查中，请稍后重试；也可以先搜索。')
+}) }
+export function previewExternal(owner, record) { return job(owner, 'preview', async (token) => { const data = await externalRequest('/preview', { source: record.source, name: record.name, ...(record.commit ? { commit: record.commit } : {}) }, 'POST', token); updateDiscovery(owner, { preview: data.preview }) }) }
 export function installExternal(owner, preview) { return job(owner, `install:${preview.source}/${preview.name}`, async (token) => {
   const data = await externalRequest('/installed', { previewId: preview.previewId }, 'POST', token); await writeLocalSkill(owner, data.skill, data.markdown); updateDiscovery(owner, { tab: 'installed', preview: null, notice: '已保存到当前浏览器本地文件区，仅此账号可见。' })
 }) }

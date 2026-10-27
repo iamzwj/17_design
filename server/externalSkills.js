@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { validateSkillMarkdown } from './skills.js'
+import { createSkillRecommendations } from './skillRecommendations.js'
 import { externalSkillFit } from '../shared/externalSkillFit.js'
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status })
@@ -10,13 +11,13 @@ const sourceOK = (value) => typeof value === 'string' && /^[a-z0-9][a-z0-9_.-]{0
 const safePath = (value) => typeof value === 'string' && value.length < 600 && !value.startsWith('/') && !value.includes('\\') && !value.split('/').some((s) => !s || s === '.' || s === '..')
 export function externalSkillCompatibility(markdown, files = []) {
   const dependencies = files.filter((p) => !/(?:^|\/)(?:SKILL\.md|README(?:\.md)?|LICENSE(?:\.[a-z]+)?)$/i.test(p))
-  const toolUse = /(?:\b(?:npx|npm|pnpm|python3?|pip3?|bash|curl|wget)\s|scripts\/|references\/|assets\/|mcp__|exec_command|allowed-tools\s*:)/i.test(markdown)
+  const toolUse = /(?:\b(?:npx|npm|pnpm|python3?|pip3?|bash|curl|wget)\s|scripts\/|references\/|assets\/|mcp__|exec_command|allowed-tools\s*:|```(?:javascript|typescript|jsx|tsx|python|bash|sh|html|css)\b)/i.test(markdown)
   return { usable: !dependencies.length && !toolUse, reason: dependencies.length ? '依赖额外脚本或参考文件，目前仅安装 MD，需适配后才能用于生成。' : toolUse ? '需要终端、脚本或外部工具，当前生成工具不能直接执行。' : '可作为生图、生视频的文字规则使用，不执行脚本。', dependencies: dependencies.slice(0, 30) }
 }
-export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = fetch }) {
+export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = fetch, warmRecommendations = false, recommendationSeedFile = new URL('./skillRecommendations.seed.json', import.meta.url) }) {
   const file = path.join(dataDir, 'external-skill-installs.json')
   let records = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : []
-  records = records.map((record) => { const fit = record.fit || externalSkillFit(record); return { ...record, fit, targets: record.compatibility.usable ? fit.targets : [] } })
+  records = records.map((record) => { const fit = externalSkillFit(record); return { ...record, fit, targets: record.compatibility.usable ? fit.targets : [] } })
   const previews = new Map(), rates = new Map()
   const save = () => { fs.writeFileSync(`${file}.next`, JSON.stringify(records), { mode: 0o600 }); fs.renameSync(`${file}.next`, file) }
   const publicRecord = ({ ownerId: _owner, ...record }) => record
@@ -51,22 +52,25 @@ export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = f
       return buffer.toString('utf8')
     }
   }
-  app.get('/api/skills/external/search', requireAuth, route(async (req, res) => {
-    const query = String(req.query.q || '').trim()
-    if (query.length < 2 || query.length > 120) throw fail('请输入 2–120 个字符的搜索词')
-    const rate = rates.get(req.user.id); if (rate && Date.now() - rate.at < 60000 && rate.count >= 30) throw fail('搜索过于频繁，请稍后再试', 429)
-    rates.set(req.user.id, rate && Date.now() - rate.at < 60000 ? { ...rate, count: rate.count + 1 } : { at: Date.now(), count: 1 })
+  const sourceTrees = new Map()
+  async function sourceTree(source, pinnedCommit) {
+    const key = `${source}:${pinnedCommit || 'HEAD'}`
+    const cached = sourceTrees.get(key)
+    if (cached && Date.now() - cached.at < 600000) return cached.promise
+    const promise = (async () => {
+      const commit = pinnedCommit || (await remote(`https://api.github.com/repos/${source}/commits/HEAD`, true)).sha
+      if (!/^[a-f0-9]{40}$/.test(commit)) throw fail('无法确认来源版本', 502)
+      return { commit, tree: await remote(`https://api.github.com/repos/${source}/git/trees/${commit}?recursive=1`, true) }
+    })().catch((error) => { sourceTrees.delete(key); throw error })
+    if (sourceTrees.size >= 60) sourceTrees.delete(sourceTrees.keys().next().value)
+    sourceTrees.set(key, { at: Date.now(), promise }); return promise
+  }
+  async function searchPublic(query) {
     const data = await remote(`https://skills.sh/api/search?${new URLSearchParams({ q: query, limit: '20' })}`, true)
-    const skills = (data.skills || []).filter((s) => sourceOK(s.source) && typeof s.name === 'string').slice(0, 20).map((s) => ({ name: s.name.slice(0, 150), source: s.source, installs: Math.max(0, Number(s.installs) || 0), url: `https://skills.sh/${s.source}/${encodeURIComponent(s.name)}`, fit: externalSkillFit({ name: s.name }) }))
-    res.set('Cache-Control', 'no-store').json({ skills })
-  }))
-  app.post('/api/skills/external/preview', requireAuth, route(async (req, res) => {
-    const { source, name } = req.body
-    if (!sourceOK(source) || typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,99}$/i.test(name)) throw fail('Skill 来源或名称无效')
-    const commitData = await remote(`https://api.github.com/repos/${source}/commits/HEAD`, true)
-    const commit = commitData.sha
-    if (!/^[a-f0-9]{40}$/.test(commit)) throw fail('无法确认来源版本', 502)
-    const tree = await remote(`https://api.github.com/repos/${source}/git/trees/${commit}?recursive=1`, true)
+    return (data.skills || []).filter((s) => sourceOK(s.source) && typeof s.name === 'string').slice(0, 20).map((s) => ({ name: s.name.slice(0, 150), source: s.source, installs: Math.max(0, Number(s.installs) || 0), url: `https://skills.sh/${s.source}/${encodeURIComponent(s.name)}`, fit: externalSkillFit({ name: s.name }) }))
+  }
+  async function inspectSkill(source, name, pinnedCommit) {
+    const { commit, tree } = await sourceTree(source, pinnedCommit)
     const entries = (tree.tree || []).filter((e) => e.type === 'blob' && e.mode !== '120000' && safePath(e.path))
     const candidates = entries.filter((e) => e.path === 'SKILL.md' || e.path.endsWith(`/${name}/SKILL.md`)).sort((a, b) => a.path.length - b.path.length)
     const match = candidates.find((e) => e.path !== 'SKILL.md') || candidates[0]
@@ -79,7 +83,31 @@ export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = f
     const files = entries.filter((e) => e.path.startsWith(folder)).map((e) => e.path.slice(folder.length))
     const compatibility = externalSkillCompatibility(markdown, tree.truncated ? [...files, '来源目录不完整'] : files)
     const fit = externalSkillFit({ name: parsed.name, summary: parsed.description })
-    const preview = { ...metadata, fit, title: parsed.name, summary: parsed.description.slice(0, 500), sha256: sha(markdown), compatibility, markdown }
+    return { ...metadata, fit, title: parsed.name, summary: parsed.description.slice(0, 500), sha256: sha(markdown), compatibility, markdown }
+  }
+  const recommendations = createSkillRecommendations({ cacheFile: path.join(dataDir, 'external-skill-recommendations.json'), seedFile: recommendationSeedFile, search: searchPublic, inspect: (candidate) => inspectSkill(candidate.source, candidate.name) })
+  if (warmRecommendations) setTimeout(() => recommendations.get(), 1000).unref()
+  app.get('/api/skills/external/recommendations', requireAuth, route((req, res) => {
+    const data = recommendations.get()
+    res.set('Cache-Control', 'no-store').status(data.status === 'running' ? 202 : data.status === 'failed' ? 502 : 200).json(data)
+  }))
+  app.get('/api/skills/external/search', requireAuth, route(async (req, res) => {
+    const query = String(req.query.q || '').trim()
+    if (query.length < 2 || query.length > 120) throw fail('请输入 2–120 个字符的搜索词')
+    const rate = rates.get(req.user.id); if (rate && Date.now() - rate.at < 60000 && rate.count >= 30) throw fail('搜索过于频繁，请稍后再试', 429)
+    rates.set(req.user.id, rate && Date.now() - rate.at < 60000 ? { ...rate, count: rate.count + 1 } : { at: Date.now(), count: 1 })
+    res.set('Cache-Control', 'no-store').json({ skills: await searchPublic(query) })
+  }))
+  app.post('/api/skills/external/preview', requireAuth, route(async (req, res) => {
+    const { source, name, commit } = req.body
+    if (!sourceOK(source) || typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,99}$/i.test(name) || (commit !== undefined && !/^[a-f0-9]{40}$/.test(commit))) throw fail('Skill 来源或名称无效')
+    const verified = recommendations.peek().find((skill) => skill.source === source && skill.name === name && (!commit || skill.commit === commit))
+    let preview
+    if (verified) {
+      const markdown = await readMarkdown(verified)
+      if (sha(markdown) !== verified.sha256) throw fail('推荐版本校验失败，请稍后刷新推荐', 409)
+      preview = { ...verified, markdown }
+    } else preview = await inspectSkill(source, name, commit)
     for (const [key, value] of previews) if (Date.now() - value.at > 600000) previews.delete(key)
     if (previews.size > 100) previews.delete(previews.keys().next().value)
     const previewId = randomUUID(); previews.set(previewId, { ownerId: req.user.id, at: Date.now(), preview })
@@ -103,7 +131,7 @@ export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = f
     res.set('Cache-Control', 'no-store').json({ skill: publicRecord(record), markdown })
   }))
   app.delete('/api/skills/external/:id', requireAuth, route((req, res) => { own(req.user, req.params.id); records = records.filter((r) => r.id !== req.params.id); save(); res.json({ ok: true }) }))
-  return { resolve(user, id, target, input) {
+  return { recommendations, resolve(user, id, target, input) {
     const record = own(user, id)
     if (!record.compatibility.usable || !record.targets.includes(target)) throw fail(record.compatibility.usable ? record.fit.reason : record.compatibility.reason, 422)
     if (!input || typeof input.markdown !== 'string') throw fail('本机缺少 Skill MD 文件，请到“发现 Skill → 已安装”重新下载', 409)

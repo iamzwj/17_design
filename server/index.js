@@ -472,7 +472,7 @@ app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
 const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
-const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth })
+const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth, warmRecommendations: true })
 const localSkillRuntime = new Map()
 const waterfallSlotRuns = new Set()
 function prepareGenerationSkill(req, target, previous = null) {
