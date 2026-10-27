@@ -3,6 +3,7 @@ import { createFestivalPosterTask, downloadGeneratedImage, generateFestivalPoste
 import { Icon } from './icons.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import ToolPageHeader from './ToolPageHeader.jsx'
+import ComposerSelect from './ComposerSelect.jsx'
 import './festivalPoster.css'
 
 const FESTIVAL_DRAFT_KEY = 'diefa-festival-poster-draft-v1'
@@ -125,7 +126,7 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
 
   return <section className="workspace festival-poster-workspace"><div className="festival-poster-page">
     <ToolPageHeader eyebrow="CONTENT CREATION" title="朴邻节日节气海报"/>
-    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日节气海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日或节气，例如国庆、重阳、冬至" maxLength={24}/><select aria-label="海报风格" value={store.style} onChange={(event) => changeStyle(event.target.value)}>{FESTIVAL_STYLES.map((style) => <option key={style.value} value={style.value}>{style.label}</option>)}</select><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
+    <div className="festival-waterfall-composer"><label htmlFor="festival-name">新建节日节气海报</label><div className="festival-input-row horizontal"><input id="festival-name" value={store.festival} onChange={(event) => changeFestival(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) submitFestival() }} placeholder="输入节日或节气，例如国庆、重阳、冬至" maxLength={24}/><ComposerSelect className="festival-style-select" label="海报风格" value={store.style} options={FESTIVAL_STYLES} onChange={changeStyle}/><button type="button" onClick={submitFestival} disabled={!store.festival.trim() || store.creating}>{store.creating ? '生成中…' : '生成'}<Icon name="spark" size={17}/></button></div>{store.error && <div className="festival-error">{store.error}</div>}</div>
     <div className="festival-task-stream">
       {store.loadingHistory && store.tasks.length === 0 ? <div className="festival-empty glass-strong"><i className="festival-loader"/><b>正在加载历史任务</b></div> : store.tasks.length === 0 ? <div className="festival-empty glass-strong"><Icon name="image" size={28}/><b>还没有节日节气海报任务</b><span>输入节日或节气后可以连续创建多组任务。</span></div> : store.tasks.map((task) => {
         const plans = Array.isArray(task.plans) ? task.plans : []
