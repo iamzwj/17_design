@@ -94,7 +94,7 @@ export default function SkillLibrary({ user, onLogin, onUse }) {
   const editor = session.editor
   return <section className="skill-workspace">
     <div className="skill-page">
-      <header className="skill-header"><div><h1>Skill 库<span>把经验，变成下一次的起点。</span></h1><p>把好用的方法整理成 Skill，和团队一起积累、复用。</p></div><div className="skill-header-actions"><input ref={importInput} type="file" accept=".md,text/markdown" hidden aria-label="上传 Skill Markdown 文件" onChange={importFile}/><button disabled={busy} onClick={() => user ? importInput.current?.click() : onLogin()}>导入 Skill</button><button className="skill-primary" disabled={busy} onClick={() => user ? action(async () => {
+      <header className="skill-header"><div><h1>团队 Skill<span>把经验，变成下一次的起点。</span></h1><p>把好用的方法整理成 Skill，和团队一起积累、复用。</p></div><div className="skill-header-actions"><input ref={importInput} type="file" accept=".md,text/markdown" hidden aria-label="上传 Skill Markdown 文件" onChange={importFile}/><button disabled={busy} onClick={() => user ? importInput.current?.click() : onLogin()}>导入 Skill</button><button className="skill-primary" disabled={busy} onClick={() => user ? action(async () => {
         if (editor) await saveDraft()
         const { skill } = await skillRequest('', {}); openDraft(skill)
       }) : onLogin()}><Icon name="plus" size={16}/>新增 Skill</button></div></header>

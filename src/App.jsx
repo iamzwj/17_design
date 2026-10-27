@@ -18,6 +18,8 @@ import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import MaterialLibrary from './MaterialLibrary.jsx'
 import KnowledgeStudio from './KnowledgeStudio.jsx'
 import SkillLibrary from './SkillLibrary.jsx'
+import DiscoverSkills from './DiscoverSkills.jsx'
+import { resumeLocalSkillTask } from './externalSkillClient.js'
 import GenerationSkillPicker from './GenerationSkillPicker.jsx'
 import { selectGenerationSkill, useGenerationSkill } from './generationSkills.js'
 import KnowledgeContext from './KnowledgeContext.jsx'
@@ -458,6 +460,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
   const [accountExpanded, setAccountExpanded] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
   const [knowledgeExpanded, setKnowledgeExpanded] = useState(() => KNOWLEDGE_SECTIONS.some((item) => item.id === active))
+  const [skillsExpanded, setSkillsExpanded] = useState(() => ['skills', 'discover-skills'].includes(active))
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
   const [moreExpanded, setMoreExpanded] = useState(false)
   const accountCloseTimer = useRef(null)
@@ -496,6 +499,11 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {active === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
             <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日节气海报</button>
+          </div>}
+        </div> : item.id === 'skills' ? <div className="more-tool-nav" key={item.id}>
+          <button className={['skills', 'discover-skills'].includes(active) ? 'active' : ''} aria-expanded={skillsExpanded} aria-controls="skills-submenu" onClick={() => setSkillsExpanded((value) => !value)}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {skillsExpanded && <div id="skills-submenu" className="module-submenu" role="menu" aria-label="Skill 库目录">
+            {[['skills', '团队 Skill'], ['discover-skills', '发现 Skill']].map(([id, label]) => <button key={id} type="button" role="menuitem" aria-current={active === id ? 'page' : undefined} className={active === id ? 'active' : ''} onClick={() => { onChange(id); onClose() }}>{label}</button>)}
           </div>}
         </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
           <button className={knowledgeActive ? 'active' : ''} aria-expanded={knowledgeExpanded} aria-controls="knowledge-submenu" onClick={() => setKnowledgeExpanded((value) => !value)}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -877,6 +885,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
 }
 
 function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin }) {
+  const localSkillResumeAttempts = useRef(new Set())
   const dismissedFailureTaskIds = useRef(new Set())
   const sessionTaskIds = useRef(new Set())
   const isInitialTaskLoad = useRef(true)
@@ -945,6 +954,12 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
           dismissedFailureTaskIds.current.add(task.id)
           return false
         })
+        for (const task of fetchedTasks) {
+          if (task.slots?.some((slot) => slot.phase === 'needs-local-skill') && !localSkillResumeAttempts.current.has(task.id)) {
+            localSkillResumeAttempts.current.add(task.id)
+            void resumeLocalSkillTask(task).catch((error) => { if (active) setError(error.message) })
+          }
+        }
         setTasks((current) => {
           const currentById = new Map(current.map((task) => [task.id, task]))
           const freshestFetched = fetchedTasks.map((task) => {
@@ -1200,7 +1215,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
           return <article className="waterfall-task" key={task.id}>
           <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <QuietReferenceImage src={url} key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url: referenceThumbnails[index], prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><QuietReferenceImage src={referenceThumbnails[index]}/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{task.skillSnapshot?.title && `${task.skillSnapshot.title} · `}{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {imageModelLabel(task.model)} · {task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO} · {waterfallPixelSize(task)}</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{isFailedWaterfallTask(task) && <span className="waterfall-task-status failed" title={task.error || task.slots?.find((slot) => slot.error)?.error || '生成失败'}>生图失败</span>}{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status}`} style={{ aspectRatio: (task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO).replace(':', ' / ') }} key={slot.index}>
-            {slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage} onRetryLogo={async () => { try { await retryWaterfallLogo(task.id, slot.index); setRefreshToken((v) => v + 1) } catch (err) { setError(err.message) } }}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'running' && slot.phase === 'needs-local-skill' && <div className="waterfall-brand-progress" role="status">等待本机 Skill 文件，请在发现 Skill → 已安装中重新下载</div>}{slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage} onRetryLogo={async () => { try { await retryWaterfallLogo(task.id, slot.index); setRefreshToken((v) => v + 1) } catch (err) { setError(err.message) } }}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}
@@ -1704,7 +1719,7 @@ export default function App() {
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
   const directContent = localPreviewParams.get('module') === 'content'
-  const directSkills = localPreviewParams.get('module') === 'skills'
+  const directSkills = ['skills', 'discover-skills'].includes(localPreviewParams.get('module')) ? localPreviewParams.get('module') : ''
   const directKnowledgeSection = KNOWLEDGE_SECTIONS.find((item) => item.id === localPreviewParams.get('module'))?.id
   const localBatchPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'batch'
   const localAvatarPreview = ['localhost', '127.0.0.1'].includes(window.location.hostname) && localPreviewParams.get('preview') === 'avatar'
@@ -1713,7 +1728,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directSkills ? 'skills' : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
@@ -1784,7 +1799,7 @@ export default function App() {
   }
 
   function changeModule(type) {
-    if (!user && type !== 'more' && type !== 'skills' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
+    if (!user && type !== 'more' && type !== 'skills' && type !== 'discover-skills' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
     startNew(type)
   }
 
@@ -1896,6 +1911,8 @@ export default function App() {
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'skills'
         ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+      : active === 'discover-skills'
+        ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'brand-knowledge'
         ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'

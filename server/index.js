@@ -1,3 +1,4 @@
+import { installExternalSkills } from './externalSkills.js'
 import { MAIZI_IMAGE_MODELS, isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
 import { BANANA_IMAGE_MODEL, BANANA_RATIOS, imageModelInput } from './imageModelInput.js'
 import express from 'express'
@@ -471,13 +472,26 @@ app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
 const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
+const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth })
+const localSkillRuntime = new Map()
+const waterfallSlotRuns = new Set()
 function prepareGenerationSkill(req, target, previous = null) {
   const originalPrompt = req.body?.prompt
   if (typeof originalPrompt !== 'string' || !originalPrompt.trim()) return
-  const snapshot = previous || skillLibrary.resolve(req.user, req.body.skillId, target)
-  req.skillSnapshot = snapshot
+  const externalId = previous?.external ? previous.id : String(req.body.skillId || '').startsWith('external-') ? req.body.skillId : null
+  const snapshot = externalId ? externalSkills.resolve(req.user, externalId, target, req.body.localSkill) : previous || skillLibrary.resolve(req.user, req.body.skillId, target)
+  if (previous?.external && previous.sha256 !== snapshot.sha256) throw Object.assign(new Error('原任务 Skill 版本不一致，请重新下载原版本'), { status: 409 })
   req.skillUserPrompt = originalPrompt
-  req.body.prompt = skillLibrary.prompt(snapshot, originalPrompt, target)
+  if (snapshot?.external) {
+    const metadata = { ...snapshot }; delete metadata.markdown
+    req.skillSnapshot = metadata
+    req.localSkillRules = snapshot
+    // Only task metadata reaches disk. Local rules are applied in memory at submission.
+    skillLibrary.prompt(snapshot, originalPrompt, target)
+  } else {
+    req.skillSnapshot = snapshot
+    req.body.prompt = skillLibrary.prompt(snapshot, originalPrompt, target)
+  }
   if (target === 'image' && snapshot?.id === 'pulin-title' && snapshot.builtIn && !previous) {
     if (req.body.images !== undefined && !Array.isArray(req.body.images)) throw Object.assign(new Error('参考图参数无效'), { status: 400 })
     const reference = fs.readFileSync(path.join(rootDir, 'public/pulin-title/stacked-subtitle-hands.png'))
@@ -854,9 +868,13 @@ function finishWaterfallTaskIfReady(taskId) {
     completedAt: new Date().toISOString(),
   }))
   waterfallControllers.delete(taskId)
+  localSkillRuntime.delete(taskId)
 }
 
 async function runWaterfallSlot(taskId, slotIndex, config) {
+  const runKey = `${taskId}:${slotIndex}`
+  if (waterfallSlotRuns.has(runKey)) return
+  waterfallSlotRuns.add(runKey)
   const controller = new AbortController()
   const controllers = waterfallControllers.get(taskId) || new Set()
   controllers.add(controller)
@@ -919,6 +937,7 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     }))
     if (shouldRefund) await refundWaterfallCredits(taskId, waterfallCreditCostPerImage(task))
   } finally {
+    waterfallSlotRuns.delete(runKey)
     controllers.delete(controller)
     finishWaterfallTaskIfReady(taskId)
   }
@@ -941,12 +960,19 @@ async function stopWaterfallTask(taskId, status = 'cancelled') {
       } : slot),
     }
   })
+  localSkillRuntime.delete(taskId)
   for (const controller of waterfallControllers.get(taskId) || []) controller.abort()
   await refundWaterfallCredits(taskId, unfinishedCount * waterfallCreditCostPerImage(task))
   return waterfallTasks.find((item) => item.id === taskId)
 }
 
 async function runWaterfallTask(task, images) {
+  const needsLocalRules = task.skillSnapshot?.external && !localSkillRuntime.has(task.id)
+  if (needsLocalRules && task.slots.some((slot) => slot.status === 'running' && !slot.upstreamId)) {
+    updateWaterfallTask(task.id, (current) => ({ ...current, slots: current.slots.map((slot) => slot.status === 'running' && !slot.upstreamId ? { ...slot, phase: 'needs-local-skill', lastEvent: '等待本机 Skill 文件恢复' } : slot) }))
+    setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, Math.max(5000, 10 * 60 * 1000 - (Date.now() - new Date(task.createdAt).getTime()))).unref()
+    if (!task.slots.some((slot) => slot.status === 'running' && slot.upstreamId)) return
+  }
   const remainingTime = Math.max(5_000, 10 * 60 * 1000 - (Date.now() - new Date(task.createdAt).getTime()))
   const timeout = setTimeout(() => { void stopWaterfallTask(task.id, 'timeout') }, remainingTime)
   try {
@@ -964,14 +990,14 @@ async function runWaterfallTask(task, images) {
       model: task.model || 'gpt-image-2.5',
       resolution: task.resolution || '1k',
       ratio: task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO,
-      prompt: task.effectivePrompt || task.prompt,
+      prompt: task.skillSnapshot?.external && localSkillRuntime.has(task.id) ? skillLibrary.prompt(localSkillRuntime.get(task.id), task.effectivePrompt || task.prompt, 'image') : task.effectivePrompt || task.prompt,
       images: [...upstreamImages, ...(task.knowledgeTraceId ? await knowledge.restoreImages(task.knowledgeTraceId, true) : [])],
       aspectRatio: task.generationSize || generationSize(task.model || 'gpt-image-2.5', task.resolution || '2k', task.resolvedAspectRatio || '1:1'),
       quality: task.quality || DEFAULT_IMAGE_QUALITY,
-      retryTransientFailure: task.surface === 'conversation',
+      retryTransientFailure: task.surface === 'conversation' && (!task.skillSnapshot?.external || localSkillRuntime.has(task.id)),
     }
     if (waterfallTasks.find((item) => item.id === task.id)?.status !== 'running') return
-    await Promise.allSettled(task.slots.map((_, index) => runWaterfallSlot(task.id, index, config)))
+    await Promise.allSettled(task.slots.map((slot, index) => slot.status === 'running' && (!needsLocalRules || slot.upstreamId) ? runWaterfallSlot(task.id, index, config) : null))
   } catch (error) {
     if (waterfallTasks.find((item) => item.id === task.id)?.status !== 'running') return
     const runningCount = waterfallTasks.find((item) => item.id === task.id)?.slots.filter((slot) => slot.status === 'running').length || 0
@@ -983,7 +1009,7 @@ async function runWaterfallTask(task, images) {
       slots: current.slots.map((slot) => ({ ...slot, status: 'failed', error: error?.message || '读取参考图失败' })),
     }))
     await refundWaterfallCredits(task.id, runningCount * waterfallCreditCostPerImage(task))
-  } finally { clearTimeout(timeout) }
+  } finally { clearTimeout(timeout); if (waterfallTasks.find((item) => item.id === task.id)?.status !== 'running') localSkillRuntime.delete(task.id) }
 }
 
 // Logo retries reuse the immutable pre-composition image, never a new image request.
@@ -1633,7 +1659,8 @@ app.post('/api/image', requireAuth, imageSkillMiddleware, knowledgeMiddleware('i
   let chargedUser = null
   let creditCost = 0
   try {
-    const { prompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution, quality = DEFAULT_IMAGE_QUALITY, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
+    const { prompt: originalImagePrompt, images = [], aspectRatio = DEFAULT_IMAGE_ASPECT_RATIO, model, resolution, quality = DEFAULT_IMAGE_QUALITY, removeBackground = false, backgroundColor = '#ff00ff' } = req.body
+    const prompt = req.localSkillRules ? skillLibrary.prompt(req.localSkillRules, originalImagePrompt, 'image') : originalImagePrompt
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt 不能为空' })
     }
@@ -1697,7 +1724,8 @@ app.post('/api/video/references', requireAuth, async (req, res, next) => {
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
   try {
     prepareGenerationSkill(req, 'video')
-    const { model, prompt, durationSeconds, resolution, aspectRatio, referenceMode = 'text', imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], referenceVideoUrls = [], omniReferenceTaskType } = req.body || {}
+    const { model, prompt: originalVideoPrompt, durationSeconds, resolution, aspectRatio, referenceMode = 'text', imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], referenceVideoUrls = [], omniReferenceTaskType } = req.body || {}
+    const prompt = req.localSkillRules ? skillLibrary.prompt(req.localSkillRules, originalVideoPrompt, 'video') : originalVideoPrompt
     if (model === 'minimax-h3') {
       if (!String(prompt || '').trim()) return res.status(400).json({ error: '视频提示词不能为空' })
       if (!['portrait', 'landscape', 'square'].includes(aspectRatio)) return res.status(400).json({ error: 'MiniMax H3 仅支持横屏、竖屏或方屏' })
@@ -1902,6 +1930,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
       refundedCount: 0,
       slots: Array.from({ length: requestedCount }, (_, index) => ({ index, status: 'running', phase: 'queued', lastEvent: '等待提交', url: null, error: null, upstreamId: null })),
     }
+    if (req.localSkillRules) localSkillRuntime.set(task.id, req.localSkillRules)
     waterfallTasks = [task, ...waterfallTasks]
     saveWaterfallTasks()
     if (task.knowledgeTraceId) knowledge.finish(task.knowledgeTraceId, { taskId: task.id, status: 'running', model: settings.model })
@@ -1931,6 +1960,18 @@ app.post('/api/waterfall/tasks/:id/slots/:index/logo', requireAuth, async (req, 
     const updated = updateWaterfallTask(task.id, (t) => ({ ...t, slots: t.slots.map((s, i) => i === index ? { ...s, logoRepairStatus: 'queued' } : s) }))
     setImmediate(() => runLogoRepair(task.id, index))
     res.status(202).json({ task: updated })
+  } catch (error) { next(error) }
+})
+
+app.post('/api/waterfall/tasks/:id/resume-skill', requireAuth, (req, res, next) => {
+  try {
+    const task = waterfallTasks.find((item) => item.id === req.params.id && item.userId === req.user.id)
+    if (!task || !task.skillSnapshot?.external) return res.status(404).json({ error: '任务不存在或不使用本地 Skill' })
+    if (task.status !== 'running' || !task.slots.some((slot) => slot.phase === 'needs-local-skill' && slot.status === 'running')) return res.json({ task })
+    const snapshot = externalSkills.resolve(req.user, task.skillSnapshot.id, 'image', req.body.localSkill)
+    if (snapshot.sha256 !== task.skillSnapshot.sha256) return res.status(409).json({ error: '本地 Skill 与原任务版本不一致，请重新下载原版本' })
+    if (!localSkillRuntime.has(task.id)) { localSkillRuntime.set(task.id, snapshot); setImmediate(() => runWaterfallTask(task, task.referenceImages || [])) }
+    res.json({ task })
   } catch (error) { next(error) }
 })
 

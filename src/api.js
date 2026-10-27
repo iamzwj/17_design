@@ -16,6 +16,7 @@ export function saveAuthToken(token, remember) {
   const storage = remember ? localStorage : sessionStorage
   storage.setItem(AUTH_TOKEN_KEY, token)
   storage.setItem(AUTH_REMEMBER_KEY, remember ? '1' : '0')
+  window.dispatchEvent(new Event('dgen-auth-changed'))
 }
 
 export function clearAuthToken() {
@@ -23,6 +24,7 @@ export function clearAuthToken() {
   localStorage.removeItem(AUTH_REMEMBER_KEY)
   sessionStorage.removeItem(AUTH_TOKEN_KEY)
   sessionStorage.removeItem(AUTH_REMEMBER_KEY)
+  window.dispatchEvent(new Event('dgen-auth-changed'))
 }
 
 function apiUrl(path) {
@@ -54,6 +56,12 @@ function hydrateWaterfallTask(task) {
 }
 
 async function post(path, body, signal) {
+  if (['/api/image', '/api/waterfall/tasks', '/api/video/tasks'].includes(path) && String(body.skillId || '').startsWith('external-')) {
+    const token = getAuthToken()
+    const { externalSkillPayload } = await import('./externalSkillClient.js')
+    body = { ...body, localSkill: await externalSkillPayload(body.skillId, token) }
+    if (getAuthToken() !== token) throw new Error('账号已切换，请重新选择 Skill')
+  }
   if (['/api/image', '/api/waterfall/tasks', '/api/text', '/api/compliance/review'].includes(path) && !Object.hasOwn(body, 'knowledge')) body = { ...body, knowledge: getKnowledgeSelection() }
   let response
   try {
