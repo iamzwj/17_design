@@ -8,7 +8,7 @@
   "theme_color": "#131217",
   "icons": [
     {
-      "src": "/dgen-butterfly-app-icon.png?v=1",
+      "src": "/dgen-ceramic-app-icon.png?v=1",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
