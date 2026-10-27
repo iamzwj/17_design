@@ -449,14 +449,7 @@ function ConversationRow({ conversation, activeConversationId, onSelect, onPin, 
 }
 
 function BrandIcon({ alt = '' }) {
-  const [loaded, setLoaded] = useState(false)
-  return <img
-    className={`brand-icon-static${loaded ? ' is-ready' : ''}`}
-    src="/dgen-butterfly-icon.png?v=1"
-    alt={alt}
-    onLoad={() => setLoaded(true)}
-    onError={() => setLoaded(false)}
-  />
+  return <span className="brand-icon-static" role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}/>
 }
 
 function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
