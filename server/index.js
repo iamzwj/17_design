@@ -465,7 +465,7 @@ app.use('/api/compliance/review', express.json({ limit: '1mb' }))
 app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 // Video references may be up to 200 MB. They are immediately persisted and
 // then sent to the provider as public URLs, never forwarded as base64.
-app.use('/api/knowledge', express.json({ limit: '18mb' }))
+app.use('/api/knowledge', express.json({ limit: '140mb' }))
 app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })

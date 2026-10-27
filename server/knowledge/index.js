@@ -1,3 +1,4 @@
+import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../../shared/knowledgeUpload.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -202,7 +203,18 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   route('get', '/documents', auth, (req, res) => {
     const brand = access(req.user, req.query.brandId), permission = level(req.user, brand)
     const docs = db.prepare('SELECT json FROM documents WHERE brand_id=?').all(brand.id).map(parse).filter((d) => !d.deletedAt && (permission >= 2 || d.publishedVersionId)).map((d) => ({ ...d, version: visibleVersion(d, permission), publishedVersion: get('versions', d.publishedVersionId) })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    const jobs = permission >= 2 ? all('jobs').filter((j) => j.brandId === brand.id).slice(-40).reverse() : []
+    const seenJobs = new Set()
+    const jobs = permission >= 2 ? all('jobs').filter((j) => j.brandId === brand.id).reverse().filter((j) => {
+      const version = get('versions', j.versionId), doc = version && get('documents', version.documentId)
+      if (!doc || doc.deletedAt || doc.latestVersionId !== version.id) return false
+      const key = j.kind === 'vision' ? `vision:${j.analysisId}` : `parse:${version.id}`
+      if (seenJobs.has(key)) return false
+      seenJobs.add(key)
+      return j.kind === 'vision' || (j.status === 'failed' ? version.status === 'failed' : true)
+    }).slice(0, 40).map((j) => {
+      const version = get('versions', j.versionId)
+      return { ...j, documentId: version.documentId, title: version.title, versionNumber: version.number }
+    }) : []
     res.json({ documents: docs, jobs })
   })
   route('get', '/documents/:id', auth, (req, res) => res.json(details(req.user, req.params.id)))
@@ -220,9 +232,9 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (req.body.file) {
       const upload = req.body.file
       const ext = path.extname(clean(upload.name, 180)).toLowerCase()
-      if (!['.pdf', '.docx', '.txt', '.md', '.png', '.jpg', '.jpeg', '.webp'].includes(ext)) fail('不支持此格式，请上传 PDF、DOCX、TXT、Markdown 或图片')
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(upload.base64 || '') || upload.base64.length > 17_000_000) fail('文件编码无效或超过 12MB')
-      const buffer = Buffer.from(upload.base64, 'base64'); if (!buffer.length || buffer.length > 12 * 1024 * 1024) fail('文件为空或超过 12MB')
+      if (!KNOWLEDGE_FILE_EXTENSIONS.includes(ext)) fail(`不支持此格式，请上传 ${KNOWLEDGE_FILE_FORMATS}`)
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(upload.base64 || '') || upload.base64.length > 4 * Math.ceil(KNOWLEDGE_MAX_FILE_BYTES / 3)) fail('文件编码无效或超过 100MB')
+      const buffer = Buffer.from(upload.base64, 'base64'); if (!buffer.length || buffer.length > KNOWLEDGE_MAX_FILE_BYTES) fail('文件为空或超过 100MB')
       const usage = fs.readdirSync(originals).reduce((sum, f) => sum + fs.statSync(path.join(originals, f)).size, 0)
       if (usage + buffer.length > 512 * 1024 * 1024) fail('首版原文件配额 512MB 已满，请联系管理员扩容', 413)
       version.file = `${version.id}${ext}`; version.ext = ext; version.originalName = clean(upload.name, 180); version.sha256 = createHash('sha256').update(buffer).digest('hex')

@@ -1,3 +1,4 @@
+import { pptxSections } from './pptx.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import mammoth from 'mammoth'
@@ -35,6 +36,7 @@ export async function parseDocument(version, originalDir) {
   }
   const supplement = version.content ? [{ text: version.content, source: '补充说明' }] : []
   if (['.txt', '.md'].includes(ext)) return splitSections([...supplement, { text: await fs.readFile(file, 'utf8'), source: '文件正文' }])
+  if (ext === '.pptx') return splitSections([...supplement, ...await pptxSections(await fs.readFile(file))])
   if (ext === '.docx') {
     const data = await mammoth.extractRawText({ path: file })
     return splitSections([...supplement, { text: data.value, source: '文档正文' }])
@@ -52,5 +54,5 @@ export async function parseDocument(version, originalDir) {
       return splitSections(sections)
     } finally { await pdf.destroy() }
   }
-  throw new Error('首版支持 PDF、DOCX、TXT、Markdown、PNG、JPG、WebP')
+  throw new Error('支持 PDF、PPTX、DOCX、TXT、Markdown、PNG、JPG、WebP')
 }
