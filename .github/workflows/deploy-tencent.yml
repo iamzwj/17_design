@@ -129,6 +129,17 @@ jobs:
               sudo systemctl reload nginx
             fi
 
+            # A server-level 50m directive overrides the http-level limit above.
+            # Both app domains must accept 100 MB brand files after base64 encoding
+            # (about 134 MB JSON), as well as the existing video reference uploads.
+            for upload_site in /etc/nginx/sites-available/17design.fun /etc/nginx/sites-available/app.17design.fun; do
+              if [ -f "$upload_site" ] && sudo grep -Eq '^[[:space:]]*client_max_body_size[[:space:]]+' "$upload_site" && ! sudo grep -Eq '^[[:space:]]*client_max_body_size[[:space:]]+280m;' "$upload_site"; then
+                sudo cp -p "$upload_site" "$upload_site.before-upload-limit"
+                sudo sed -i -E 's/^([[:space:]]*)client_max_body_size[[:space:]]+[^;]+;/\1client_max_body_size 280m;/' "$upload_site"
+              fi
+            done
+            sudo nginx -t
+
             if [ "$restart_required" -eq 1 ]; then
               sudo systemctl restart 17design
               sleep 2

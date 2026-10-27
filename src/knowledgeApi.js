@@ -1,12 +1,11 @@
 import { getAuthToken } from './api.js'
+import { readKnowledgeResponse } from './knowledgeResponse.js'
 export function knowledgeKey(suffix = '') { return `dgen-knowledge:${getAuthToken().slice(-12) || 'guest'}:${suffix}` }
 export function getKnowledgeSelection() { try { return JSON.parse(localStorage.getItem(knowledgeKey('context'))) || {} } catch { return {} } }
 export async function knowledgeRequest(path, body, method = body === undefined ? 'GET' : 'POST') {
   const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const response = await fetch(`${base}/api/knowledge${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || '知识库请求失败')
-  return data
+  return readKnowledgeResponse(response)
 }
 export async function knowledgeDownload(path, name, preview = false) {
   const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
