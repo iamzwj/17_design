@@ -102,6 +102,11 @@ jobs:
               sudo apt-get update -qq
               sudo apt-get install -y --no-install-recommends g++
             fi
+            # Render uploaded PPTX slides locally before multimodal recognition.
+            if ! command -v soffice >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends libreoffice-impress fonts-noto-cjk
+            fi
             ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm ci
             # Warm and validate the local multilingual model before restarting production.
             DIEFA_DATA_DIR=/home/ubuntu/17_design/data node server/knowledge/warmModel.js

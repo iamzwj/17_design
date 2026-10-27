@@ -1,3 +1,4 @@
+import { renderPptx } from './renderPptx.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
@@ -33,7 +34,7 @@ export async function analyzePage(image, context = '', { request } = {}) {
   return { ...validateAnalysis(value), model: VISION_MODEL, reportedModel: limit(data.model, 100), usage: data.usage || null }
 }
 export async function extractPages(version, originals, range, save) {
-  const file = path.join(originals, version.file)
+  const file = version.ext === '.pptx' ? await renderPptx(path.join(originals, version.file)) : path.join(originals, version.file)
   const pages = []
   const add = async (buffer, source, number, text = '') => {
     const png = await sharp(buffer, { limitInputPixels: 40000000 }).rotate().resize(1800, 1800, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
@@ -41,12 +42,13 @@ export async function extractPages(version, originals, range, save) {
     const stored = await save(png, { source, number, width: metadata.width, height: metadata.height, context: text })
     pages.push(stored)
   }
-  if (version.ext === '.pdf') {
+  if (['.pdf', '.pptx'].includes(version.ext)) {
     globalThis.DOMMatrix ||= DOMMatrix; globalThis.ImageData ||= ImageData; globalThis.Path2D ||= Path2D
     const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
     const pdf = await getDocument({ data: new Uint8Array(await fs.readFile(file)), useSystemFonts: true, isEvalSupported: false }).promise
     try {
       if (pdf.numPages > 100) throw new Error('单份 PDF 最多100页，请拆分后上传')
+      if (range.start > pdf.numPages && range.allowEmpty) return pages
       if (range.start > pdf.numPages) throw new Error(`文件仅${pdf.numPages}页，请调整起始页`)
       for (let n = range.start; n <= Math.min(range.end, pdf.numPages); n++) {
         const page = await pdf.getPage(n), raw = page.getViewport({ scale: 1 })
@@ -62,15 +64,17 @@ export async function extractPages(version, originals, range, save) {
     const zip = await JSZip.loadAsync(await fs.readFile(file))
     if (Object.values(zip.files).reduce((sum, f) => sum + (f._data?.uncompressedSize || 0), 0) > 60 * 1024 * 1024) throw new Error('文档解压超过60MB，请拆分')
     const media = Object.values(zip.files).filter((f) => !f.dir && /^word\/media\/.*\.(png|jpe?g|webp)$/i.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    if (range.start > media.length && range.allowEmpty) return pages
     if (range.start > media.length) throw new Error('此范围没有可读取的内嵌图片；DOCX暂支持PNG/JPG/WebP图片，不支持矢量WMF/EMF')
     const text = (await mammoth.extractRawText({ path: file })).value.slice(0, 14000)
     for (let n = range.start; n <= Math.min(range.end, media.length); n++) await add(await media[n - 1].async('nodebuffer'), `内嵌图片 ${n}（${path.basename(media[n - 1].name)}；DOCX无可靠页码）`, n, text)
   } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(version.ext)) {
     const meta = await sharp(file).metadata()
     if (meta.width * meta.height > 40000000) throw new Error('图片超过4000万像素')
+    if (range.start !== 1 && range.allowEmpty) return pages
     if (range.start !== 1) throw new Error('单张图片请从第1项开始')
     await add(await fs.readFile(file), '原始图片', 1, version.content || '')
-  } else throw new Error('图文解析支持 PDF、DOCX 和图片')
+  } else throw new Error('图文解析支持 PDF、PPTX、DOCX 和图片')
   return pages
 }
 export function cropRectangle(box, width, height) {

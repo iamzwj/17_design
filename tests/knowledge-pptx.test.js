@@ -26,7 +26,7 @@ test('PPTX over 12MB uploads, processes, publishes, searches and downloads uncha
   const user = { id: 'admin', email: 'zhangwj159@onewo.com' }
   const app = express(); app.use(express.json({ limit: '140mb' }))
   const auth = (req, res, next) => { req.user = user; next() }
-  const kb = installKnowledge(app, { dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => [user], embed: async (texts) => texts.map(() => [1, 0]) })
+  const kb = installKnowledge(app, { automaticVision: false, dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => [user], embed: async (texts) => texts.map(() => [1, 0]) })
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r))
   const base = `http://127.0.0.1:${server.address().port}/api/knowledge`

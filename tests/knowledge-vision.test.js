@@ -45,7 +45,7 @@ test('persisted vision tasks, permission isolation, safe import, original-logo c
   const auth = (req, res, next) => { req.user = users.find((u) => u.id === req.headers['x-user']); if (!req.user) return res.status(401).json({ error: 'login' }); next() }
   let calls = 0
   const result = { text: '主营墙面修缮，正式紫色Logo，禁止拉伸和改色', business: '墙面修缮', rules: ['禁止拉伸、改色'], assets: [{ title: '正式Logo', kind: 'logo', description: '正式标志原图', box: [100, 100, 900, 900] }, { title: '禁用示例', kind: 'prohibited', box: [0, 0, 1000, 1000] }] }
-  const opts = { reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]), analyze: async () => { calls++; if (calls === 1) throw new Error('mock transient'); return result } }
+  const opts = { automaticVision: false, reviewLogo: async () => ({ boxes: [], model: 'test' }), dataDir: dir, requireAuth: auth, requireAdmin: auth, listUsers: () => users, embed: async (texts) => texts.map(() => [1, 0]), analyze: async () => { calls++; if (calls === 1) throw new Error('mock transient'); return result } }
   let kb = installKnowledge(app, opts)
   app.use((e, req, res, _next) => res.status(e.status || 500).json({ error: e.message }))
   const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r)); const base = `http://127.0.0.1:${server.address().port}/api/knowledge`

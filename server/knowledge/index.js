@@ -7,7 +7,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import Database from 'better-sqlite3'
 import sharp from 'sharp'
 import { createEmbedder, EMBEDDING_MODEL } from './embedding.js'
-import { parseDocument } from './parse.js'
+import { parseDocument, splitSections } from './parse.js'
 import { reviewLogo } from './logoReview.js'
 import { composeBrandLogo } from './compose.js'
 import { analyzePage, extractPages, cropRectangle, VISION_MODEL } from './vision.js'
@@ -24,7 +24,7 @@ const segmenter = new Intl.Segmenter('zh', { granularity: 'word' })
 function terms(text) { return [...new Set([...segmenter.segment(text.toLowerCase())].filter((x) => x.isWordLike).map((x) => x.segment))] }
 function similarity(a, b) { if (a.length !== b.length) return 0; return a.reduce((sum, value, i) => sum + value * b[i], 0) }
 
-export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, materialDir = fileURLToPath(new URL('../../public/material-library/', import.meta.url)) }) {
+export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, automaticVision = true, materialDir = fileURLToPath(new URL('../../public/material-library/', import.meta.url)) }) {
   const directory = path.join(dataDir, 'knowledge'), originals = path.join(directory, 'originals')
   fs.mkdirSync(originals, { recursive: true })
   const visuals = path.join(directory, 'visuals'); fs.mkdirSync(visuals, { recursive: true })
@@ -93,6 +93,16 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     version.status = 'queued'; version.error = null; versionPut(version)
     jobPut({ id: id(), versionId: version.id, brandId: version.brandId, status: 'queued', stage: '等待处理', createdAt: now(), updatedAt: now() }); schedule()
   }
+  const visionExtensions = ['.pdf', '.pptx', '.docx', '.png', '.jpg', '.jpeg', '.webp']
+  function queueAutomaticAnalysis(version, userId) {
+    const existing = all('analyses').find((a) => a.versionId === version.id && a.automatic)
+    if (existing) return existing
+    const analysis = { id: id(), documentId: version.documentId, versionId: version.id, brandId: version.brandId, model: VISION_MODEL, status: 'queued', automatic: true, range: { start: 1, end: 100 }, pages: [], nextPage: 1, createdBy: userId, createdAt: now(), updatedAt: now() }
+    put('analyses', analysis)
+    jobPut({ id: id(), kind: 'vision', analysisId: analysis.id, versionId: version.id, brandId: version.brandId, status: 'queued', stage: '等待自动图文解析', createdAt: now(), updatedAt: now() })
+    schedule()
+    return analysis
+  }
   async function drain() {
     if (draining || stopped) return
     draining = true
@@ -126,7 +136,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
             chunks.forEach(chunkPut)
             version = { ...version, publishRequestedBy: get('versions', version.id)?.publishRequestedBy, status: 'ready', error: null, chunkCount: chunks.length, embeddingModel: EMBEDDING_MODEL }; delete version.editedChunks; versionPut(version)
             job.status = 'succeeded'; job.stage = '待发布'
-            if (version.publishRequestedBy) {
+            if (version.publishRequestedBy && !all('analyses').some((a) => a.versionId === version.id && ['queued', 'running', 'failed'].includes(a.status))) {
               const publisher = listUsers().find((u) => u.id === version.publishRequestedBy), doc = get('documents', version.documentId)
               if (doc && !doc.deletedAt && doc.latestVersionId === version.id && level(publisher, get('brands', version.brandId)) >= 3) {
                 version.publishedAt = now(); version.publishedBy = publisher.id; versionPut(version)
@@ -149,16 +159,27 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     try {
       if (!version || get('documents', version.documentId)?.deletedAt) throw new Error('原资料已不可用')
       update('running', '提取原文页面与图片')
-      if (!analysis.pages.length) {
-        // Commit all extracted pages before any outbound call. A restart resumes completed pages.
-        const pages = await extractPages(version, originals, analysis.range, async (buffer, info) => {
+      if (!analysis.extractionComplete && (analysis.automatic || !analysis.pages.length)) {
+        const savePage = async (buffer, info) => {
           const usage = fs.readdirSync(visuals).reduce((sum, f) => sum + fs.statSync(path.join(visuals, f)).size, 0)
           if (usage + buffer.length > 512 * 1024 * 1024) throw new Error('图文预览配额512MB已满，请联系管理员')
           const file = `${analysis.id}-${info.number}.png`
           fs.writeFileSync(path.join(visuals, file), buffer, { mode: 0o600 })
-          return { ...info, file, sha256: createHash('sha256').update(buffer).digest('hex') }
-        })
-        analysis.pages = pages; put('analyses', analysis)
+          const page = { ...info, file, sha256: createHash('sha256').update(buffer).digest('hex') }
+          analysis.pages.push(page)
+          analysis.nextPage = info.number + 1
+          put('analyses', analysis)
+          return page
+        }
+        if (analysis.automatic) {
+          while ((analysis.nextPage || 1) <= 100) {
+            const start = analysis.nextPage || 1
+            const pages = await extractPages(version, originals, { start, end: Math.min(start + 19, 100), allowEmpty: true }, savePage)
+            if (pages.length < 20) break
+          }
+        } else await extractPages(version, originals, analysis.range, savePage)
+        analysis.extractionComplete = true
+        put('analyses', analysis)
       }
       job.total = analysis.pages.length
       for (let i = 0; i < analysis.pages.length; i++) {
@@ -171,7 +192,22 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
         }
         job.completed = i + 1; jobPut(job)
       }
-      update('succeeded', '图文解析完成，等待确认')
+      if (analysis.automatic && !analysis.textMerged) {
+        const sections = analysis.pages.filter((p) => p.result).map((p) => ({ source: `${p.source} · 图文识别`, text: [p.result.text, p.result.business, ...(p.result.rules || [])].filter(Boolean).join('\n') })).filter((s) => s.text.trim())
+        const doc = get('documents', version.documentId)
+        if (!doc || doc.deletedAt || doc.latestVersionId !== version.id) throw new Error('资料版本已变化，识别结果保留但不覆盖新版本')
+        if (sections.length) {
+          const merged = [...chunksFor(version.id).map(({ text, source, enabled }) => ({ text, source, enabled })), ...splitSections(sections)]
+          const unique = [...new Map(merged.map((c) => [`${c.source}:${c.text}`, c])).values()]
+          if (unique.length > 2000) throw new Error('图文识别分段超过2000段，请拆分资料')
+          version.editedChunks = unique
+          queue(version)
+        }
+        analysis.textMerged = true
+        put('analyses', analysis)
+      }
+      analysis.error = null; job.error = null
+      update('succeeded', analysis.pages.length ? '图文解析完成，等待核对发布' : '文字已提取，无需识别内嵌图片')
     } catch (error) { analysis.error = String(error.message).slice(0, 500); job.error = analysis.error; update('failed', '图文解析失败，可重试') }
   }
   function analysisAccess(user, key, role = 'view') {
@@ -186,7 +222,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   const route = (method, url, guards, handler) => app[method](`/api/knowledge${url}`, ...guards, async (req, res, next) => { try { await handler(req, res) } catch (error) { next(error) } })
   const auth = [requireAuth], admin = [requireAdmin]
   route('get', '/bootstrap', auth, (req, res) => {
-    res.json({ brands: all('brands').filter((b) => level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: 12, maxDocuments: 300, maxChunks: 10000 } })
+    res.json({ brands: all('brands').filter((b) => level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })
   })
   route('post', '/brands', admin, (req, res) => {
     const name = clean(req.body.name, 60); if (!name) fail('请输入品牌名称')
@@ -215,6 +251,10 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       const version = get('versions', j.versionId)
       return { ...j, documentId: version.documentId, title: version.title, versionNumber: version.number }
     }) : []
+    for (const doc of docs) {
+      const automatic = all('analyses').find((a) => a.versionId === doc.version?.id && a.automatic)
+      if (automatic) doc.automaticAnalysis = { status: automatic.status, completed: automatic.pages.filter((p) => p.result).length, total: automatic.pages.length, error: automatic.error }
+    }
     res.json({ documents: docs, jobs })
   })
   route('get', '/documents/:id', auth, (req, res) => res.json(details(req.user, req.params.id)))
@@ -251,7 +291,10 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       version.editedChunks = chunksFor(previous.id).map(({ text, source, enabled }) => ({ text, source, enabled }))
       if (!version.editedChunks.length) delete version.editedChunks
     }
-    db.transaction(() => { versionPut(version); doc.latestVersionId = version.id; doc.updatedAt = now(); docPut(doc); queue(version) })()
+    db.transaction(() => {
+      versionPut(version); doc.latestVersionId = version.id; doc.updatedAt = now(); docPut(doc); queue(version)
+      if (automaticVision && req.body.file && visionExtensions.includes(version.ext) && ['document', 'rule', 'palette'].includes(kind)) queueAutomaticAnalysis(version, req.user.id)
+    })()
     return version
   }
   route('post', '/documents', auth, async (req, res) => {
@@ -274,6 +317,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   route('post', '/documents/:id/publish', auth, (req, res) => {
     const { doc } = document(req.user, req.params.id, 'publish'), v = get('versions', req.body.versionId)
     if (!v || v.documentId !== doc.id || v.status !== 'ready') fail('请选择处理完成的版本')
+    if (all('analyses').some((a) => a.versionId === v.id && a.automatic && a.status !== 'succeeded')) fail('请等待自动图文解析完成，失败时先重试未完成页面')
     if (!chunksFor(v.id).some((c) => c.enabled)) fail('至少保留一个启用分段')
     if (v.kind === 'rule' && chunksFor(v.id).filter((c) => c.enabled).reduce((sum, c) => sum + c.text.length, 0) > 10000) fail('强制规则过长，请精简到 10000 字以内')
     const count = db.prepare('SELECT COUNT(*) AS n FROM chunks').get().n
@@ -293,14 +337,26 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (!version || version.documentId !== doc.id || !version.file || (permission < 2 && !version.publishedAt)) fail('文件不存在或无权访问', 404)
     res.set('Cache-Control', 'private, no-store').download(path.join(originals, version.file), version.originalName)
   })
-  route('post', '/documents/:id/analyze', auth, (req, res) => {
+  route('post', '/documents/:id/analyze', auth, async (req, res) => {
     const { doc } = document(req.user, req.params.id, 'edit')
     const version = get('versions', req.body.versionId)
     if (!version || version.documentId !== doc.id || !version.file) fail('请选择含原文件的版本')
     if (all('analyses').some((a) => a.documentId === doc.id && ['queued', 'running'].includes(a.status))) fail('该资料正在图文解析，请等待完成', 409)
+    if (req.body.automatic) {
+      if (!visionExtensions.includes(version.ext)) fail('此格式无需图文解析')
+      const existing = all('analyses').find((a) => a.versionId === version.id && a.automatic)
+      if (existing) fail('整份解析已启动过，请查看记录或重试未完成页面', 409)
+      let draft = version
+      if (version.publishedAt) {
+        if (version.id !== doc.latestVersionId) fail('请切换到最新版本后解析')
+        req.body = { title: version.title, kind: version.kind, category: version.category, keywords: version.keywords, content: version.content }
+        draft = await saveVersion(req, doc)
+      }
+      return res.status(202).json({ analysis: queueAutomaticAnalysis(draft, req.user.id) })
+    }
     const start = Number(req.body.start || 1), end = Number(req.body.end || start)
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > 100 || end - start >= 20) fail('每次选择1至20页/张，范围须在1至100内')
-    if (!['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'].includes(version.ext)) fail('请选择PDF、DOCX或图片')
+    if (!visionExtensions.includes(version.ext)) fail('请选择PDF、PPTX、DOCX或图片')
     const analysis = { id: id(), documentId: doc.id, versionId: version.id, brandId: doc.brandId, model: VISION_MODEL, status: 'queued', range: { start, end }, pages: [], createdBy: req.user.id, createdAt: now(), updatedAt: now() }
     put('analyses', analysis)
     jobPut({ id: id(), kind: 'vision', analysisId: analysis.id, versionId: version.id, brandId: doc.brandId, status: 'queued', stage: '等待图文解析', createdAt: now(), updatedAt: now() }); schedule()
