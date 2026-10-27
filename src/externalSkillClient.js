@@ -25,7 +25,7 @@ export async function externalSkillPayload(id, token = getAuthToken()) {
   return { markdown }
 }
 const key = (owner) => `dgen-discover-state:${owner}`
-const initial = { tab: 'discover', query: '', results: [], preview: null, jobs: {}, error: '', notice: '' }
+const initial = { tab: 'discover', filter: 'related', query: '', results: [], preview: null, jobs: {}, error: '', notice: '' }
 export function readDiscovery(owner) { try { return { ...initial, ...JSON.parse(localStorage.getItem(key(owner)) || 'null') } } catch { return { ...initial } } }
 export function updateDiscovery(owner, patch) {
   const next = { ...readDiscovery(owner), ...patch }; localStorage.setItem(key(owner), JSON.stringify(next)); window.dispatchEvent(new CustomEvent('dgen-discovery-change', { detail: owner })); return next

@@ -25,7 +25,7 @@ test('published skills drive real image/video provider payloads; built-in title 
   fs.writeFileSync(path.join(directory, 'auth.json'), JSON.stringify({ users: [{ id: 'qa', email: 'qa@example.test', passwordHash: 'unused', credits: 100 }], codes: [], sessions: [{ tokenHash: createHash('sha256').update(token).digest('hex'), userId: 'qa', expiresAt: Date.now() + 3600000 }] }))
   const externalMarkdown = '---\nname: local-poster\ndescription: 本机海报规则\n---\n\nLOCAL_ONLY_VIOLET_RULE_1739 紫色材质'
   const externalId = `external-${randomUUID()}`
-  fs.writeFileSync(path.join(directory, 'external-skill-installs.json'), JSON.stringify([{ id: externalId, ownerId: 'qa', title: 'local-poster', targets: ['image', 'video'], compatibility: { usable: true }, sha256: createHash('sha256').update(externalMarkdown).digest('hex') }]))
+  fs.writeFileSync(path.join(directory, 'external-skill-installs.json'), JSON.stringify([{ id: externalId, ownerId: 'qa', title: 'local-poster', summary: '生成图片和视频', targets: ['image', 'video'], compatibility: { usable: true }, sha256: createHash('sha256').update(externalMarkdown).digest('hex') }]))
   let logs = ''
   const start = () => { const child = spawn(process.execPath, ['server/index.js'], { env: { ...process.env, PORT: String(port), DIEFA_DATA_DIR: directory, GRSAI_BASE_URL: `http://127.0.0.1:${mock.address().port}`, GRSAI_API_KEY: 'test-only', VIBBIT_OPENAPI_BASE_URL: `http://127.0.0.1:${mock.address().port}`, VIBBIT_OPENAPI_KEY: 'test-only' }, stdio: ['ignore', 'pipe', 'pipe'] }); child.stdout.on('data', (d) => { logs += d }); child.stderr.on('data', (d) => { logs += d }); return child }
   let child = start()
