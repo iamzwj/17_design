@@ -14,3 +14,9 @@
 
 .skill-reference-preview { width:100%; max-height:230px; object-fit:contain; display:block; margin:18px 0 0; padding:12px; background:var(--sk-panel); border-radius:9px; }
 .skill-reference-preview.detail { max-width:620px; max-height:320px; margin-top:28px; }
+
+/* Six fixed-height options; additional skills remain keyboard/scroll accessible. */
+.generation-skill-picker .composer-select-menu { max-height: min(274px,60vh); }
+.generation-skill-picker .composer-select-options { max-height: min(264px,calc(60vh - 12px)); overflow-y: auto; overscroll-behavior: contain; }
+.generation-skill-picker .composer-select-options button { height: 44px; min-height: 44px; }
+.generation-skill-picker .composer-select-options button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

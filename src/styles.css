@@ -358,6 +358,11 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .answer-advice strong { color: #b9aaff; }
 :root[data-theme='dark'] .text-sources a { border-color: rgba(255,255,255,.14); color: #d8d4e0; }
 :root[data-theme='dark'] .text-sources a:hover { border-color: rgba(185,170,255,.42); color: #c3b3ff; }
+.text-sources .text-sources-toggle { flex-shrink: 0; padding: 4px 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+.text-sources .text-sources-toggle:hover { background: rgba(107,78,255,.08); }
+.text-sources a:focus-visible, .text-sources .text-sources-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root[data-theme='dark'] .text-sources .text-sources-toggle { color: #c3b3ff; }
+:root[data-theme='dark'] .text-sources .text-sources-toggle:hover { background: rgba(185,170,255,.12); }
 :root[data-theme='dark'] .answer-content,
 :root[data-theme='dark'] .compliance-report,
 :root[data-theme='dark'] .report-paragraph,
@@ -482,3 +487,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .waterfall-logo-recompose:focus-visible { outline: 2px solid #8c73da; outline-offset: 2px; }
 :root[data-theme='dark'] .waterfall-logo-recompose { background: #28252f; color: #e9e1f6; }
 :root[data-theme='dark'] .waterfall-logo-recompose:hover { background: #393143; }
+
+/* Align the Pulin title heading with its full-width composer. */
+.workspace.pulin-title-workspace .pulin-title-page > .tool-page-header { width: 100%; margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }

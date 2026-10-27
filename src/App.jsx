@@ -403,9 +403,15 @@ function AnswerText({ content }) {
 }
 
 function TextSources({ sources }) {
+  const [expanded, setExpanded] = useState(false)
   const items = (sources || []).filter((source) => source?.url)
   if (!items.length) return null
-  return <div className="text-sources" aria-label="联网搜索来源"><span>搜索来源</span>{items.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>)}</div>
+  const visibleItems = expanded ? items : items.slice(0, 2)
+  return <div className="text-sources" aria-label="联网搜索来源">
+    <span>搜索来源</span>
+    {visibleItems.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>)}
+    {items.length > 2 && <button type="button" className="text-sources-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起' : `展开其余 ${items.length - 2} 条`}</button>}
+  </div>
 }
 
 function ConversationRow({ conversation, activeConversationId, onSelect, onPin, onArchive, onRename }) {
@@ -1216,9 +1222,9 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         <textarea ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) { event.preventDefault(); submitTask() } }} placeholder="描述这一组图片…" rows="2"/>
         <div className="composer-tools"><div className="tool-group">
           <button className="tool-button reference-add" type="button" onClick={() => fileRef.current?.click()} disabled={references.length >= referenceLimit}><Icon name="plus" size={18}/></button><input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (event) => { await appendReferences(event.target.files); event.target.value = '' }}/>
-          <GenerationSkillPicker target="image" state={skillState}/>
           <ComposerSelect label="生图模型" value={model} options={IMAGE_MODEL_OPTIONS} onChange={(nextModel) => { const nextResolution = supportsImageResolution(nextModel) ? '2k' : '1k'; setModel(nextModel); setResolution(nextResolution); setQuality((current) => imageQualityForModel(nextModel, current)); setRatio((current) => normalizedImageRatio(nextModel, nextResolution, current)) }}/>
           <ImageSettings model={model} ratio={ratio} ratios={imageRatioOptions(model, resolution)} onRatio={setRatio} resolution={resolution} onResolution={(nextResolution) => { setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }} quality={quality} onQuality={setQuality} count={count} onCount={setCount}/>
+          <GenerationSkillPicker target="image" state={skillState}/>
           <KnowledgeContext tool="image"/>
         </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
