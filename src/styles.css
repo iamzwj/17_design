@@ -38,9 +38,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .sidebar { position: fixed; z-index: 50; left: 18px; top: 18px; bottom: 18px; width: 246px; border-radius: 27px; padding: 20px 13px 14px; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 4px 22px; margin-left: 2px; }
 .brand-avatar { position: relative; width: 60px; height: 44px; flex: 0 0 60px; display: block; margin-right: 3px; filter: none; }
-.brand-icon-static { position: absolute; inset: 0; width: 100%; height: 100%; background-color: #ffffff; -webkit-mask: url('/dgen-butterfly-icon.png?v=1') center / contain no-repeat; mask: url('/dgen-butterfly-icon.png?v=1') center / contain no-repeat; }
+.brand-icon-static { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent url('/dgen-butterfly-ceramic.png') center / contain no-repeat; }
 .sidebar .brand-icon-static { transform: scaleY(1.18); transform-origin: center; }
-:root[data-theme='light'] .brand-icon-static { background-color: #141419; }
 .brand-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .brand-name { font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; font-size: 20px; line-height: 1.2; font-weight: 600; white-space: nowrap; }
 .brand-caption { color: var(--muted); font-size: 10px; line-height: 1.2; white-space: nowrap; }
