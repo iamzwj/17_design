@@ -41,8 +41,6 @@ const MODULES = [
 const KNOWLEDGE_SECTIONS = [
   { id: 'brand-knowledge', label: '团队品牌知识库' },
   { id: 'assets', label: '素材库' },
-  { id: 'brand-manual', label: '品牌手册' },
-  { id: 'marketing-strategy', label: '营销策略' },
 ]
 
 const RATIO_OPTIONS = [
