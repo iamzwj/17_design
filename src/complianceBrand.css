@@ -1,6 +1,6 @@
 .compliance-brand-select .composer-select-trigger {
   position: relative;
-  width: 176px;
+  width: auto;
   padding: 0 40px 0 12px;
 }
 .compliance-brand-select .composer-select-trigger > svg:last-child {
