@@ -1665,7 +1665,7 @@ function TextStudio({ type, conversation, onSave }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: content })
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: content, ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
@@ -1731,6 +1731,14 @@ export default function App() {
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [active, setActive] = useState(() => directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
+    else if (KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
+      for (const key of ['module', 'brand', 'document', 'version', 'material']) url.searchParams.delete(key)
+    }
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [active])
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)

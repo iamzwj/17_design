@@ -13,7 +13,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
     fs.renameSync(`${file}.next`, file)
   }
   const publicTask = ({ id, status, result, error, createdAt }) => ({ id, status, result, error, createdAt })
-  const owner = (req, kind) => kind === 'text' || req.body?.knowledge?.brandId ? req.user?.id : req.headers['x-text-session']
+  const owner = (req, kind) => kind === 'text' || req.body?.knowledge?.brandId || (req.user && req.body?.complianceBrand) ? req.user?.id : req.headers['x-text-session']
   async function run(task) {
     if (executing.has(task.id)) return
     executing.add(task.id)
@@ -36,7 +36,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
     finally { delete task.input; executing.delete(task.id); save() }
   }
   for (const kind of ['text', 'compliance']) {
-    const guards = kind === 'text' ? [requireAuth] : [(req, res, next) => req.headers.authorization || req.body?.knowledge?.brandId ? requireAuth(req, res, next) : next()]
+    const guards = kind === 'text' ? [requireAuth] : [(req, res, next) => req.headers.authorization || req.body?.knowledge?.brandId || req.body?.complianceBrand ? requireAuth(req, res, next) : next()]
     app.post(`/api/${kind}/tasks`, ...guards, async (req, res, next) => {
       try {
         const scope = owner(req, kind)
@@ -52,7 +52,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
         const input = { ...req.body }; delete input.__knowledge
         const duplicate = tasks.find((task) => task.id === id)
         if (duplicate) return res.json({ task: publicTask(duplicate) })
-        const task = { id, owner: scope, kind, privateKnowledge: Boolean(req.body.knowledge?.brandId), status: 'running', input, user: req.user || null, createdAt: Date.now() }
+        const task = { id, owner: scope, kind, privateKnowledge: Boolean(req.body.knowledge?.brandId || (req.user && req.body.complianceBrand)), status: 'running', input, user: req.user || null, createdAt: Date.now() }
         tasks.push(task); save()
         setImmediate(() => { void run(task) })
         res.status(202).json({ task: publicTask(task) })

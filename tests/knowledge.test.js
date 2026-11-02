@@ -30,7 +30,7 @@ test('brand knowledge permissions, version publishing, index changes, images and
     assert.equal(boot.groups.length, 3)
     assert.equal((await call('/bootstrap', undefined, 'outsider')).data.brands.length, 0)
     await call('/groups', { id: 'group-1', name: '维护组', members: ['editor'] }); await call('/groups', { id: 'group-2', name: '查看组', members: ['viewer'] })
-    await call('/brands', { id: brandId, name: '测试品牌', grants: { 'group-1': 'edit', 'group-2': 'view' } })
+    await call('/brands', { id: brandId, name: '万科物业', grants: { 'group-1': 'edit', 'group-2': 'view' } })
     const created = await call('/documents', { brandId, title: '标志规范', kind: 'rule', content: 'Logo必须使用紫色，不得更改品牌颜色' }, 'editor')
     assert.equal(created.status, 202); const docId = created.data.document.id
     const d = await ready(docId), v1 = d.document.latestVersionId
@@ -39,6 +39,16 @@ test('brand knowledge permissions, version publishing, index changes, images and
     assert.equal((await call('/search', { brandId, query: '颜色' }, 'outsider')).status, 403)
     assert.equal((await call('/search', { brandId, query: '颜色' }, 'viewer')).data.results.length, 0)
     await call(`/documents/${docId}/publish`, { versionId: v1 })
+    const compliance = await kb.prepare(users[2], { complianceBrand: 'vanke-property', knowledge: { brandId: 'stale-other-brand' }, messages: [{ role: 'user', content: '审核品牌颜色' }] }, 'compliance')
+    assert.ok(compliance.prompt.includes('不得更改品牌颜色'))
+    assert.ok(compliance.prompt.includes('法律法规优先于品牌规范'))
+    assert.ok(compliance.sources.some((source) => source.versionId === v1))
+    await assert.rejects(kb.prepare(users[3], { complianceBrand: 'vanke-property' }, 'compliance'), /无权访问/)
+    await assert.rejects(kb.prepare(null, { complianceBrand: 'vanke-property' }, 'compliance'), /登录/)
+    const missing = await kb.prepare(users[0], { complianceBrand: 'xingfushe-live' }, 'compliance')
+    assert.ok(missing.prompt.includes('未引用品牌知识库'))
+    const emptyBrand = await kb.prepare(users[0], { complianceBrand: 'pulin' }, 'compliance')
+    assert.ok(emptyBrand.prompt.includes('当前没有可引用的已发布品牌资料'))
     const found = (await call('/search', { brandId, query: '品牌颜色', mode: 'hybrid' }, 'viewer')).data.results
     assert.equal(found.length, 1); assert.equal(found[0].versionId, v1); assert.equal('vector' in found[0], false)
     const trace = await kb.prepare(users[2], { knowledge: { brandId }, messages: [{ role: 'user', content: '帮我写文案' }] }, 'text')

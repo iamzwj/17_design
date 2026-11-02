@@ -1627,7 +1627,7 @@ installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion
 
 app.post('/api/text', requireAuth, knowledgeMiddleware('text'), handleTextCompletion)
 // Compliance review remains separate from account-only text chat.
-app.post('/api/compliance/review', (req, res, next) => req.body.knowledge?.brandId ? requireAuth(req, res, next) : next(), knowledgeMiddleware('compliance'), handleTextCompletion)
+app.post('/api/compliance/review', (req, res, next) => (req.body.knowledge?.brandId || req.body.complianceBrand) ? requireAuth(req, res, next) : next(), knowledgeMiddleware('compliance'), handleTextCompletion)
 
 // On the server deployment, user reference images are stored on the instance
 // instead of passing through Cloudflare KV or requiring a Google Drive session.

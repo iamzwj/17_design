@@ -30,7 +30,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
   const [linkMaterials, setLinkMaterials] = useState(false)
   const initialMaterial = useRef(new URLSearchParams(window.location.search).get('material'))
   const [bootstrap, setBootstrap] = useState(null), [brandId, setBrandId] = useState(saved.brandId || ''), [tab, setTab] = useState(saved.tab || 'documents')
-  const [documents, setDocuments] = useState([]), [jobs, setJobs] = useState([]), [selected, setSelected] = useState(null), [versionId, setVersionId] = useState('')
+  const [documents, setDocuments] = useState([]), [jobs, setJobs] = useState([]), [selected, setSelected] = useState(null), [versionId, setVersionId] = useState(saved.versionId || '')
   const [draft, setDraft] = useState(saved.draft || null), [draftDoc, setDraftDoc] = useState(saved.draftDoc || null), [query, setQuery] = useState(saved.query || ''), [mode, setMode] = useState(saved.mode || 'hybrid'), [results, setResults] = useState(saved.results || null)
   const [traces, setTraces] = useState([]), [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true)
   const [searchBusy, setSearchBusy] = useState(false)
@@ -54,12 +54,22 @@ export default function KnowledgeStudio({ user, onLogin }) {
     if (target) setBrandId(target.id)
     setTab('documents'); setLinkMaterials(true)
   }, [bootstrap])
-  const linkedDocument = useRef(new URLSearchParams(window.location.search).get('document'))
+  const linkedDocument = useRef(new URLSearchParams(window.location.search).get('document') || saved.selectedDocumentId)
+  const [restoringDocument, setRestoringDocument] = useState(Boolean(linkedDocument.current))
   useEffect(() => {
     if (!bootstrap || !linkedDocument.current) return
-    const documentId = linkedDocument.current; linkedDocument.current = null
-    knowledgeRequest(`/documents/${documentId}`).then((d) => { setBrandId(d.document.brandId); setTab('documents'); setSelected(d); setVersionId(new URLSearchParams(window.location.search).get('version') || d.document.publishedVersionId || d.document.latestVersionId) }).catch((e) => setError(e.message))
-  }, [bootstrap])
+    let live = true
+    const documentId = linkedDocument.current
+    knowledgeRequest(`/documents/${documentId}`).then((d) => {
+      if (!live) return
+      if (!bootstrap.brands.some((b) => b.id === d.document.brandId)) return
+      const params = new URLSearchParams(window.location.search)
+      const preferred = params.get('version') || (saved.selectedDocumentId === documentId ? saved.versionId : '')
+      const targetVersion = d.versions.some((v) => v.id === preferred) ? preferred : d.permission >= 2 ? d.document.latestVersionId : d.document.publishedVersionId
+      setBrandId(d.document.brandId); setTab('documents'); setSelected(d); setVersionId(targetVersion)
+    }).catch((e) => { if (live) setError(e.message) }).finally(() => { if (live) { linkedDocument.current = null; setRestoringDocument(false) } })
+    return () => { live = false }
+  }, [bootstrap, saved.selectedDocumentId, saved.versionId])
   const selectedId = selected?.document.id
   const selectedProcessing = Boolean(selected && (selected.versions.some((v) => ['queued', 'processing'].includes(v.status)) || selected.analyses?.some((a) => ['queued', 'running'].includes(a.status))))
   useEffect(() => {
@@ -70,7 +80,18 @@ export default function KnowledgeStudio({ user, onLogin }) {
   }, [selectedId, selectedProcessing])
   async function loadBootstrap() { const d = await knowledgeRequest('/bootstrap'); setBootstrap(d); setBrandId((value) => { const linked = new URLSearchParams(window.location.search).get('brand'); return d.brands.some((b) => b.id === linked) ? linked : d.brands.some((b) => b.id === value) ? value : d.brands[0]?.id || '' }) }
   useEffect(() => { if (!user) return; loadBootstrap().catch((e) => setError(e.message)).finally(() => setLoading(false)) }, [user])
-  useEffect(() => { localStorage.setItem(knowledgeKey('workspace'), JSON.stringify({ brandId, tab, draft, draftDoc, query, mode, results })) }, [brandId, tab, draft, draftDoc, query, mode, results])
+  useEffect(() => {
+    if (restoringDocument) return
+    localStorage.setItem(knowledgeKey('workspace'), JSON.stringify({ brandId, tab, draft, draftDoc, query, mode, results, selectedDocumentId: selected?.document.id || '', versionId }))
+  }, [brandId, tab, draft, draftDoc, query, mode, results, selected, versionId, restoringDocument])
+  useEffect(() => {
+    if (!bootstrap || restoringDocument || !brandId) return
+    const url = new URL(window.location.href)
+    url.searchParams.set('module', 'brand-knowledge'); url.searchParams.set('brand', brandId)
+    if (selected) { url.searchParams.set('document', selected.document.id); url.searchParams.set('version', versionId || selected.document.latestVersionId) }
+    else { url.searchParams.delete('document'); url.searchParams.delete('version') }
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [bootstrap, brandId, selected, versionId, restoringDocument])
   useEffect(() => {
     if (!brandId || !user) return
     let live = true
@@ -107,7 +128,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
   return <section className="kb-page">
     <header className="kb-heading"><div><h1>品牌知识库</h1><p>让每次创作，都有品牌依据。</p></div>{canEdit && <div className="kb-actions"><button disabled={busy} onClick={() => { setLinkMaterials(true); setSelected(null) }}><Icon name="library" size={16}/>关联素材库</button><button disabled={busy} onClick={() => uploadRef.current.click()}><Icon name="upload" size={16}/>上传文件</button><button className="kb-primary" onClick={() => { setDraft({ ...empty, brandId }); setDraftDoc(null); setSelected(null) }}><Icon name="plus" size={16}/>新建文字</button><input ref={uploadRef} type="file" multiple hidden accept={KNOWLEDGE_FILE_EXTENSIONS.join(',')} onChange={(e) => { void upload(e.target.files); e.target.value = '' }}/></div>}</header>
     {error && <div className="kb-alert" role="alert">{error}<button aria-label="关闭提示" onClick={() => setError('')}>×</button></div>}{notice && <div className="kb-notice" role="status">{notice}</div>}
-    {loading ? <div className="kb-empty">正在加载品牌空间…</div> : <div className="kb-layout"><aside className="kb-brands"><h2>品牌空间</h2>{bootstrap?.brands.map((b) => <button className={brandId === b.id ? 'active' : ''} title={b.name} aria-current={brandId === b.id ? 'true' : undefined} key={b.id} onClick={() => { setBrandId(b.id); setSelected(null); setResults(null); setConfirmAction(null); setLinkMaterials(false) }}><Icon name="book" size={17}/><span>{b.name}</span></button>)}{bootstrap?.isAdmin && <form onSubmit={(e) => { e.preventDefault(); void act(async () => { await knowledgeRequest('/brands', { name: brandName, grants: {} }); setBrandName(''); await loadBootstrap() }) }}><label htmlFor="kb-brand-name">新增品牌</label><input id="kb-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌名称" maxLength={60} required/><button disabled={busy}>创建品牌</button></form>}<p>仅已发布资料参与检索和 AI 调用。原件与历史版本保留。</p></aside>
+    {loading || restoringDocument ? <div className="kb-empty">{restoringDocument ? '正在恢复资料与解析进度…' : '正在加载品牌空间…'}</div> : <div className="kb-layout"><aside className="kb-brands"><h2>品牌空间</h2>{bootstrap?.brands.map((b) => <button className={brandId === b.id ? 'active' : ''} title={b.name} aria-current={brandId === b.id ? 'true' : undefined} key={b.id} onClick={() => { setBrandId(b.id); setSelected(null); setResults(null); setConfirmAction(null); setLinkMaterials(false) }}><Icon name="book" size={17}/><span>{b.name}</span></button>)}{bootstrap?.isAdmin && <form onSubmit={(e) => { e.preventDefault(); void act(async () => { await knowledgeRequest('/brands', { name: brandName, grants: {} }); setBrandName(''); await loadBootstrap() }) }}><label htmlFor="kb-brand-name">新增品牌</label><input id="kb-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="品牌名称" maxLength={60} required/><button disabled={busy}>创建品牌</button></form>}<p>仅已发布资料参与检索和 AI 调用。原件与历史版本保留。</p></aside>
     <div className="kb-main"><nav className="kb-tabs" aria-label="知识库视图">{[['documents', '资料'], ['search', '检索测试'], ['traces', '调用记录'], ...(bootstrap?.isAdmin ? [['access', '团队权限']] : [])].map(([key, name]) => <button className={tab === key ? 'active' : ''} key={key} onClick={() => { setTab(key); setSelected(null) }}>{name}</button>)}</nav>
     {!brandId && <div className="kb-empty"><h2>暂无可访问的品牌</h2><p>请管理员将你加入组，并为组授予品牌权限。</p></div>}
     {brand && canEdit && linkMaterials && <KnowledgeMaterials key={brand.id} brand={brand} canPublish={canPublish} initialAssetId={initialMaterial.current} onClose={() => { setLinkMaterials(false); initialMaterial.current = null }} onComplete={async (r, publish) => { setLinkMaterials(false); initialMaterial.current = null; setSelected(null); await refresh(); setNotice(`已关联 ${r.results.length} 项素材。${publish ? '后台完成处理后自动发布，切换页面不会中断。' : '已保存为草稿，核对后可发布。'}`) }}/>}

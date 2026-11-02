@@ -112,9 +112,16 @@ test('two pages run in parallel while other documents finish text indexing indep
     const text = (await call('/documents', { brandId, title: '其他资料', content: '无需等待图文识别' })).data
     await until(async () => (await call(`/documents/${text.document.id}`)).data.versions[0].status === 'ready')
     assert.equal(active, 2, 'slow vision work is still running while text ingestion completes')
+    const more = []
+    for (let i = 0; i < 2; i++) more.push((await call('/documents', { brandId, title: `并行资料${i}`, kind: 'document', content: '正文', file: { name: 'manual.pdf', base64: pdf(2).toString('base64') } })).data)
+    await until(async () => active === 4)
+    assert.equal(calls, 4, 'two documents have two model requests each; third document waits')
+    const queued = (await call(`/analyses/${more[1].analyses[0].id}`)).data.analysis
+    assert.equal(queued.status, 'queued')
     release()
+    await until(async () => (await call(`/analyses/${more[1].analyses[0].id}`)).data.analysis.status === 'succeeded')
     await until(async () => (await call(`/analyses/${analysis.id}`)).data.analysis.status === 'succeeded')
-    assert.equal(calls, 3); assert.equal(maxActive, 2)
+    assert.equal(calls, 7); assert.equal(maxActive, 4)
     const done = await until(async () => { const d = (await call(`/documents/${uploaded.document.id}`)).data; return d.versions[0].status === 'ready' && d })
     assert.equal(done.versions[0].progress.overall, 100)
   } finally { release(); await new Promise((r) => server.close(r)); await kb.close(); fs.rmSync(dir, { recursive: true, force: true }) }

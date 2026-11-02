@@ -46,3 +46,20 @@ test('text tasks persist, deduplicate submissions, enforce ownership and recover
     assert.equal(failed.task.status, 'failed'); assert.equal(failed.task.error, 'provider unavailable')
   } finally { instance.server.closeAllConnections(); await new Promise((r) => instance.server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
 })
+
+
+test('brand compliance tasks are owned by the authenticated user, not a shared browser session', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'brand-review-owner-'))
+  const app = express(); app.use(express.json())
+  installTextTasks(app, { dataDir, requireAuth(req, res, next) { req.user = { id: req.headers['x-user'] || 'alice' }; next() }, prepareInput: async (req) => req.body, handleCompletion: async (req, res) => res.json({ content: req.body.complianceBrand }) })
+  const server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r))
+  const base = `http://127.0.0.1:${server.address().port}/api/compliance/tasks`, id = randomUUID()
+  const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer test', 'X-Text-Session': 'same-browser', 'X-User': 'alice' }
+  try {
+    assert.equal((await fetch(base, { method: 'POST', headers, body: JSON.stringify({ requestId: id, complianceBrand: 'vanke-property', messages: [{ role: 'user', content: '审核' }] }) })).status, 202)
+    await new Promise((r) => setTimeout(r, 30))
+    assert.equal((await fetch(`${base}/${id}`, { headers: { ...headers, 'X-User': 'bob' } })).status, 404)
+    const own = await (await fetch(`${base}/${id}`, { headers })).json()
+    assert.equal(own.task.result.content, 'vanke-property')
+  } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
+})
