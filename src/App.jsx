@@ -24,6 +24,7 @@ import GenerationSkillPicker from './GenerationSkillPicker.jsx'
 import { selectGenerationSkill, useGenerationSkill } from './generationSkills.js'
 import KnowledgeContext from './KnowledgeContext.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
+import './complianceBrand.css'
 import { retryWaterfallLogo } from './logoRepair.js'
 import ImageSettings from './ImageSettings.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, availableImageModel, imageQualityForModel, supportsImageRatio, supportsImageResolution, imageCreditCost, imageResolutionForModel } from './imageModels.js'
@@ -1440,9 +1441,8 @@ function TextStudio({ type, conversation, onSave }) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
-  const [brand, setBrand] = useState(conversation?.brand || 'general')
+  const [brand, setBrand] = useState(conversation?.brand === 'general' ? '' : conversation?.brand || '')
   const webSearch = type === 'strategy'
-  const [brandOpen, setBrandOpen] = useState(false)
   const [draggingComplianceFiles, setDraggingComplianceFiles] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
   const [runningRequests, setRunningRequests] = useState(() => [...runtime.active.entries()].map(([id, startedAt]) => ({ id, startedAt })))
@@ -1451,7 +1451,6 @@ function TextStudio({ type, conversation, onSave }) {
   const uploadingImageAttachmentsRef = useRef(false)
   const [uploadingImages, setUploadingImages] = useState(false)
   const complianceFileRef = useRef(null)
-  const brandPickerRef = useRef(null)
   const complianceDragDepth = useRef(0)
   const focusRef = useConversationFocus()
   const conversationScrollRef = useOpenConversationLatest(conversation?.id)
@@ -1534,12 +1533,12 @@ function TextStudio({ type, conversation, onSave }) {
     if (activeRequestsRef.current.size > 0) {
       setMessages(messagesRef.current)
       setRunningRequests(activeTaskSnapshot())
-      if (conversation.brand) setBrand(conversation.brand)
+      if (conversation.brand) setBrand(conversation.brand === 'general' ? '' : conversation.brand)
       return
     }
     updateMessages(validTextMessages(conversation.messages))
     setRunningRequests([])
-    if (conversation.brand) setBrand(conversation.brand)
+    if (conversation.brand) setBrand(conversation.brand === 'general' ? '' : conversation.brand)
   }, [conversation])
 
   useEffect(() => {
@@ -1556,14 +1555,6 @@ function TextStudio({ type, conversation, onSave }) {
     const timer = window.setTimeout(cleanUp, nextDeadline - Date.now())
     return () => window.clearTimeout(timer)
   }, [brand, messages, onSave, type, webSearch])
-
-  useEffect(() => {
-    const closeBrandMenu = (event) => {
-      if (!brandPickerRef.current?.contains(event.target)) setBrandOpen(false)
-    }
-    document.addEventListener('pointerdown', closeBrandMenu)
-    return () => document.removeEventListener('pointerdown', closeBrandMenu)
-  }, [])
 
   async function appendComplianceFiles(fileList) {
     const files = Array.from(fileList || []).slice(0, 4 - attachments.length)
@@ -1620,6 +1611,10 @@ function TextStudio({ type, conversation, onSave }) {
   }
 
   async function submit(customInput) {
+    if (type === 'compliance' && !COMPLIANCE_BRANDS.some((item) => item.value === brand)) {
+      setAttachmentError('请先选择品牌，再发送审核')
+      return
+    }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
     const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
@@ -1712,11 +1707,8 @@ function TextStudio({ type, conversation, onSave }) {
         {type === 'compliance' ? <div className="tool-group">
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
-          <div className="brand-picker" ref={brandPickerRef}>
-            <button className="brand-trigger" type="button" aria-haspopup="menu" aria-expanded={brandOpen} onClick={() => setBrandOpen((open) => !open)}><span>品牌</span><b>{COMPLIANCE_BRANDS.find((item) => item.value === brand)?.label || '通用合规'}</b><Icon name="chevron" size={14}/></button>
-            {brandOpen && <div className="brand-menu glass-strong" role="menu" aria-label="选择审核品牌"><div className="brand-menu-title">选择品牌</div><div className="brand-grid">{COMPLIANCE_BRANDS.map((item) => <button key={item.value} type="button" role="menuitem" className={brand === item.value ? 'active' : ''} onClick={() => { setBrand(item.value); setBrandOpen(false) }}><b>{item.label}</b></button>)}</div></div>}
-          </div>
-        <KnowledgeContext tool="compliance"/></div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span><KnowledgeContext tool="text"/></div>}
+          <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择品牌" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
+        </div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span><KnowledgeContext tool="text"/></div>}
         <button className="send-button" aria-label={uploadingImages ? '正在上传图片' : '发送'} onClick={() => submit()} disabled={uploadingImages || (!input.trim() && attachments.length === 0)}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 

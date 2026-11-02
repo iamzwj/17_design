@@ -1,5 +1,4 @@
 export const COMPLIANCE_BRANDS = [
-  { value: 'general', label: '通用合规' },
   { value: 'pulin', label: '朴邻' },
   { value: 'yanxuanjia', label: '研选家' },
   { value: 'xingfushe-live', label: '幸福社直播脚本' },
@@ -222,13 +221,12 @@ const REVIEW_LOGIC = `
 `
 
 const BRAND_RULES = {
-  general: '',
   pulin: PULIN_SIGNAGE_RULES + '\n\n' + PULIN_RULES,
   yanxuanjia: YANXUANJIA_RULES,
   'xingfushe-live': XINGFUSHE_LIVE_RULES,
 }
 
 export function buildComplianceSystemPrompt(brandValue, basePrompt = '') {
-  const brand = COMPLIANCE_BRANDS.find((item) => item.value === brandValue) || COMPLIANCE_BRANDS[0]
+  const brand = COMPLIANCE_BRANDS.find((item) => item.value === brandValue) || { value: brandValue, label: '品牌合规' }
   return `${basePrompt}\n\n当前审核类型：${brand.label}\n\n${GENERAL_AD_LAW}\n\n${BRAND_RULES[brand.value] || ''}\n\n${REVIEW_LOGIC}`
 }
