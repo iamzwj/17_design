@@ -12,3 +12,15 @@
   margin: 0;
   transform: translateY(-50%) rotate(90deg);
 }
+
+.send-button.compliance-start-button {
+  width: auto;
+  min-width: 88px;
+  flex-shrink: 0;
+  padding: 0 14px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
