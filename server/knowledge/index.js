@@ -557,7 +557,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       const brandNames = { 'vanke-property': '万科物业', pulin: '朴邻', yanxuanjia: '研选家', 'xingfushe-live': '幸福社' }
       const name = brandNames[input.complianceBrand]
       if (!name) fail('审核品牌无效')
-      if (!user) fail('请登录后使用品牌知识库审核', 401)
+      if (!user) return { id: '', sources: [], prompt: `本次所选品牌为${name}。本次为游客审核，仅使用通用及现有审核规则，不引用账号品牌知识库，不得声称已按品牌手册审核。` }
       const matched = all('brands').find((b) => b.name === name && !b.deletedAt)
       if (!matched) return { id: '', sources: [], prompt: `本次所选品牌为${name}，尚无对应品牌知识库。继续执行通用审核和现有审核规则，在结果中明确说明未引用品牌知识库，不能声称已按品牌手册审核。` }
       selection = { brandId: matched.id }

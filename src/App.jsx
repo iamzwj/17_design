@@ -1767,11 +1767,11 @@ export default function App() {
   }, [authState])
 
   useEffect(() => {
-    if (!user) return
+    if (authState === 'checking') return
     // Video generation is a persistent waterfall workspace, not a chat.
     // Remove records left by the earlier node-based video workspace so they
     // no longer appear alongside actual conversations.
-    const savedKey = `${STORAGE_KEY}:${user.email}`
+    const savedKey = user ? `${STORAGE_KEY}:${user.email}` : STORAGE_KEY
     const loaded = loadConversations(savedKey)
     const withoutVideoHistory = loaded.filter((conversation) => conversation.type !== 'video')
     if (withoutVideoHistory.length !== loaded.length) {
@@ -1779,7 +1779,7 @@ export default function App() {
     }
     setConversations(withoutVideoHistory)
     setActiveConversationId(null)
-  }, [user])
+  }, [user, authState])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme

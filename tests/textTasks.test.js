@@ -63,3 +63,25 @@ test('brand compliance tasks are owned by the authenticated user, not a shared b
     assert.equal(own.task.result.content, 'vanke-property')
   } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
 })
+
+ test('guest brand review remains anonymous and readable after a service restart', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guest-brand-review-'))
+  let server
+  async function boot() {
+    const app = express(); app.use(express.json())
+    installTextTasks(app, { dataDir, requireAuth(req, res) { res.status(401).json({ error: 'login required' }) }, handleCompletion: async (req, res) => res.json({ content: req.body.complianceBrand }) })
+    server = app.listen(0, '127.0.0.1'); await new Promise((r) => server.once('listening', r))
+    return `http://127.0.0.1:${server.address().port}/api/compliance/tasks`
+  }
+  let base = await boot()
+  const id = randomUUID(), headers = { 'Content-Type': 'application/json', 'X-Text-Session': 'guest-brand' }
+  try {
+    assert.equal((await fetch(base, { method: 'POST', headers, body: JSON.stringify({ requestId: id, complianceBrand: 'pulin', messages: [{ role: 'user', content: '审核' }] }) })).status, 202)
+    await new Promise((r) => setTimeout(r, 30))
+    server.closeAllConnections(); await new Promise((r) => server.close(r))
+    base = await boot()
+    const result = await (await fetch(`${base}/${id}`, { headers })).json()
+    assert.equal(result.task.result.content, 'pulin')
+    assert.equal((await fetch(`${base}/${id}`, { headers: { 'X-Text-Session': 'other' } })).status, 404)
+  } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
+})

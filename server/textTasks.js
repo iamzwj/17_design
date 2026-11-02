@@ -13,7 +13,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
     fs.renameSync(`${file}.next`, file)
   }
   const publicTask = ({ id, status, result, error, createdAt }) => ({ id, status, result, error, createdAt })
-  const owner = (req, kind) => kind === 'text' || req.body?.knowledge?.brandId || (req.user && req.body?.complianceBrand) ? req.user?.id : req.headers['x-text-session']
+  const owner = (req, kind) => req.user || kind === 'text' || req.body?.knowledge?.brandId ? req.user?.id : req.headers['x-text-session']
   async function run(task) {
     if (executing.has(task.id)) return
     executing.add(task.id)
@@ -36,7 +36,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
     finally { delete task.input; executing.delete(task.id); save() }
   }
   for (const kind of ['text', 'compliance']) {
-    const guards = kind === 'text' ? [requireAuth] : [(req, res, next) => req.headers.authorization || req.body?.knowledge?.brandId || req.body?.complianceBrand ? requireAuth(req, res, next) : next()]
+    const guards = kind === 'text' ? [requireAuth] : [(req, res, next) => req.headers.authorization || req.body?.knowledge?.brandId ? requireAuth(req, res, next) : next()]
     app.post(`/api/${kind}/tasks`, ...guards, async (req, res, next) => {
       try {
         const scope = owner(req, kind)
