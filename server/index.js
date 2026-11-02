@@ -1063,7 +1063,7 @@ async function imageSourceToData(source) {
   // Compliance conversation history stores uploaded images as local asset URLs.
   // Resolve only a filename under the controlled asset directory; never treat an
   // arbitrary relative URL as a file path or a network target.
-  const localAsset = value.match(/^\/api\/waterfall\/assets\/([A-Za-z0-9][A-Za-z0-9._-]*)$/)
+  const localAsset = value.match(/^\/api\/waterfall\/assets\/([A-Za-z0-9_-][A-Za-z0-9._-]*)$/)
   if (localAsset) {
     const fileName = localAsset[1]
     const buffer = await fs.promises.readFile(path.join(waterfallAssetsDir, fileName)).catch(() => null)

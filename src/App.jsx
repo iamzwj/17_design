@@ -277,9 +277,8 @@ function waterfallDisplayUrl(slot) {
 }
 
 function QuietReferenceImage({ src }) {
-  const [loaded, setLoaded] = useState(false)
-  useEffect(() => setLoaded(false), [src])
-  return <img className={`quiet-reference-image${loaded ? ' is-ready' : ''}`} src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => setLoaded(false)}/>
+  const [loadedSource, setLoadedSource] = useState(null)
+  return <img className={`quiet-reference-image${loadedSource === src ? ' is-ready' : ''}`} src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoadedSource(src)} onError={() => setLoadedSource(null)}/>
 }
 
 function WaterfallResultImage({ slot, prompt, urls, onPreview, onRetryLogo }) {
