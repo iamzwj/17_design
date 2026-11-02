@@ -1,3 +1,4 @@
+import { createPreviewQueue } from './knowledgePreviewQueue.js'
 import { getAuthToken } from './api.js'
 import { readKnowledgeResponse } from './knowledgeResponse.js'
 export function knowledgeKey(suffix = '') { return `dgen-knowledge:${getAuthToken().slice(-12) || 'guest'}:${suffix}` }
@@ -7,11 +8,17 @@ export async function knowledgeRequest(path, body, method = body === undefined ?
   const response = await fetch(`${base}/api/knowledge${path}`, { method, signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   return readKnowledgeResponse(response)
 }
-export async function knowledgeDownload(path, name, preview = false) {
+const enqueuePreview = createPreviewQueue(2)
+export async function knowledgeDownload(path, name, preview = false, { signal } = {}) {
   const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-  const response = await fetch(`${base}/api/knowledge${path}`, { headers: { Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store' })
-  if (!response.ok) throw new Error('文件不存在或无权访问')
-  const url = URL.createObjectURL(await response.blob())
+  const load = async () => {
+    const response = await fetch(`${base}/api/knowledge${path}`, { signal, headers: { Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store' })
+    if (!response.ok) throw new Error('文件不存在或无权访问')
+    const blob = await response.blob()
+    signal?.throwIfAborted()
+    return blob
+  }
+  const url = URL.createObjectURL(await (preview ? enqueuePreview(load, signal) : load()))
   if (preview) return url
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
