@@ -378,8 +378,8 @@ function LiveElapsed({ startedAt }) {
   return <span>已用时 {formatElapsed(elapsed)}</span>
 }
 
-function LiveTaskStatus({ startedAt }) {
-  return <div className="task-elapsed live"><span className="task-thinking"><i/>思考中</span><LiveElapsed startedAt={startedAt}/></div>
+function LiveTaskStatus({ startedAt, label = '思考中' }) {
+  return <div className="task-elapsed live" role="status"><span className="task-thinking"><i/>{label}</span><LiveElapsed startedAt={startedAt}/></div>
 }
 
 function AnswerText({ content }) {
@@ -1449,6 +1449,7 @@ function TextStudio({ type, conversation, onSave }) {
   const messagesRef = runtime.messages
   const activeRequestsRef = useRef(runtime.active)
   const uploadingImageAttachmentsRef = useRef(false)
+  const [uploadingImages, setUploadingImages] = useState(false)
   const complianceFileRef = useRef(null)
   const brandPickerRef = useRef(null)
   const complianceDragDepth = useRef(0)
@@ -1630,17 +1631,28 @@ function TextStudio({ type, conversation, onSave }) {
     // Clear the composer at submission time so a second task can be composed
     // while this request uploads and is being reviewed.
     setInput(''); setAttachments([]); setAttachmentError('')
-    if (needsImageUpload) uploadingImageAttachmentsRef.current = true
+    if (needsImageUpload) {
+      uploadingImageAttachmentsRef.current = true
+      setUploadingImages(true)
+    }
     let completed = false
     try {
       // Local data URLs are stripped from saved conversation records. Save
       // uploaded compliance images first so the user message keeps a clickable
       // thumbnail after refresh and when reopening its history.
-      const attachmentSnapshot = type === 'compliance' ? await Promise.all(submittedAttachments.map(async (file) => {
-        if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
-        const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
-        return { ...file, src: url }
-      })) : submittedAttachments
+      let attachmentSnapshot
+      try {
+        attachmentSnapshot = type === 'compliance' ? await Promise.all(submittedAttachments.map(async (file) => {
+          if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
+          const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
+          return { ...file, src: url }
+        })) : submittedAttachments
+      } finally {
+        if (needsImageUpload) {
+          uploadingImageAttachmentsRef.current = false
+          setUploadingImages(false)
+        }
+      }
       const submittedMessage = { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }
       const nextMessages = [...messagesRef.current, submittedMessage]
       updateMessages(nextMessages)
@@ -1674,7 +1686,6 @@ function TextStudio({ type, conversation, onSave }) {
         scrollToLatestResult()
       }
     } finally {
-      if (needsImageUpload) uploadingImageAttachmentsRef.current = false
       finishTask(requestId)
       saveTaskState(messagesRef.current, { unreadComplete: completed })
     }
@@ -1682,14 +1693,14 @@ function TextStudio({ type, conversation, onSave }) {
 
   return <section className={`workspace text-workspace ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
     <div className="conversation" ref={conversationScrollRef}>
-      {messages.length === 0 ? <div className="welcome text-welcome">
+      {messages.length === 0 && runningRequests.length === 0 ? <div className="welcome text-welcome">
         <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
         return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={message.content} label={type !== 'compliance'}/></div>
       })}
-        {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt}/></div>)}
+        {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>
@@ -1706,7 +1717,7 @@ function TextStudio({ type, conversation, onSave }) {
             {brandOpen && <div className="brand-menu glass-strong" role="menu" aria-label="选择审核品牌"><div className="brand-menu-title">选择品牌</div><div className="brand-grid">{COMPLIANCE_BRANDS.map((item) => <button key={item.value} type="button" role="menuitem" className={brand === item.value ? 'active' : ''} onClick={() => { setBrand(item.value); setBrandOpen(false) }}><b>{item.label}</b></button>)}</div></div>}
           </div>
         <KnowledgeContext tool="compliance"/></div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span><KnowledgeContext tool="text"/></div>}
-        <button className="send-button" onClick={() => submit()} disabled={!input.trim() && attachments.length === 0}><Icon name="arrowUp" size={18}/></button>
+        <button className="send-button" aria-label={uploadingImages ? '正在上传图片' : '发送'} onClick={() => submit()} disabled={uploadingImages || (!input.trim() && attachments.length === 0)}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
   </section>
