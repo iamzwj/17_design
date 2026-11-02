@@ -1,4 +1,5 @@
 export const COMPLIANCE_BRANDS = [
+  { value: 'vanke-property', label: '万科物业' },
   { value: 'pulin', label: '朴邻' },
   { value: 'yanxuanjia', label: '研选家' },
   { value: 'xingfushe-live', label: '幸福社直播脚本' },
