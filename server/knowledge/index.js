@@ -67,7 +67,8 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   function level(user, brand) {
     if (!user || !brand) return 0
     if (isAdmin(user)) return 3
-    return Math.max(0, ...all('groups').filter((g) => g.members.includes(user.id)).map((g) => roles[brand.grants[g.id]] || 0))
+    // Temporary owner-only maintenance; preserve grants for a future reopening.
+    return 1
   }
   function access(user, brandId, role = 'view') {
     const brand = get('brands', brandId)
@@ -255,7 +256,10 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   }
   for (const job of all('jobs').filter((j) => j.status === 'running')) { job.status = 'queued'; jobPut(job) }
   schedule()
-  const route = (method, url, guards, handler) => app[method](`/api/knowledge${url}`, ...guards, async (req, res, next) => { try { await handler(req, res) } catch (error) { next(error) } })
+  const route = (method, url, guards, handler) => app[method](`/api/knowledge${url}`, ...guards, async (req, res, next) => { try {
+    if (!['get', 'head'].includes(method) && url !== '/search' && !isAdmin(req.user)) fail('知识库暂仅允许 zhangwj159 编辑，其他账号只能查看', 403)
+    await handler(req, res)
+  } catch (error) { next(error) } })
   const auth = [requireAuth], admin = [requireAdmin]
   route('get', '/bootstrap', auth, (req, res) => {
     res.json({ brands: all('brands').filter((b) => !hiddenBrandNames.has(b.name) && level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })

@@ -8,7 +8,7 @@ import express from 'express'
 import sharp from 'sharp'
 import { installKnowledge } from '../server/knowledge/index.js'
 const pause = () => new Promise((r) => setTimeout(r, 10))
-test('library Logos and IP link without uploads, preserve snapshots, publish under grants, and feed real images', async () => {
+test('library Logos and IP link without uploads, preserve snapshots, publish under owner maintenance, and feed real images', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-materials-')), materialDir = path.join(dir, 'library'); fs.mkdirSync(materialDir)
   const users = [{ id: 'admin', email: 'zhangwj159@onewo.com' }, { id: 'editor', email: 'editor@test.local' }, { id: 'viewer', email: 'viewer@test.local' }, { id: 'publisher', email: 'publisher@test.local' }]
   const color = await sharp({ create: { width: 120, height: 40, channels: 4, background: '#10ac91' } }).png().toBuffer()
@@ -30,7 +30,7 @@ test('library Logos and IP link without uploads, preserve snapshots, publish und
     for (const [n, role] of [['1', 'editor'], ['2', 'viewer'], ['3', 'publisher']]) await call('/groups', { id: `group-${n}`, name: role, members: [role] })
     await call('/brands', { id: brandId, name: '研选家', grants: { 'group-1': 'edit', 'group-2': 'view', 'group-3': 'publish' } })
     assert.equal((await call(`/materials?brandId=${brandId}`, undefined, 'viewer')).status, 403)
-    const catalog = (await call(`/materials?brandId=${brandId}`, undefined, 'editor')).data.assets
+    const catalog = (await call(`/materials?brandId=${brandId}`, undefined, 'admin')).data.assets
     assert.equal(catalog.filter((a) => a.type === 'logo').length, 2)
     assert.ok(catalog.some((a) => a.id === 'yanxuanjia-painter' && a.available)); assert.ok(catalog.some((a) => a.id === 'xiaojie'))
     assert.ok(!catalog.some((a) => a.id === 'person-main'))
@@ -38,7 +38,7 @@ test('library Logos and IP link without uploads, preserve snapshots, publish und
     assert.equal((await call('/material-links', payload, 'editor')).status, 403)
     assert.equal((await call('/material-links', { brandId: other, assetIds: ['研选家-color'] })).status, 403)
     assert.equal((await call('/material-links', { brandId, assetIds: ['../../.env'] })).status, 403)
-    const linked = await call('/material-links', payload, 'publisher'); assert.equal(linked.status, 202)
+    const linked = await call('/material-links', payload, 'admin'); assert.equal(linked.status, 202)
     const docs = await until(async () => { const ds = (await call(`/documents?brandId=${brandId}`)).data.documents; return ds.length === 3 && ds.every((d) => d.publishedVersionId) ? ds : null })
     const logo = docs.find((d) => d.materialId === '研选家-color'), reversed = docs.find((d) => d.materialId === '研选家-white'), ip = docs.find((d) => d.materialId === 'yanxuanjia-painter')
     const hash = createHash('sha256').update(color).digest('hex')
@@ -52,22 +52,24 @@ test('library Logos and IP link without uploads, preserve snapshots, publish und
     const manual = await kb.prepare(users[2], { prompt: '反白Logo', knowledge: { brandId, assetIds: [reversed.id] } }, 'image')
     assert.equal((await call(`/traces/${manual.id}`, undefined, 'viewer')).data.trace.assets[0].documentId, reversed.id)
     const count = kb.db.prepare('SELECT COUNT(*) AS n FROM versions').get().n
-    await call('/material-links', payload, 'publisher'); assert.equal(kb.db.prepare('SELECT COUNT(*) AS n FROM versions').get().n, count)
+    await call('/material-links', payload, 'admin'); assert.equal(kb.db.prepare('SELECT COUNT(*) AS n FROM versions').get().n, count)
     const newLogo = await sharp(color).negate({ alpha: false }).png().toBuffer(); fs.writeFileSync(path.join(materialDir, 'yanxuanjia-color.png'), newLogo)
-    const updated = (await call('/material-links', { brandId, assetIds: ['研选家-color'] }, 'editor')).data.results[0]
+    const updated = (await call('/material-links', { brandId, assetIds: ['研选家-color'] }, 'admin')).data.results[0]
     const revised = await until(async () => { const d = (await call(`/documents/${updated.documentId}`)).data; return d.versions.at(-1).status === 'ready' ? d : null })
     assert.equal(revised.versions.length, 2); assert.equal(revised.document.publishedVersionId, logo.publishedVersionId)
     assert.equal((await call(`/traces/${prepared.id}`, undefined, 'viewer')).data.trace.assets[0].sha256, hash)
     assert.deepEqual(Buffer.from((await kb.restoreImages(prepared.id))[0].split(',')[1], 'base64'), color)
-    await call(`/documents/${logo.id}/versions`, { baseVersionId: revised.document.latestVersionId, title: '人工改写不得随关联发布', kind: 'rule', content: '这不是素材库的标准原图说明' }, 'editor')
+    await call(`/documents/${logo.id}/versions`, { baseVersionId: revised.document.latestVersionId, title: '人工改写不得随关联发布', kind: 'rule', content: '这不是素材库的标准原图说明' }, 'admin')
     await until(async () => (await call(`/documents/${logo.id}`)).data.versions.at(-1).status === 'ready')
-    await call('/material-links', { brandId, assetIds: ['研选家-color'], publish: true }, 'publisher')
+    await call('/material-links', { brandId, assetIds: ['研选家-color'], publish: true }, 'admin')
     const canonical = await until(async () => { const d = (await call(`/documents/${logo.id}`)).data; return d.document.publishedVersionId === d.document.latestVersionId ? d : null })
     assert.equal(canonical.versions.at(-1).kind, 'logo'); assert.equal(canonical.versions.at(-1).title, '研选家 · 彩色 Logo')
-    // A shared IP can be associated with another brand, but revoking publish permission mid-task must prevent publication.
+    // Losing the owner identity mid-task must prevent automatic publication.
     block = true
-    const pending = await call('/material-links', { brandId, assetIds: ['xiaojie'], publish: true }, 'publisher'); assert.equal(pending.status, 202)
-    await started; await call('/groups', { id: 'group-3', name: 'publisher', members: [] }); release()
+    const pending = await call('/material-links', { brandId, assetIds: ['xiaojie'], publish: true }, 'admin'); assert.equal(pending.status, 202)
+    await started; users[0].email = 'former-owner@test.local'; release()
+    await until(async () => { const rows = kb.db.prepare('SELECT json FROM versions WHERE document_id=?').all(pending.data.results[0].documentId); return rows.some((r) => JSON.parse(r.json).status === 'ready') })
+    users[0].email = 'zhangwj159@onewo.com'
     const unpub = await until(async () => { const d = (await call(`/documents/${pending.data.results[0].documentId}`)).data; return d.versions[0].status === 'ready' ? d : null })
     assert.equal(unpub.document.publishedVersionId, null)
   } finally { release(); await kb.close(); server.closeAllConnections(); await new Promise((r) => server.close(r)); fs.rmSync(dir, { recursive: true, force: true }) }

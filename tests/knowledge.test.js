@@ -28,23 +28,33 @@ test('brand knowledge permissions, version publishing, index changes, images and
     assert.ok(storedBrands.some((b) => b.name === '万物云'))
     assert.ok(storedBrands.some((b) => b.name === '住这儿'))
     assert.equal(boot.groups.length, 3)
-    assert.equal((await call('/bootstrap', undefined, 'outsider')).data.brands.length, 0)
+    assert.equal((await call('/bootstrap', undefined, 'outsider')).data.brands.length, boot.brands.length)
     await call('/groups', { id: 'group-1', name: '维护组', members: ['editor'] }); await call('/groups', { id: 'group-2', name: '查看组', members: ['viewer'] })
     await call('/brands', { id: brandId, name: '万科物业', grants: { 'group-1': 'edit', 'group-2': 'view' } })
-    const created = await call('/documents', { brandId, title: '标志规范', kind: 'rule', content: 'Logo必须使用紫色，不得更改品牌颜色' }, 'editor')
+    await call('/brands', { id: brandId, name: '万科物业', grants: { 'group-1': 'publish', 'group-2': 'view' } })
+    for (const user of ['editor', 'viewer', 'outsider']) {
+      const viewerBoot = (await call('/bootstrap', undefined, user)).data
+      assert.ok(viewerBoot.brands.every((b) => b.permission === 1))
+      assert.equal(viewerBoot.isAdmin, false)
+      for (const url of ['/brands', '/groups', '/documents', '/documents/any/versions', '/documents/any/retry', '/documents/any/publish', '/documents/any/unpublish', '/documents/any/analyze', '/analyses/any/retry', '/analyses/any/import', '/material-links']) {
+        assert.equal((await call(url, { brandId, title: 'blocked', content: 'blocked' }, user)).status, 403, `${user} ${url}`)
+      }
+      assert.equal((await call('/documents/any', {}, user, 'DELETE')).status, 403)
+    }
+    const created = await call('/documents', { brandId, title: '标志规范', kind: 'rule', content: 'Logo必须使用紫色，不得更改品牌颜色' })
     assert.equal(created.status, 202); const docId = created.data.document.id
     const d = await ready(docId), v1 = d.document.latestVersionId
     assert.equal((await call(`/documents/${docId}`, undefined, 'viewer')).status, 404)
     assert.equal((await call(`/documents/${docId}/publish`, { versionId: v1 }, 'editor')).status, 403)
-    assert.equal((await call('/search', { brandId, query: '颜色' }, 'outsider')).status, 403)
+    assert.equal((await call('/search', { brandId, query: '颜色' }, 'outsider')).status, 200)
     assert.equal((await call('/search', { brandId, query: '颜色' }, 'viewer')).data.results.length, 0)
     await call(`/documents/${docId}/publish`, { versionId: v1 })
     const compliance = await kb.prepare(users[2], { complianceBrand: 'vanke-property', knowledge: { brandId: 'stale-other-brand' }, messages: [{ role: 'user', content: '审核品牌颜色' }] }, 'compliance')
     assert.ok(compliance.prompt.includes('不得更改品牌颜色'))
     assert.ok(compliance.prompt.includes('法律法规优先于品牌规范'))
     assert.ok(compliance.sources.some((source) => source.versionId === v1))
-    await assert.rejects(kb.prepare(users[3], { complianceBrand: 'vanke-property' }, 'compliance'), /无权访问/)
-    await assert.rejects(kb.prepare(null, { complianceBrand: 'vanke-property' }, 'compliance'), /登录/)
+    assert.ok((await kb.prepare(users[3], { complianceBrand: 'vanke-property' }, 'compliance')).prompt.includes('不得更改品牌颜色'))
+    assert.match((await kb.prepare(null, { complianceBrand: 'vanke-property' }, 'compliance')).prompt, /游客审核/)
     const missing = await kb.prepare(users[0], { complianceBrand: 'xingfushe-live' }, 'compliance')
     assert.ok(missing.prompt.includes('未引用品牌知识库'))
     const emptyBrand = await kb.prepare(users[0], { complianceBrand: 'pulin' }, 'compliance')
@@ -54,9 +64,9 @@ test('brand knowledge permissions, version publishing, index changes, images and
     const trace = await kb.prepare(users[2], { knowledge: { brandId }, messages: [{ role: 'user', content: '帮我写文案' }] }, 'text')
     assert.ok(trace.prompt.includes('不得更改品牌颜色'))
     assert.equal((await call(`/traces/${trace.id}`, undefined, 'editor')).status, 404)
-    await call(`/documents/${docId}/versions`, { baseVersionId: v1, title: '标志规范', kind: 'rule', content: 'Logo改用白色' }, 'editor'); const v2 = (await ready(docId)).document.latestVersionId
+    await call(`/documents/${docId}/versions`, { baseVersionId: v1, title: '标志规范', kind: 'rule', content: 'Logo改用白色' }); const v2 = (await ready(docId)).document.latestVersionId
     assert.equal((await call('/search', { brandId, query: '颜色' }, 'viewer')).data.results[0].versionId, v1)
-    assert.equal((await call(`/documents/${docId}/versions`, { baseVersionId: v1, title: '并发更新', content: '冲突' }, 'editor')).status, 409)
+    assert.equal((await call(`/documents/${docId}/versions`, { baseVersionId: v1, title: '并发更新', content: '冲突' })).status, 409)
     await call(`/documents/${docId}/publish`, { versionId: v2 })
     assert.equal((await call('/search', { brandId, query: '品牌颜色' }, 'viewer')).data.results[0].versionId, v2)
     assert.ok((await call(`/traces/${trace.id}`, undefined, 'viewer')).data.trace.prompt.includes('不得更改品牌颜色'))
@@ -73,8 +83,8 @@ test('brand knowledge permissions, version publishing, index changes, images and
     assert.equal((await call(`/documents/${docId}`, undefined, 'viewer')).status, 404)
     assert.ok((await call(`/traces/${trace.id}`, undefined, 'viewer')).data.trace.rules.length)
     await call('/groups', { id: 'group-2', name: '查看组', members: [] })
-    assert.equal((await call(`/traces/${trace.id}`, undefined, 'viewer')).status, 403)
-    assert.equal((await fetch(`${base}/documents/${assetDoc}/files/${assetV}`, { headers: { 'X-User': 'outsider' } })).status, 403)
+    assert.equal((await call(`/traces/${trace.id}`, undefined, 'viewer')).status, 200)
+    assert.equal((await fetch(`${base}/documents/${assetDoc}/files/${assetV}`, { headers: { 'X-User': 'outsider' } })).status, 200)
     const bad = await call('/documents', { brandId, title: '扫描 PDF', kind: 'document', file: { name: 'bad.pdf', base64: Buffer.from('invalid pdf').toString('base64') } })
     let failed; for (let i = 0; i < 200; i++) { failed = (await call(`/documents/${bad.data.document.id}`)).data; if (failed.versions[0].status === 'failed') break; await pause() }
     assert.equal(failed.versions[0].status, 'failed')
