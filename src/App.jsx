@@ -1707,7 +1707,7 @@ function TextStudio({ type, conversation, onSave }) {
         {type === 'compliance' ? <div className="tool-group">
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
-          <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择品牌" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
+          <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
         </div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span><KnowledgeContext tool="text"/></div>}
         <button className="send-button" aria-label={uploadingImages ? '正在上传图片' : '发送'} onClick={() => submit()} disabled={uploadingImages || (!input.trim() && attachments.length === 0)}><Icon name="arrowUp" size={18}/></button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
