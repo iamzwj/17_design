@@ -5,6 +5,19 @@ export const COMPLIANCE_BRANDS = [
   { value: 'xingfushe-live', label: '幸福社直播脚本' },
 ]
 
+const GENERAL_TEXT_REVIEW = `
+# 通用基础文字审核（所有品牌、所有材料必须执行）
+
+审核用户提交的文案、文件正文及图片中清晰可辨的文字，检查错别字、同音误用、漏字、多字、重复字和语境中可以确定的用词错误。基础文字审核与通用广告法规、所选品牌规范共同执行，不得因未发现法规或品牌问题而跳过。
+
+- 只报告能根据上下文或已发布品牌资料确认的文字错误。例如“欢迊”应为“欢迎”、“服物”应为“服务”；不能把示例当作待审内容中的实际问题。
+- 品牌名、项目名、人名、地名、专有名词及刻意使用的谐音、口语或创意表达，不得仅因少见而判错。涉及品牌标准写法时，以当前已发布品牌资料为依据；无法确认则列为人工核验。
+- 图片文字模糊、遮挡或识别结果不确定时，不猜字、不自行补字后判错，应明确标注对应位置待核验。正常措辞的润色偏好不属于错别字问题。
+- 确认的错别字等可修正文字错误列为 S2，不直接视为违法；品牌名称等已有更严格品牌规则的，按该规则执行。朴邻店招继续使用 PULIN-SIGN 的审核格式和状态，不另行套用评分。
+- 每项列出原文、所在句子或页码/画面位置、错误原因及可直接采用的正确写法或完整替换句；依据写“通用基础文字审核”，引用品牌标准时补充资料来源。不得编造法律条款作为文字纠错依据。
+- 同一错字多次出现时合并列出相关位置，避免重复扣分；已经按品牌规则报告的相同文字错误不再重复列项。没有明确文字错误时，不编造问题。
+`
+
 const GENERAL_AD_LAW = `
 # 通用广告法规硬伤审核（所有品牌必须执行）
 
@@ -216,7 +229,7 @@ const YANXUANJIA_RULES = `
 const REVIEW_LOGIC = `
 # 审核逻辑与输出要求
 
-1. 先执行通用广告法规，再执行所选品牌规则；通用法规不得被品牌规则替代。朴邻店招审核时，PULIN-SIGN 规则中的对象识别、状态、输出字段和来源页码要求优先于本节的分数与风险等级格式。
+1. 必须执行通用基础文字审核和通用广告法规，再执行所选品牌规则；通用法规不得被品牌规则替代。朴邻店招审核时，PULIN-SIGN 规则中的对象识别、状态、输出字段和来源页码要求优先于本节的分数与风险等级格式。
 2. 先检查 S1 红线，再检查 S2 重要问题，最后判断是否存在需要人工核验的事项。
 3. 只依据用户当前提供的文字、图片和文件判断。确定性不足时不得硬判违规。
 4. 同一证据触发多条规则时合并，避免重复罗列。
@@ -240,5 +253,5 @@ const BRAND_RULES = {
 
 export function buildComplianceSystemPrompt(brandValue, basePrompt = '') {
   const brand = COMPLIANCE_BRANDS.find((item) => item.value === brandValue) || { value: brandValue, label: '品牌合规' }
-  return `${basePrompt}\n\n当前审核类型：${brand.label}\n\n${GENERAL_AD_LAW}\n\n${BRAND_RULES[brand.value] || ''}\n\n${REVIEW_LOGIC}`
+  return `${basePrompt}\n\n当前审核类型：${brand.label}\n\n${GENERAL_TEXT_REVIEW}\n\n${GENERAL_AD_LAW}\n\n${BRAND_RULES[brand.value] || ''}\n\n${REVIEW_LOGIC}`
 }
