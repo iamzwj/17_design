@@ -36,10 +36,10 @@ export async function analyzePage(image, context = '', { request } = {}) {
 export async function extractPages(version, originals, range, save) {
   const file = version.ext === '.pptx' ? await renderPptx(path.join(originals, version.file)) : path.join(originals, version.file)
   const pages = []
-  const add = async (buffer, source, number, text = '') => {
+  const add = async (buffer, source, number, text = '', totalPages = 1) => {
     const png = await sharp(buffer, { limitInputPixels: 40000000 }).rotate().resize(1800, 1800, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
     const metadata = await sharp(png).metadata()
-    const stored = await save(png, { source, number, width: metadata.width, height: metadata.height, context: text })
+    const stored = await save(png, { source, number, width: metadata.width, height: metadata.height, context: text, totalPages })
     pages.push(stored)
   }
   if (['.pdf', '.pptx'].includes(version.ext)) {
@@ -56,7 +56,7 @@ export async function extractPages(version, originals, range, save) {
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height))
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
         const text = await page.getTextContent()
-        await add(canvas.toBuffer('image/png'), `第 ${n} 页`, n, text.items.map((x) => x.str || '').join(' '))
+        await add(canvas.toBuffer('image/png'), `第 ${n} 页`, n, text.items.map((x) => x.str || '').join(' '), pdf.numPages)
         page.cleanup()
       }
     } finally { await pdf.destroy() }
@@ -68,7 +68,7 @@ export async function extractPages(version, originals, range, save) {
     if (range.start > media.length && range.allowEmpty) return pages
     if (range.start > media.length) throw new Error('此范围没有可读取的内嵌图片；DOCX暂支持PNG/JPG/WebP图片，不支持矢量WMF/EMF')
     const text = (await mammoth.extractRawText({ path: file })).value.slice(0, 14000)
-    for (let n = range.start; n <= Math.min(range.end, media.length); n++) await add(await media[n - 1].async('nodebuffer'), `内嵌图片 ${n}（${path.basename(media[n - 1].name)}；DOCX无可靠页码）`, n, text)
+    for (let n = range.start; n <= Math.min(range.end, media.length); n++) await add(await media[n - 1].async('nodebuffer'), `内嵌图片 ${n}（${path.basename(media[n - 1].name)}；DOCX无可靠页码）`, n, text, media.length)
   } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(version.ext)) {
     const meta = await sharp(file).metadata()
     if (meta.width * meta.height > 40000000) throw new Error('图片超过4000万像素')

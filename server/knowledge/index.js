@@ -1,3 +1,4 @@
+import { documentProgress } from './progress.js'
 import { processPagePool } from './pagePool.js'
 import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../../shared/knowledgeUpload.js'
 import fs from 'node:fs'
@@ -83,7 +84,8 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   function publicChunks(versionId) { return chunksFor(versionId).map(({ vector: _vector, ...c }) => c) }
   function details(user, documentId) {
     const { doc, level: permission } = document(user, documentId)
-    const versions = db.prepare('SELECT json FROM versions WHERE document_id=?').all(doc.id).map(parse).filter((v) => permission >= 2 || v.publishedAt).map((v) => ({ ...v, chunks: publicChunks(v.id) }))
+    const progressJobs = all('jobs'), progressAnalyses = all('analyses')
+    const versions = db.prepare('SELECT json FROM versions WHERE document_id=?').all(doc.id).map(parse).filter((v) => permission >= 2 || v.publishedAt).map((v) => ({ ...v, chunks: publicChunks(v.id), progress: documentProgress(v, progressJobs, progressAnalyses) }))
     if (permission < 2 && !doc.publishedVersionId) fail('资料尚未发布', 404)
     return { document: doc, versions, permission, analyses: permission >= 2 ? all('analyses').filter((a) => a.documentId === doc.id).map(({ pages, ...a }) => ({ ...a, pageCount: pages.length })) : [] }
   }
@@ -93,9 +95,9 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   const jobPut = (job) => put('jobs', job)
   const wakeVision = () => { if (!stopped) setImmediate(() => { void drainVision() }) }
   const schedule = () => { if (!stopped) setImmediate(() => { void drain(); void drainVision() }) }
-  function queue(version) {
+  function queue(version, phase = 'foundation') {
     version.status = 'queued'; version.error = null; versionPut(version)
-    jobPut({ id: id(), versionId: version.id, brandId: version.brandId, status: 'queued', stage: '等待处理', createdAt: now(), updatedAt: now() }); schedule()
+    jobPut({ id: id(), phase, versionId: version.id, brandId: version.brandId, status: 'queued', stage: '等待处理', createdAt: now(), updatedAt: now() }); schedule()
   }
   const visionExtensions = ['.pdf', '.pptx', '.docx', '.png', '.jpg', '.jpeg', '.webp']
   function queueAutomaticAnalysis(version, userId) {
@@ -181,6 +183,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
           const file = `${analysis.id}-${info.number}.png`
           fs.writeFileSync(path.join(visuals, file), buffer, { mode: 0o600 })
           const page = { ...info, file, sha256: createHash('sha256').update(buffer).digest('hex') }
+          analysis.totalPages = analysis.automatic ? info.totalPages || analysis.totalPages : Math.min(analysis.range.end, info.totalPages || analysis.range.end) - analysis.range.start + 1
           analysis.pages.push(page)
           analysis.nextPage = info.number + 1
           put('analyses', analysis)
@@ -219,12 +222,13 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
         const sections = analysis.pages.filter((p) => p.result).map((p) => ({ source: `${p.source} · 图文识别`, text: [p.result.text, p.result.business, ...(p.result.rules || [])].filter(Boolean).join('\n') })).filter((s) => s.text.trim())
         const doc = get('documents', version.documentId)
         if (!doc || doc.deletedAt || doc.latestVersionId !== version.id) throw new Error('资料版本已变化，识别结果保留但不覆盖新版本')
+        analysis.indexRequired = sections.length > 0
         if (sections.length) {
           const merged = [...chunksFor(version.id).map(({ text, source, enabled }) => ({ text, source, enabled })), ...splitSections(sections)]
           const unique = [...new Map(merged.map((c) => [`${c.source}:${c.text}`, c])).values()]
           if (unique.length > 2000) throw new Error('图文识别分段超过2000段，请拆分资料')
           version.editedChunks = unique
-          queue(version)
+          queue(version, 'full-index')
         }
         analysis.textMerged = true
         put('analyses', analysis)
@@ -274,7 +278,9 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       const version = get('versions', j.versionId)
       return { ...j, documentId: version.documentId, title: version.title, versionNumber: version.number }
     }) : []
+    const progressJobs = all('jobs'), progressAnalyses = all('analyses')
     for (const doc of docs) {
+      if (doc.version) doc.version = { ...doc.version, progress: documentProgress(doc.version, progressJobs, progressAnalyses) }
       const automatic = all('analyses').find((a) => a.versionId === doc.version?.id && a.automatic)
       if (automatic) doc.automaticAnalysis = { status: automatic.status, completed: automatic.pages.filter((p) => p.result).length, total: automatic.pages.length, error: automatic.error }
     }
@@ -335,7 +341,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   route('post', '/documents/:id/retry', auth, (req, res) => {
     const { doc } = document(req.user, req.params.id, 'edit'), v = get('versions', doc.latestVersionId)
     if (v.status !== 'failed') fail('只有失败任务可以重试')
-    queue(v); res.status(202).json({ ok: true })
+    queue(v, all('analyses').some((a) => a.versionId === v.id && a.automatic && a.textMerged) ? 'full-index' : 'foundation'); res.status(202).json({ ok: true })
   })
   route('post', '/documents/:id/publish', auth, (req, res) => {
     const { doc } = document(req.user, req.params.id, 'publish'), v = get('versions', req.body.versionId)

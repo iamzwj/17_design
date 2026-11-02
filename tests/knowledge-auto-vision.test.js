@@ -104,6 +104,8 @@ test('two pages run in parallel while other documents finish text indexing indep
     await until(async () => active === 2)
     const detail = (await call(`/documents/${uploaded.document.id}`)).data
     assert.equal(detail.versions[0].status, 'ready')
+    assert.equal(detail.versions[0].progress.foundation.percent, 100)
+    assert.ok(detail.versions[0].progress.overall >= 20 && detail.versions[0].progress.overall < 100)
     assert.ok(detail.versions[0].chunks.some((c) => c.text.includes('先提取到的正文')))
     const analysis = (await call(`/analyses/${uploaded.analyses[0].id}`)).data.analysis
     assert.equal(analysis.pages.filter((p) => p.status === 'running').length, 2)
@@ -113,6 +115,7 @@ test('two pages run in parallel while other documents finish text indexing indep
     release()
     await until(async () => (await call(`/analyses/${analysis.id}`)).data.analysis.status === 'succeeded')
     assert.equal(calls, 3); assert.equal(maxActive, 2)
-    await until(async () => (await call(`/documents/${uploaded.document.id}`)).data.versions[0].status === 'ready')
+    const done = await until(async () => { const d = (await call(`/documents/${uploaded.document.id}`)).data; return d.versions[0].status === 'ready' && d })
+    assert.equal(done.versions[0].progress.overall, 100)
   } finally { release(); await new Promise((r) => server.close(r)); await kb.close(); fs.rmSync(dir, { recursive: true, force: true }) }
 })

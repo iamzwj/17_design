@@ -31,3 +31,12 @@
 .kb-vision-progress { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--kb-border); border-radius: 8px; background: var(--kb-soft); }
 .kb-vision-progress progress { display: block; width: 100%; height: 8px; margin: 10px 0; accent-color: var(--kb-accent); }
 .kb-vision-progress small { display: block; overflow-wrap: anywhere; }
+
+.kb-overall-progress { margin: 20px 0; padding: 16px; border: 1px solid var(--kb-border); border-radius: 10px; background: var(--kb-soft); }
+.kb-overall-progress > header, .kb-progress-stage > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kb-overall-progress h3 { margin: 0; }.kb-overall-progress > header > strong { color: var(--kb-accent); font-size: 24px; }
+.kb-overall-progress progress { display: block; width: 100%; height: 8px; margin: 12px 0; accent-color: var(--kb-accent); }
+.kb-progress-stages { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 16px 0 12px; }
+.kb-progress-stage { min-width: 0; padding: 12px; border: 1px solid var(--kb-border); border-radius: 8px; background: var(--kb-bg); }.kb-progress-stage b { font-size: 12px; }.kb-progress-stage span { color: var(--kb-muted); font-size: 11px; white-space: nowrap; }.kb-progress-stage small { display: block; overflow-wrap: anywhere; }.kb-progress-stage.failed { border-color: #c97c8c; }
+.kb-page .kb-overall-percentage { display: block; color: var(--kb-accent); font-size: 12px; margin-bottom: 4px; }
+@media(max-width:700px) { .kb-progress-stages { grid-template-columns: 1fr; }.kb-overall-progress { padding: 12px; }.kb-progress-stage > header { flex-wrap: wrap; } }
