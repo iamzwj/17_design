@@ -80,3 +80,15 @@ test('uncertain results and subjective legacy suggestions never become hard erro
   assert.match(copied, /手册第24页/)
   assert.doesNotMatch(copied, /PULIN-SIGN|FAIL/)
 })
+
+test('inline severity fields from older replies preserve full-size problem and correction text', () => {
+  const report = parseComplianceReport('审核结论：修改后复审\n问题清单\n1. 严重度：S2。所在位置：画面中部标题。问题原因：汉字被图形遮挡，文字显示不完整。规则依据：通用基础文字审核。修改建议：移开遮挡物。\n人工核验项\n1. 确认实际营业项目。')
+  assert.equal(report.issues.length, 1)
+  assert.equal(report.issues[0].severity, '明确问题')
+  assert.equal(report.issues[0].location, '画面中部标题')
+  assert.match(report.issues[0].problem, /文字显示不完整/)
+  assert.match(report.issues[0].fix, /移开遮挡物/)
+  assert.match(report.issues[0].basis[0], /通用基础文字审核/)
+  assert.ok(report.issues[0].title)
+  assert.equal(report.pending.length, 1)
+})

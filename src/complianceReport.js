@@ -9,11 +9,14 @@ export function parseComplianceReport(content) {
     if (!item) return
     const target = item.severity.startsWith('一般问题') ? 'suggestions' : item.status === '待核验' ? 'pending' : ['符合', '不适用'].includes(item.status) ? 'passed' : section || 'issues'
     if (!item.title && item.extra.length && !item.problem) item.title = item.extra.shift()
+    if (!item.title && item.problem) item.title = item.problem.split(/[。；\n]/)[0]
     if (item.title || item.problem || item.fix || item.location || item.basis.length) report[target].push(item)
     item = null
   }
   const start = (title = '') => { flush(); item = { title, location: '', problem: '', fix: '', basis: [], status: '', severity: '', extra: [] } }
-  for (const raw of String(content || '').split(/\r?\n/)) {
+  // Older replies sometimes put every labelled field on one numbered line.
+  const normalized = String(content || '').replace(/(?:[。；;]\s*|[ \t]+)(?=(?:严重度|风险等级|所在位置|触发原文\/画面位置|画面位置|问题原因|规则依据|修改建议|整改提示|需确认|错误|修改|依据)[：:])/g, '\n')
+  for (const raw of normalized.split(/\r?\n/)) {
     const line = raw.replace(/^#{1,6}\s*|^>\s?/g, '').replace(/\*\*/g, '').trim()
     if (!line) continue
     const heading = line.replace(/[：:]$/, '')
@@ -42,7 +45,7 @@ export function parseComplianceReport(content) {
         if (key === '状态') item.status = ['待核验', '不适用', '不符合', '符合'].find((s) => value.startsWith(s)) || value
         else if (key === '严重度' || key === '风险等级') item.severity = value
         else if (['问题', '项目', '检查项'].includes(key)) item.title = value
-        else if (['位置', '触发原文/画面位置', '原文', '画面位置'].includes(key)) item.location += (item.location ? '\n' : '') + value
+        else if (['位置', '所在位置', '触发原文/画面位置', '原文', '画面位置'].includes(key)) item.location += (item.location ? '\n' : '') + value
         else if (['错误', '问题原因', '观察/数据'].includes(key)) item.problem += (item.problem ? '\n' : '') + value
         else if (['修改', '怎么改', '修改建议', '整改提示', '需确认', '可直接替换/补充建议', '可直接替换建议'].includes(key)) item.fix += (item.fix ? '\n' : '') + value
         else if (['依据', '规则依据', '规范要求', '来源'].includes(key)) item.basis.push(value)
