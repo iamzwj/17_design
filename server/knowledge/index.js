@@ -14,6 +14,8 @@ import { analyzePage, extractPages, cropRectangle, VISION_MODEL } from './vision
 
 const ADMIN = 'zhangwj159@onewo.com'
 const roles = { view: 1, edit: 2, publish: 3 }
+// Temporarily omit these spaces from all brand pickers; preserve their documents and history.
+const hiddenBrandNames = new Set(['万物云', '住这儿'])
 const kinds = new Set(['document', 'rule', 'logo', 'palette', 'original', 'style'])
 const now = () => new Date().toISOString()
 const id = () => randomUUID()
@@ -222,7 +224,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   const route = (method, url, guards, handler) => app[method](`/api/knowledge${url}`, ...guards, async (req, res, next) => { try { await handler(req, res) } catch (error) { next(error) } })
   const auth = [requireAuth], admin = [requireAdmin]
   route('get', '/bootstrap', auth, (req, res) => {
-    res.json({ brands: all('brands').filter((b) => level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })
+    res.json({ brands: all('brands').filter((b) => !hiddenBrandNames.has(b.name) && level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })
   })
   route('post', '/brands', admin, (req, res) => {
     const name = clean(req.body.name, 60); if (!name) fail('请输入品牌名称')

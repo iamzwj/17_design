@@ -6,7 +6,15 @@ import './knowledge.css'
 export default function KnowledgeContext({ tool }) {
   const [brands, setBrands] = useState([]), [assets, setAssets] = useState([]), [selection, setSelection] = useState(getKnowledgeSelection), [error, setError] = useState(''), [color, setColor] = useState(null), [loading, setLoading] = useState(false)
   const token = getAuthToken()
-  useEffect(() => { if (!token) return; let live = true; knowledgeRequest('/bootstrap').then((d) => { if (live) setBrands(d.brands) }).catch(() => { if (live) setError('品牌知识库暂不可用') }); return () => { live = false } }, [token])
+  useEffect(() => { if (!token) return; let live = true; knowledgeRequest('/bootstrap').then((d) => { if (live) {
+    setBrands(d.brands)
+    setSelection((current) => {
+      if (!current.brandId || d.brands.some((b) => b.id === current.brandId)) return current
+      const next = { brandId: '', assetIds: [], ipMode: 'none', ipAssetIds: [], logoVariant: 'color' }
+      localStorage.setItem(knowledgeKey('context'), JSON.stringify(next))
+      return next
+    })
+  } }).catch(() => { if (live) setError('品牌知识库暂不可用') }); return () => { live = false } }, [token])
   useEffect(() => {
     if (!selection.brandId || tool !== 'image') return
     let live = true

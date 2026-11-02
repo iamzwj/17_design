@@ -26,7 +26,7 @@ test('library Logos and IP link without uploads, preserve snapshots, publish und
   const call = async (url, body, user = 'admin') => { const response = await fetch(base + url, { method: body ? 'POST' : 'GET', headers: { 'X-User': user, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: response.status, data: await response.json() } }
   const until = async (fn) => { for (let i = 0; i < 200; i++) { const v = await fn(); if (v) return v; await pause() }; throw new Error('timeout') }
   try {
-    const boot = (await call('/bootstrap')).data, brandId = boot.brands.find((b) => b.name === '研选家').id, other = boot.brands.find((b) => b.name === '万物云').id
+    const boot = (await call('/bootstrap')).data, brandId = boot.brands.find((b) => b.name === '研选家').id, other = boot.brands.find((b) => b.name === '万科物业').id
     for (const [n, role] of [['1', 'editor'], ['2', 'viewer'], ['3', 'publisher']]) await call('/groups', { id: `group-${n}`, name: role, members: [role] })
     await call('/brands', { id: brandId, name: '研选家', grants: { 'group-1': 'edit', 'group-2': 'view', 'group-3': 'publish' } })
     assert.equal((await call(`/materials?brandId=${brandId}`, undefined, 'viewer')).status, 403)
