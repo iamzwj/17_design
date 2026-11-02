@@ -1469,7 +1469,7 @@ function TextStudio({ type, conversation, onSave }) {
         startTask(task.id, task.startedAt)
         void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then((result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
-            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
         }).catch((error) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: error.message, failedAt: new Date().toISOString() }])
@@ -1658,7 +1658,7 @@ function TextStudio({ type, conversation, onSave }) {
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
-        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
+        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>

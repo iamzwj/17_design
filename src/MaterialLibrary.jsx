@@ -45,9 +45,9 @@ function MaterialPreview({ asset, onClose }) {
 }
 
 export default function MaterialLibrary() {
-  const [type, setType] = useState('all')
+  const [type, setType] = useState(() => { const value = new URLSearchParams(window.location.search).get('type'); return Object.hasOwn(TYPE_LABELS, value) ? value : 'all' })
   const [ipGroup, setIpGroup] = useState('cartoon')
-  const [brand, setBrand] = useState('all')
+  const [brand, setBrand] = useState(() => { const value = new URLSearchParams(window.location.search).get('brand'); return BRANDS.includes(value) ? value : 'all' })
   const [variant, setVariant] = useState('all')
   const [query, setQuery] = useState('')
   const [preview, setPreview] = useState(null)

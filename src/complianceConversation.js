@@ -30,7 +30,7 @@ export async function runComplianceConversation({ brand, content, attachments, s
       complianceBrand: brand, systemPrompt: buildComplianceSystemPrompt(brand, basePrompt), webSearch: false, searchQuery: content,
       messages: [{ role: 'user', content: [{ type: 'text', text }, ...images.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }],
     })
-    runtime.messages.current = [...runtime.messages.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
+    runtime.messages.current = [...runtime.messages.current, { role: 'assistant', taskId: requestId, complianceBrand: brand, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
     succeeded = true
   } catch (error) {
     runtime.messages.current = [...runtime.messages.current, { role: 'error', taskId: requestId, content: error.message, failedAt: new Date().toISOString() }]
