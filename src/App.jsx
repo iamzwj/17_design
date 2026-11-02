@@ -1,3 +1,4 @@
+import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import mammoth from 'mammoth'
@@ -1630,25 +1631,32 @@ function TextStudio({ type, conversation, onSave }) {
       uploadingImageAttachmentsRef.current = true
       setUploadingImages(true)
     }
-    let completed = false
-    try {
-      // Local data URLs are stripped from saved conversation records. Save
-      // uploaded compliance images first so the user message keeps a clickable
-      // thumbnail after refresh and when reopening its history.
-      let attachmentSnapshot
+    if (type === 'compliance') {
+      let uploadedAttachments
       try {
-        attachmentSnapshot = type === 'compliance' ? await Promise.all(submittedAttachments.map(async (file) => {
+        uploadedAttachments = await Promise.all(submittedAttachments.map(async (file) => {
           if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
           const { url } = await uploadComplianceImage({ source: file.src, name: file.name })
           return { ...file, src: url }
-        })) : submittedAttachments
+        }))
+      } catch (error) {
+        setAttachmentError(error.message || '图片保存失败，请重试')
+        setInput((current) => current || submittedInput)
+        setAttachments((current) => current.length ? current : submittedAttachments)
       } finally {
-        if (needsImageUpload) {
-          uploadingImageAttachmentsRef.current = false
-          setUploadingImages(false)
-        }
+        uploadingImageAttachmentsRef.current = false
+        setUploadingImages(false)
+        finishTask(requestId)
       }
-      const submittedMessage = { role: 'user', content, ...(type === 'compliance' && attachmentSnapshot.length ? { attachments: attachmentSnapshot } : {}) }
+      if (uploadedAttachments) await runComplianceConversation(
+        { brand, content, attachments: uploadedAttachments, startedAt, requestId },
+        { onSave, createRuntime: textTaskRuntime, generate: generatePersistentText, basePrompt: copy.systemPrompt },
+      )
+      return
+    }
+    let completed = false
+    try {
+      const submittedMessage = { role: 'user', content }
       const nextMessages = [...messagesRef.current, submittedMessage]
       updateMessages(nextMessages)
       scrollToLatestResult()
@@ -1790,8 +1798,9 @@ export default function App() {
 
   function saveConversation(update) {
     const now = new Date().toISOString()
-    const { activate, ...conversationUpdate } = update
+    const { activate, openNew, ...conversationUpdate } = update
     if (activate) setActiveConversationId(update.id)
+    if (openNew) setWorkspaceToken((value) => value + 1)
     setConversations((current) => {
       const existing = current.find((conversation) => conversation.id === update.id)
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
