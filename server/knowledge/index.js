@@ -290,7 +290,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     const progressJobs = all('jobs'), progressAnalyses = all('analyses')
     for (const doc of docs) {
       if (doc.version) doc.version = { ...doc.version, progress: documentProgress(doc.version, progressJobs, progressAnalyses) }
-      const automatic = all('analyses').find((a) => a.versionId === doc.version?.id && a.automatic)
+      const automatic = progressAnalyses.find((a) => a.versionId === doc.version?.id && a.automatic)
       if (automatic) doc.automaticAnalysis = { status: automatic.status, completed: automatic.pages.filter((p) => p.result).length, total: automatic.pages.length, error: automatic.error }
     }
     res.json({ documents: docs, jobs })
