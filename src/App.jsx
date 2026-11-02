@@ -1,3 +1,5 @@
+import { formatComplianceReport } from './complianceReport.js'
+import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -1266,51 +1268,6 @@ function TextUserMessage({ message, messageRef, onPreview }) {
   </div>
 }
 
-const COMPLIANCE_SECTION_TITLES = new Set(['摘要', '问题清单', '人工核验项', '通过项'])
-const COMPLIANCE_FIELD_LABELS = ['触发原文/画面位置', '问题原因', '规则依据', '可直接替换/补充建议', '可直接替换建议', '修改建议']
-
-function cleanComplianceLine(line) {
-  return line
-    .replace(/^#{1,6}\s*/, '')
-    .replace(/\*\*/g, '')
-    .replace(/^>\s?/, '')
-    .trim()
-}
-
-function ComplianceReport({ content }) {
-  const lines = String(content || '').split(/\r?\n/).map(cleanComplianceLine).filter(Boolean)
-  const conclusionIndex = lines.findIndex((line) => /审核结论\s*[：:]/.test(line))
-  const scoreIndex = lines.findIndex((line) => /(?:合规)?得分\s*[：:]/.test(line))
-  const conclusionMatch = conclusionIndex >= 0 ? lines[conclusionIndex].match(/审核结论\s*[：:]\s*([^。；]+)/) : null
-  const scoreMatch = scoreIndex >= 0 ? lines[scoreIndex].match(/(?:合规)?得分\s*[：:]\s*([^。；，]+)/) : null
-  const conclusion = conclusionMatch?.[1]?.trim() || '审核完成'
-  const score = scoreMatch?.[1]?.trim() || null
-  const blocked = conclusion.includes('禁止发布') || lines.some((line) => /^严重度\s*[：:]\s*S1\b/i.test(line) || /^\d+[.、]\s*严重度\s*[：:]\s*S1\b/i.test(line))
-  const displayScore = blocked ? '0 分' : score
-  const bodyLines = lines.filter((line, index) => index !== conclusionIndex && index !== scoreIndex && !/^(我先|我会先|下面先)/.test(line) && !/^(以上|本结果|本审核).*(仅供参考|不替代|专业人士|律师意见)/.test(line))
-
-  return <div className="compliance-report">
-    <div className={`report-overview ${blocked ? 'blocked' : ''}`}>
-      <div className="report-conclusion"><span>审核结论</span><strong>{blocked ? '禁止发布' : conclusion}</strong></div>
-      {displayScore && <div className="report-score"><span>合规得分</span><strong>{displayScore}</strong></div>}
-    </div>
-    <div className="report-body">{bodyLines.map((line, index) => {
-      if (COMPLIANCE_SECTION_TITLES.has(line)) return <h3 key={index}>{line}</h3>
-      const numbered = line.match(/^(\d+)[.、]\s*(.*)$/)
-      if (numbered) {
-        const severity = numbered[2].match(/^严重度\s*[：:]\s*(.+)$/)
-        return <div className="report-numbered" key={index}><span className="report-index">{numbered[1]}</span>{severity ? <span className={`severity-badge ${severity[1].toLowerCase()}`}>{severity[1]}</span> : <p>{numbered[2]}</p>}</div>
-      }
-      const severity = line.match(/^严重度\s*[：:]\s*(.+)$/)
-      if (severity) return <div className="report-severity" key={index}><span>风险等级</span><b className={`severity-badge ${severity[1].toLowerCase()}`}>{severity[1]}</b></div>
-      const field = COMPLIANCE_FIELD_LABELS.find((label) => line.startsWith(`${label}：`) || line.startsWith(`${label}:`))
-      if (field) return <div className="report-field" key={index}><b>{field}</b><p>{line.slice(field.length + 1).trim()}</p></div>
-      if (/^[-•]\s+/.test(line)) return <div className="report-pass" key={index}><i/> <span>{line.replace(/^[-•]\s+/, '')}</span></div>
-      return <p className="report-paragraph" key={index}>{line}</p>
-    })}</div>
-  </div>
-}
-
 function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src) => src }) {
   const draggedIndex = useRef(null)
   const [draggingIndex, setDraggingIndex] = useState(null)
@@ -1701,7 +1658,7 @@ function TextStudio({ type, conversation, onSave }) {
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
-        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={message.content} label={type !== 'compliance'}/></div>
+        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>
