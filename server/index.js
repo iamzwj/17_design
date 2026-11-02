@@ -1096,7 +1096,8 @@ async function analyzeImageLayout(sources) {
 4. 核心标题、电话号码等是否被裁断或互相覆盖；
 5. 对遮挡关系写明“哪个元素遮挡了哪个元素”，不要只转录文字。
 6. 如果画面是门店、门头、侧招、玻璃贴、广告牌或施工/效果图，识别可见物料类型，完整转录可辨认的尺寸、比例、材质、工艺、色值、灯箱、侧招、玻璃贴、二维码和导视信息；说明画面是否覆盖门店正面、侧面和玻璃区域。
-7. 不要从照片臆测不可见的材质、厚度、色温、调光器、防水、二维码跳转或现场尺寸。看不到时明确写“未提供足够可见证据”。
+7. 区分原貌照片、效果图和正面设计图；分别描述 Logo 与主文案的左对齐/居中关系，转录宽高标注，能够可靠计算时给出宽高比；不要把场景照片的透视当成平面设计的变形。
+8. 不要从照片臆测不可见的材质、厚度、色温、调光器、防水、二维码跳转或现场尺寸。看不到时明确写“未提供足够可见证据”。
 
 如果 Logo 虽然还能辨认但有任何部分被其他文字覆盖，也必须明确报告。不要因为能读出文字就忽略遮挡。` }]
   images.forEach((image, index) => {
@@ -1161,7 +1162,7 @@ async function normalizeTextMessage({ role, content }) {
     imageSources.length ? analyzeImageLayout(imageSources) : Promise.resolve(''),
     Promise.all(imageSources.map(async (source, index) => {
     const recognizedText = await recognizeImageText(source, index + 1)
-    return `\n\n--- 图片 ${index + 1} 本机识别到的可见文字 ---\n${recognizedText || '未识别到清晰文字。请在结论中说明图片文字不可辨认，不要称用户未上传图片。'}`
+    return `\n\n--- 图片 ${index + 1} 本机识别到的可见文字 ---\n${recognizedText || '本机 OCR 未提供文字（可能不可用或未识别成功），不代表图片文字不可辨认。请依据视觉模型观察审核可识别内容，仅将确实看不清的局部列为待核验；不要称用户未上传图片。'}`
     })),
   ])
 
