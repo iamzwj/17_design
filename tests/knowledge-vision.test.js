@@ -52,7 +52,7 @@ test('persisted vision tasks, permission isolation, safe import, original-logo c
   const call = async (url, body, user = 'admin') => { const r = await fetch(base + url, { method: body ? 'POST' : 'GET', headers: { 'X-User': user, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { status: r.status, data: await r.json() } }
   const until = async (fn) => { for (let n = 0; n < 200; n++) { const r = await fn(); if (r) return r; await pause() }; throw new Error('timeout') }
   try {
-    const brand = (await call('/bootstrap')).data.brands[0]
+    const brand = (await call('/brands', { name: '独立测试品牌', grants: {} })).data.brand
     const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#6C43A8' } }).png().toBuffer()
     const d = (await call('/documents', { brandId: brand.id, title: '虚构规范', file: { name: 'standard.png', base64: png.toString('base64') } })).data
     const documentId = d.document.id, versionId = d.document.latestVersionId

@@ -1,3 +1,4 @@
+import { processPagePool } from './pagePool.js'
 import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../../shared/knowledgeUpload.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -88,9 +89,10 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   }
   const embedder = injectedEmbed ? null : createEmbedder(process.env.KNOWLEDGE_MODEL_CACHE || path.join(directory, 'models'))
   const embed = injectedEmbed || embedder.embed
-  let draining = false, stopped = false
+  let draining = false, visionDraining = false, stopped = false
   const jobPut = (job) => put('jobs', job)
-  const schedule = () => { if (!stopped) setImmediate(() => { void drain() }) }
+  const wakeVision = () => { if (!stopped) setImmediate(() => { void drainVision() }) }
+  const schedule = () => { if (!stopped) setImmediate(() => { void drain(); void drainVision() }) }
   function queue(version) {
     version.status = 'queued'; version.error = null; versionPut(version)
     jobPut({ id: id(), versionId: version.id, brandId: version.brandId, status: 'queued', stage: '等待处理', createdAt: now(), updatedAt: now() }); schedule()
@@ -110,9 +112,8 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     draining = true
     try {
       while (!stopped) {
-        const job = all('jobs').find((j) => j.status === 'queued')
+        const job = all('jobs').find((j) => j.status === 'queued' && j.kind !== 'vision')
         if (!job) break
-        if (job.kind === 'vision') { await runAnalysis(job); continue }
         let version = get('versions', job.versionId)
         if (!version) { job.status = 'failed'; job.error = '版本不存在'; jobPut(job); continue }
         try {
@@ -152,12 +153,24 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
           job.status = 'failed'; job.error = version.error; job.updatedAt = now(); jobPut(job)
         }
       }
-    } finally { draining = false }
+    } finally { draining = false; wakeVision() }
+  }
+  async function drainVision() {
+    if (visionDraining || stopped) return
+    visionDraining = true
+    try {
+      while (!stopped) {
+        const jobs = all('jobs')
+        const job = jobs.find((j) => j.kind === 'vision' && j.status === 'queued' && !jobs.some((text) => text.versionId === j.versionId && text.kind !== 'vision' && ['queued', 'running'].includes(text.status)))
+        if (!job) break
+        await runAnalysis(job)
+      }
+    } finally { visionDraining = false }
   }
   async function runAnalysis(job) {
     const analysis = get('analyses', job.analysisId)
     const version = get('versions', job.versionId)
-    const update = (status, stage) => { analysis.status = status; job.status = status; job.stage = stage; analysis.updatedAt = now(); job.updatedAt = now(); put('analyses', analysis); jobPut(job) }
+    const update = (status, stage) => { analysis.status = status; analysis.stage = stage; job.status = status; job.stage = stage; analysis.updatedAt = now(); job.updatedAt = now(); put('analyses', analysis); jobPut(job) }
     try {
       if (!version || get('documents', version.documentId)?.deletedAt) throw new Error('原资料已不可用')
       update('running', '提取原文页面与图片')
@@ -184,16 +197,24 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
         put('analyses', analysis)
       }
       job.total = analysis.pages.length
-      for (let i = 0; i < analysis.pages.length; i++) {
-        const page = analysis.pages[i]
-        if (!page.result) {
-          if (get('documents', version.documentId)?.deletedAt) throw new Error('原资料已删除，停止图文解析')
-          update('running', `${VISION_MODEL} 解析 ${page.source}`)
-          page.result = await (injectedAnalyze || analyzePage)(fs.readFileSync(path.join(visuals, page.file)), page.context)
-          page.analyzedAt = now(); put('analyses', analysis)
-        }
-        job.completed = i + 1; jobPut(job)
+      job.completed = analysis.pages.filter((p) => p.result).length
+      jobPut(job)
+      const report = () => {
+        job.completed = analysis.pages.filter((p) => p.result).length
+        const active = analysis.pages.filter((p) => p.status === 'running').map((p) => p.source).join('、')
+        update('running', active ? `图文识别 ${job.completed}/${job.total} · ${active}` : `图文识别 ${job.completed}/${job.total}`)
       }
+      await processPagePool(analysis.pages.filter((page) => !page.result), async (page) => {
+        if (get('documents', version.documentId)?.deletedAt) throw new Error('原资料已删除，停止图文解析')
+        page.status = 'running'; page.error = null; report()
+        try {
+          page.result = await (injectedAnalyze || analyzePage)(fs.readFileSync(path.join(visuals, page.file)), page.context)
+          page.analyzedAt = now(); page.status = 'succeeded'
+        } catch (error) {
+          page.status = 'failed'; page.error = String(error.message).slice(0, 500)
+          throw error
+        } finally { report() }
+      }, 2)
       if (analysis.automatic && !analysis.textMerged) {
         const sections = analysis.pages.filter((p) => p.result).map((p) => ({ source: `${p.source} · 图文识别`, text: [p.result.text, p.result.business, ...(p.result.rules || [])].filter(Boolean).join('\n') })).filter((s) => s.text.trim())
         const doc = get('documents', version.documentId)
@@ -613,5 +634,5 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (!v?.file) fail('此资料没有原文件', 404)
     res.set('Cache-Control', 'private, no-store').download(path.join(originals, v.file), v.originalName)
   })
-  return { prepare, finish, compose, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
+  return { prepare, finish, compose, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining || visionDraining) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
 }
