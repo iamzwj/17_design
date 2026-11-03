@@ -18,6 +18,7 @@ const LOGO_FILES = {
   '朴邻-反白': '/material-library/pulin-white.png',
   '研选家-彩色': '/material-library/yanxuanjia-color.png',
   '研选家-反白': '/material-library/yanxuanjia-white.png',
+  '万科物业-彩色': '/material-library/vanke-property-color.png',
   '万科物业-反白': '/material-library/vanke-property-white.png',
   '万科物业 × 朴里节-彩色': '/material-library/vanke-please-day-color.png',
   '万科物业 × 朴里节-反白': '/material-library/vanke-please-day-white.png',
