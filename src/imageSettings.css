@@ -18,3 +18,15 @@
 :root[data-theme='dark'] .image-settings-panel :is(legend,small), :root[data-theme='dark'] .image-settings-panel > header button { color: #b5afc2; }
 :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button { background: #302d39; border-color: #484251; color: #ddd8e6; }
 :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button:hover:not(:disabled), :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button[aria-pressed='true'] { background: #8a73ff26; border-color: #9b81e8; color: #c7bcff; }
+.image-custom-toggle { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid #dedbe7; border-radius: 7px; background: #fff; color: #555063; text-align: left; font-size: 11px; cursor: pointer; }
+.image-custom-toggle[aria-pressed='true'] { background: #efeafa; border-color: #a58be6; color: #6240d4; }
+.image-custom-inputs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 10px; }
+.image-custom-inputs label { min-width: 0; color: #666174; font-size: 11px; }
+.image-custom-inputs input { box-sizing: border-box; width: 100%; min-width: 0; margin-top: 5px; padding: 8px; border: 1px solid #dedbe7; border-radius: 7px; background: #fff; color: #252231; font: inherit; font-size: 13px; }
+.image-custom-inputs input:focus-visible { outline: 2px solid #9474ee; outline-offset: 2px; }
+.image-custom-inputs small { margin-top: 4px; }
+:root[data-theme='dark'] .image-custom-toggle, :root[data-theme='dark'] .image-custom-inputs input { background: #302d39; border-color: #484251; color: #ddd8e6; }
+:root[data-theme='dark'] .image-custom-toggle[aria-pressed='true'] { background: #8a73ff26; border-color: #9b81e8; color: #c7bcff; }
+:root[data-theme='dark'] .image-custom-inputs label { color: #b5afc2; }
+.image-custom-inputs input:invalid { border-color: #c23e54; }
+:root[data-theme='dark'] .image-custom-inputs input:invalid { border-color: #f38b9d; }
