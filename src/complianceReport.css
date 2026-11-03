@@ -43,10 +43,19 @@
 .review-logo-grid span { color: var(--review-muted); font-size: 12px; }
 @media(max-width:600px) { .review-logo-grid { grid-template-columns: 1fr; } }
 
-/* One shared accent for review cues and actions. */
-.review-verdict > span,
+/* Color indicates risk level; purple is reserved for actions. */
+.review-report { --review-error: #b1384e; --review-warning: #935000; }
+:root[data-theme='dark'] .review-report { --review-error: #ffadbc; --review-warning: #ffd08a; }
+.review-section:not(.review-pending) > h3,
+.review-section:not(.review-pending) .review-finding > h4,
+.review-section:not(.review-pending) .review-finding-row > b { color: var(--review-error); }
 .review-verdict.needs-change:not(.is-blocked) > strong,
-.review-section-hint,
-.review-section .review-finding-row > b,
 .review-pending > h3,
+.review-pending .review-finding > h4,
+.review-pending .review-finding-row > b,
+.review-section-hint { color: var(--review-warning); }
 .review-evidence > summary { color: var(--review-accent); }
+
+.review-recommendations { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--review-line); color: var(--review-muted); font-size: 12px; line-height: 1.7; }
+.review-recommendations > b { font-size: 12px; font-weight: 500; }
+.review-recommendations > p { margin: 5px 0 0; }

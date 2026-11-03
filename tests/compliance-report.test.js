@@ -92,3 +92,13 @@ test('inline severity fields from older replies preserve full-size problem and c
   assert.ok(report.issues[0].title)
   assert.equal(report.pending.length, 1)
 })
+
+test('optional recommendations stay in small-print data and never change a passing verdict', () => {
+  const input = '审核结论：通过\n摘要：未发现明确硬伤。\n参考建议（非必改）\n1. 可结合门店条件参考侧招推荐尺寸，现有50×50cm不作为不通过依据。'
+  const report = parseComplianceReport(input)
+  assert.equal(report.conclusion, '通过')
+  assert.equal(report.issues.length, 0)
+  assert.equal(report.pending.length, 0)
+  assert.equal(report.suggestions.length, 1)
+  assert.match(formatComplianceReport(input), /参考建议（非必改）/)
+})

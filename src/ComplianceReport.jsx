@@ -27,6 +27,7 @@ export default function ComplianceReport({ content, brand }) {
     <header className={`review-verdict${blocked ? ' is-blocked' : needsChange ? ' needs-change' : ''}`}><span>审核结论</span><strong>{report.conclusion}</strong>{report.summary.length > 0 && <p>{report.summary.join(' ')}</p>}</header>
     {report.issues.length > 0 && <section className="review-section" aria-label="硬性问题"><h3>硬性问题 <span>{report.issues.length} 项</span></h3>{report.issues.map((item, i) => <Finding item={item} brand={brand} key={i}/>)}</section>}
     {report.pending.length > 0 && <section className="review-section review-pending" aria-label="待核验"><h3>待核验 <span>{report.pending.length} 项</span></h3><p className="review-section-hint">以下项目证据不足，尚不能判定为错误。</p>{report.pending.map((item, i) => <Finding item={item} pending key={i}/>)}</section>}
+    {report.suggestions.length > 0 && <aside className="review-recommendations" aria-label="参考建议（非必改）"><b>参考建议（非必改）</b>{report.suggestions.slice(0, 3).map((item, i) => <p key={i}>{[item.title, item.fix || item.problem, ...item.extra].filter(Boolean).join('：')}</p>)}</aside>}
     {report.notes.length > 0 && <div className="review-notes">{report.notes.map((line, i) => <p key={i}>{line}</p>)}</div>}
     {report.passed.length > 0 && <details className="review-checked"><summary>已检查且未发现明确问题的项目 · {report.passed.length} 项</summary>{report.passed.map((item, i) => <Finding item={item} key={i}/>)}</details>}
   </div>

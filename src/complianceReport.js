@@ -1,4 +1,4 @@
-const sections = { '硬性问题': 'issues', '问题清单': 'issues', '店招规则结果': 'issues', '待核验': 'pending', '人工核验项': 'pending', '待核验项': 'pending', '已检查': 'passed', '通过项': 'passed' }
+const sections = { '参考建议': 'suggestions', '参考建议（非必改）': 'suggestions', '推荐建议': 'suggestions', '硬性问题': 'issues', '问题清单': 'issues', '店招规则结果': 'issues', '待核验': 'pending', '人工核验项': 'pending', '待核验项': 'pending', '已检查': 'passed', '通过项': 'passed' }
 export function readableReviewText(value) {
   return String(value || '').replace(/PULIN-SIGN-\d+/gi, '').replace(/\bNOT_APPLICABLE\b/g, '不适用').replace(/\bUNCERTAIN\b/g, '待核验').replace(/\bFAIL\b/g, '不符合').replace(/\bPASS\b/g, '符合').replace(/\bS1\b/g, '严重硬伤').replace(/\bS2\b/g, '明确问题').replace(/\bS3\b/g, '一般问题').replace(/^[：:｜|\s]+|[｜|\s]+$/g, '').trim()
 }
@@ -36,7 +36,7 @@ export function parseComplianceReport(content) {
     }
     if (section === 'summary') { report.summary.push(readableReviewText(line)); continue }
     if (/^(?:无|暂无|没有)[。.]?$|^未发现(?:明确|明显)?(?:硬性)?(?:问题|错误)[。.]?$|^无明确问题[。.]?$/.test(line)) continue
-    if (!item && ['issues', 'pending', 'passed'].includes(section)) start()
+    if (!item && ['issues', 'pending', 'passed', 'suggestions'].includes(section)) start()
     if (item) {
       const field = line.match(/^([^：:]+)[：:]\s*(.*)$/)
       if (field) {
@@ -78,6 +78,10 @@ export function formatComplianceReport(content) {
       if (item.basis.length) lines.push(`依据：${item.basis.join('；')}`)
       lines.push('')
     })
+  }
+  if (report.suggestions.length) {
+    lines.push('', '参考建议（非必改）')
+    report.suggestions.slice(0, 3).forEach((item, index) => lines.push(`${index + 1}. ${[item.title, item.fix || item.problem, ...item.extra].filter(Boolean).join('：')}`))
   }
   lines.push(...report.notes)
   return lines.join('\n').trim()
