@@ -16,6 +16,7 @@ import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
+import DramaStudio from './DramaStudio.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import MaterialLibrary from './MaterialLibrary.jsx'
@@ -83,6 +84,7 @@ const MODULE_COPY = {
 const STORAGE_KEY = 'diefa-conversations-v1'
 const THEME_KEY = 'diefa-display-mode-v1'
 const IMAGE_MODE_KEY = 'diefa-image-mode-v1'
+const VIDEO_MODE_KEY = 'diefa-video-mode-v1'
 const WATERFALL_CACHE_PREFIX = 'diefa-waterfall-cache-v1:'
 const WATERFALL_HISTORY_PAGE_SIZE = 8
 const GENERATED_IMAGE_DRAG_TYPE = 'application/x-diefa-generated-image'
@@ -457,11 +459,12 @@ function BrandIcon({ alt = '' }) {
   return <span className="brand-icon-static" role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}/>
 }
 
-function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
+function Sidebar({ active, onChange, imageMode, onSelectImageMode, videoMode, onSelectVideoMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
+  const [videoExpanded, setVideoExpanded] = useState(() => active === 'video')
   const [knowledgeExpanded, setKnowledgeExpanded] = useState(() => KNOWLEDGE_SECTIONS.some((item) => item.id === active))
   const [skillsExpanded, setSkillsExpanded] = useState(() => ['skills', 'discover-skills'].includes(active))
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
@@ -497,6 +500,12 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           {imageExpanded && <div className="module-submenu" role="menu" aria-label="图像创作模式">
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'dialogue' ? 'true' : undefined} className={active === 'image' && imageMode === 'dialogue' ? 'active' : ''} onClick={() => { onSelectImageMode('dialogue'); onClose() }}>对话模式</button>
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
+          </div>}
+        </div> : item.id === 'video' ? <div className="more-tool-nav" key={item.id}>
+          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={videoExpanded} onClick={() => { if (item.disabled) return; setVideoExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {videoExpanded && <div className="module-submenu" role="menu" aria-label="视频生成模式">
+            <button type="button" role="menuitem" aria-current={active === 'video' && videoMode !== 'drama' ? 'true' : undefined} className={active === 'video' && videoMode !== 'drama' ? 'active' : ''} onClick={() => { onSelectVideoMode('generate'); onClose() }}>视频生成</button>
+            <button type="button" role="menuitem" aria-current={active === 'video' && videoMode === 'drama' ? 'true' : undefined} className={active === 'video' && videoMode === 'drama' ? 'active' : ''} onClick={() => { onSelectVideoMode('drama'); onClose() }}>短剧生成</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -1706,6 +1715,7 @@ export default function App() {
   }, [active])
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
+  const [videoMode, setVideoMode] = useState(() => localStorage.getItem(VIDEO_MODE_KEY) === 'drama' ? 'drama' : 'generate')
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => ['light', 'dark'].includes(localPreviewTheme) ? localPreviewTheme : localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -1796,6 +1806,16 @@ export default function App() {
     localStorage.setItem(IMAGE_MODE_KEY, mode)
     setArchiveViewOpen(false)
     setActive('image')
+    setWorkspaceToken((value) => value + 1)
+  }
+
+  function selectVideoMode(mode) {
+    const next = mode === 'drama' ? 'drama' : 'generate'
+    if (!user) { openLogin('video'); return }
+    setVideoMode(next)
+    localStorage.setItem(VIDEO_MODE_KEY, next)
+    setArchiveViewOpen(false)
+    setActive('video')
     setWorkspaceToken((value) => value + 1)
   }
 
@@ -1896,7 +1916,9 @@ export default function App() {
       : ['brand-manual', 'marketing-strategy'].includes(active)
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
-        ? <VideoStudio key={workspaceToken}/>
+        ? (videoMode === 'drama'
+          ? <DramaStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('video')}/>
+          : <VideoStudio key={workspaceToken}/>)
       : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
@@ -1907,5 +1929,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} videoMode={videoMode} onSelectVideoMode={selectVideoMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
