@@ -1,3 +1,4 @@
+import { installFilms } from './films.js'
 import { installExternalSkills } from './externalSkills.js'
 import { MAIZI_IMAGE_MODELS, isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
 import { BANANA_IMAGE_MODEL, BANANA_RATIOS, imageModelInput } from './imageModelInput.js'
@@ -2028,6 +2029,8 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   const images = [...waterfallImages, ...directImages].sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt))
   res.json({ users: listUsers(), images })
 })
+
+installFilms(app, { dataDir: waterfallDataDir, requireAuth })
 
 const distDir = path.join(rootDir, 'dist')
 if (fs.existsSync(distDir)) {

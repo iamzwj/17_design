@@ -1,3 +1,4 @@
+import FilmStudio from './FilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
@@ -464,7 +465,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, videoMode, on
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
-  const [videoExpanded, setVideoExpanded] = useState(() => active === 'video')
+  const [videoExpanded, setVideoExpanded] = useState(() => ['video', 'film'].includes(active))
   const [knowledgeExpanded, setKnowledgeExpanded] = useState(() => KNOWLEDGE_SECTIONS.some((item) => item.id === active))
   const [skillsExpanded, setSkillsExpanded] = useState(() => ['skills', 'discover-skills'].includes(active))
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
@@ -502,10 +503,11 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, videoMode, on
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
           </div>}
         </div> : item.id === 'video' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={videoExpanded} onClick={() => { if (item.disabled) return; setVideoExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          <button disabled={item.disabled} className={['video', 'film'].includes(active) ? 'active' : ''} aria-expanded={videoExpanded} onClick={() => { if (item.disabled) return; setVideoExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {videoExpanded && <div className="module-submenu" role="menu" aria-label="视频生成模式">
             <button type="button" role="menuitem" aria-current={active === 'video' && videoMode !== 'drama' ? 'true' : undefined} className={active === 'video' && videoMode !== 'drama' ? 'active' : ''} onClick={() => { onSelectVideoMode('generate'); onClose() }}>视频生成</button>
             <button type="button" role="menuitem" aria-current={active === 'video' && videoMode === 'drama' ? 'true' : undefined} className={active === 'video' && videoMode === 'drama' ? 'active' : ''} onClick={() => { onSelectVideoMode('drama'); onClose() }}>短剧生成</button>
+            <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>一键成片</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -615,7 +617,7 @@ function AuthScreen({ onAuthenticated, onClose, requiredModule = 'general' }) {
   }
 
   const isRegister = mode === 'register'
-  const moduleLabel = requiredModule === 'more-qr' ? '批处理二维码' : MODULES.find((item) => item.id === requiredModule)?.label || ''
+  const moduleLabel = requiredModule === 'film' ? '一键成片' : requiredModule === 'more-qr' ? '批处理二维码' : MODULES.find((item) => item.id === requiredModule)?.label || ''
   const prompt = moduleLabel ? `登录后才能使用“${moduleLabel}”。` : '登录后继续你的创作与对话。'
   return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
@@ -1704,11 +1706,11 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
-    else if (KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
+    if (active === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
+    else if (url.searchParams.get('module') === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
       for (const key of ['module', 'brand', 'document', 'version', 'material']) url.searchParams.delete(key)
     }
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
@@ -1919,7 +1921,7 @@ export default function App() {
         ? (videoMode === 'drama'
           ? <DramaStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('video')}/>
           : <VideoStudio key={workspaceToken}/>)
-      : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'film' ? <FilmStudio key={user?.id || 'guest'} user={user} onLogin={() => openLogin('film')}/> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
