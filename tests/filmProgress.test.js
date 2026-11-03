@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filmProgress, filmEvent, filmShotState } from '../shared/filmProgress.js';
+import { filmProgress, filmEvent, filmShotState, filmTaskName } from '../shared/filmProgress.js';
 test('progress reflects real outputs, including invalidated and paused work', () => {
   const p = { status:'running', stage:'plan', assets:[], shots:[] };
   assert.equal(filmProgress(p).completed, 0);
@@ -24,4 +24,9 @@ test('each shot exposes pending, generating, failed and playable states', () => 
   assert.equal(filmShotState(p,{video:{}},0).state,'complete');
   assert.equal(filmShotState(p,{videoError:'拒绝'},1).state,'error');
   p.status='cancelled'; assert.equal(filmShotState(p,{frame:{}},0).label,'已暂停');
+});
+
+test('task names keep the one-click-film prefix and use the director title', () => {
+  assert.equal(filmTaskName({title:'用户长篇输入'}),'一键成片 · 导演命名中');
+  assert.equal(filmTaskName({plan:{},title:'社区的一束光'}),'一键成片 · 社区的一束光');
 });

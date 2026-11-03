@@ -1706,9 +1706,10 @@ export default function App() {
   const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
+    if (active !== 'film') url.searchParams.delete('filmProject')
     if (active === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
     else if (url.searchParams.get('module') === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
-      for (const key of ['module', 'brand', 'document', 'version', 'material']) url.searchParams.delete(key)
+      for (const key of ['module', 'brand', 'document', 'version', 'material', 'filmProject']) url.searchParams.delete(key)
     }
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [active])

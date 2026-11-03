@@ -83,7 +83,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true }) {
     const p = {
       id: requestId,
       userId: req.user.id,
-      title: String(b.story).slice(0, 22),
+      title: "导演命名中",
       story: b.story,
       ratio: b.ratio,
       duration: Number(b.duration),

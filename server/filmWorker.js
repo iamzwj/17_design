@@ -142,7 +142,7 @@ async function plan(p) {
       {
         role: "system",
         content:
-          "你是短片总导演。只输出JSON，不要代码块。结构：title,summary,assets:[{id,name,prompt}],shots:[{id,duration,assetIds,prompt,dialogue}]。最多2个角色、2个场景，assets分别生成角色或场景独立图。镜头每段3至10秒，合计等于目标时长，最多12镜。每镜prompt按时间、场景、人物服装、构图、动作、光线、运镜、声音、连续性详细描述；中文台词写进dialogue，视频模型应同步生成对白及环境音，不要背景字幕。所有角色/场景引用既有assetIds，镜头参考图最多3张。避免多人长对白。",
+          "你是短片总导演。只输出JSON，不要代码块。title根据故事梗概拟定一个简洁片名（5至12个汉字），不要截取故事开头。结构：title,summary,assets:[{id,name,prompt}],shots:[{id,duration,assetIds,prompt,dialogue}]。最多2个角色、2个场景，assets分别生成角色或场景独立图。镜头每段3至10秒，合计等于目标时长，最多12镜。每镜prompt按时间、场景、人物服装、构图、动作、光线、运镜、声音、连续性详细描述；中文台词写进dialogue，视频模型应同步生成对白及环境音，不要背景字幕。所有角色/场景引用既有assetIds，镜头参考图最多3张。避免多人长对白。",
       },
       {
         role: "user",
@@ -158,6 +158,7 @@ async function plan(p) {
     throw Error("导演未返回有效制作计划，请重试");
   }
   if (
+    typeof j.title !== "string" || !j.title.trim() || j.title.length > 40 ||
     !Array.isArray(j.shots) ||
     !j.shots.length ||
     j.shots.length > 12 ||
@@ -180,7 +181,7 @@ async function plan(p) {
   )
     throw Error("分镜时长或素材引用未通过校验，请重试");
   p.plan = j;
-  p.title = j.title || p.title;
+  p.title = j.title.trim();
   p.assets = j.assets;
   p.shots = j.shots;
   p.status = p.automatic ? "running" : "review";

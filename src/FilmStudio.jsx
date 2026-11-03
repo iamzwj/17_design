@@ -1,6 +1,6 @@
-import { filmShotState } from '../shared/filmProgress.js';
+import { filmShotState, filmTaskName } from '../shared/filmProgress.js';
 import FilmProduction from './FilmProduction.jsx';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
 import "./filmStudio.css";
@@ -73,13 +73,15 @@ const stages = {
   done: "成片已完成",
 };
 export default function FilmStudio({ user, onLogin }) {
+  const selectedKey = "dgen-film-selected-user:" + user?.id;
+  const viewKey = "dgen-film-view-user:" + user?.id;
+  const initialId = () => new URLSearchParams(window.location.search).get("filmProject") || localStorage.getItem(selectedKey) || localStorage.getItem("dgen-film-selected-" + getAuthToken().slice(-12)) || "";
+  const firstLoad = useRef(true);
+  const firstSelectedId = useRef(initialId());
+  const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState(() => new URLSearchParams(window.location.search).get("filmProject") ? "project" : localStorage.getItem(viewKey) || (initialId() ? "project" : "tasks"));
   const [projects, setProjects] = useState([]),
-    [id, setId] = useState(
-      () =>
-        localStorage.getItem(
-          "dgen-film-selected-" + getAuthToken().slice(-12),
-        ) || "",
-    ),
+    [id, setId] = useState(initialId),
     [form, setForm] = useState(() => {
       try {
         return (
@@ -121,7 +123,13 @@ export default function FilmStudio({ user, onLogin }) {
     const refresh = () =>
       request()
         .then((d) => {
-          if (live) { setProjects(d.projects); setLastSynced(Date.now()); setError(""); }
+          if (live) {
+            setProjects(previous => [...d.projects, ...previous.filter(old => !d.projects.some(item => item.id === old.id))]); setLastSynced(Date.now()); setLoaded(true);
+            if (firstLoad.current) {
+              firstLoad.current = false;
+              if (!d.projects.length && !firstSelectedId.current) setView("create");
+            }
+          }
         })
         .catch((e) => {
           if (live) setError(e.message);
@@ -140,9 +148,17 @@ export default function FilmStudio({ user, onLogin }) {
     );
   }, [form]);
   useEffect(() => {
-    localStorage.setItem("dgen-film-selected-" + getAuthToken().slice(-12), id);
+    localStorage.setItem(selectedKey, id);
     setEdits({});
-  }, [id]);
+  }, [id, selectedKey]);
+  useEffect(() => {
+    localStorage.setItem(viewKey, view);
+    const url = new URL(window.location.href);
+    if (view === "project" && id) url.searchParams.set("filmProject", id);
+    else url.searchParams.delete("filmProject");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [id, view, viewKey]);
+  function openProject(projectId) { setId(projectId); setView("project"); }
   useEffect(() => { if (p?.output) setTab("output"); }, [p?.id, p?.output]);
   const field = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   async function action(path, body) {
@@ -155,7 +171,7 @@ export default function FilmStudio({ user, onLogin }) {
           d.project,
           ...ps.filter((x) => x.id !== d.project.id),
         ]);
-        setId(d.project.id);
+        openProject(d.project.id);
       }
     } catch (e) {
       setError(e.message);
@@ -172,7 +188,7 @@ export default function FilmStudio({ user, onLogin }) {
       const url = URL.createObjectURL(await r.blob()),
         a = document.createElement("a");
       a.href = url;
-      a.download = p.title + ".mp4";
+      a.download = filmTaskName(p) + ".mp4";
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
@@ -195,7 +211,7 @@ export default function FilmStudio({ user, onLogin }) {
           <h1>一键成片</h1>
           <p>把故事变成一部短片，让角色、场景与镜头共同讲述。</p>
         </div>
-        <button onClick={() => setId("")}>新建短片</button>
+        <div className="film-header-actions"><button onClick={() => setView("tasks")}>任务列表{projects.length ? ` (${projects.length})` : ''}</button><button onClick={() => { setId(""); setView("create"); }}>新建短片</button></div>
       </header>
       {error && (
         <p className="film-error" role="alert">
@@ -204,15 +220,15 @@ export default function FilmStudio({ user, onLogin }) {
       )}
       <div className="film-layout">
         <aside>
-          <h3>我的短片</h3>
-          {!projects.length && <p>你的制作项目会保存在这里。</p>}
+          <h3>任务列表</h3>
+          {!loaded ? <p role="status">正在恢复任务…</p> : !projects.length && <p>开始制作后，任务会自动保存在这里。</p>}
           {projects.map((x) => (
             <button
               key={x.id}
-              className={id === x.id ? "active" : ""}
-              onClick={() => setId(x.id)}
+              className={view === "project" && id === x.id ? "active" : ""}
+              onClick={() => openProject(x.id)}
             >
-              <b>{x.title}</b>
+              <b title={filmTaskName(x)}>{filmTaskName(x)}</b>
               <small>
                 {x.status === "failed"
                   ? "需要处理"
@@ -224,7 +240,7 @@ export default function FilmStudio({ user, onLogin }) {
           ))}
         </aside>
         <main>
-          {!p ? (
+          {!loaded && !p ? <div className="film-restoring" role="status"><h2>正在恢复制作任务</h2><p>正在读取后台保存的进度和素材…</p></div> : view === "tasks" ? <section className="film-task-overview" aria-label="成片任务列表"><h2>任务列表</h2><p>所有制作任务保存在账号中，刷新或离开页面后可继续查看。</p>{!projects.length ? <button className="film-primary" onClick={() => setView("create")}>创建第一个成片任务</button> : projects.map(task => <button className="film-task-row" key={task.id} onClick={() => openProject(task.id)}><div><b>{filmTaskName(task)}</b><small>{new Date(task.createdAt).toLocaleDateString('zh-CN')} · {task.duration}秒</small></div><span>{task.status === 'succeeded' ? '查看成片' : task.status === 'failed' ? '需要处理' : task.status === 'review' ? '待确认分镜' : task.status === 'cancelled' ? '已暂停' : stages[task.stage] || '等待调度'}</span></button>)}</section> : view === "project" && !p ? <div className="film-restoring"><h2>暂未找到该任务</h2><p>任务可能属于其他账号，请返回列表查看。</p><button onClick={() => setView("tasks")}>返回任务列表</button></div> : view === "create" ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -301,7 +317,7 @@ export default function FilmStudio({ user, onLogin }) {
             </form>
           ) : (
             <>
-              <div className="film-project-heading"><h2>{p.title}</h2><span>{p.duration}秒 · {p.ratio === '16:9' ? '横屏' : '竖屏'}</span></div>
+              <div className="film-project-heading"><h2>{filmTaskName(p)}</h2><span>{p.duration}秒 · {p.ratio === '16:9' ? '横屏' : '竖屏'}</span></div>
               <FilmProduction project={p} lastSynced={lastSynced} onStage={(stage) => setTab(stage === 'assets' ? 'assets' : stage === 'render' ? 'output' : 'shots')}/>
               {p.reviewWarning > 0 && (
                 <p className="film-error">

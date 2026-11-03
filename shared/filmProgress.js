@@ -39,3 +39,7 @@ export function filmShotState(project, shot, index) {
   if (['failed','cancelled'].includes(project.status)) return { state:'pending', label:'已暂停', detail:'已保留素材，继续制作后自动恢复' };
   return { state:'pending', label:shot.frame ? '等待生成视频' : '等待首帧', detail:shot.frame ? '已准备好首帧，等待导演调度视频生成' : '角色与场景就绪后自动生成首帧' };
 }
+
+export function filmTaskName(project) {
+  return `一键成片 · ${project.plan ? project.title : '导演命名中'}`;
+}
