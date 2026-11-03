@@ -1,3 +1,5 @@
+import FilmStoryboard from './FilmStoryboard.jsx';
+import FilmMediaLibrary from './FilmMediaLibrary.jsx';
 import {useEffect,useState} from 'react';
 import ComposerSelect from './ComposerSelect.jsx';
 import FilmMedia from './FilmMedia.jsx';
@@ -5,9 +7,15 @@ import {filmUpload} from './filmUpload.js';
 export default function FilmEditor({project:p,stage,selected,onSelect,send,request,notice}) {
   const options=stage==='characters'||stage==='scenes'?(p.resources||[]).filter(r=>r.category===stage):stage==='images'?[...(p.resources||[]),...(p.shots||[])]:p.shots||[];
   const item=options.find(r=>r.id===selected)||options[0];
+  if(stage==='media')return <FilmMediaLibrary project={p} onSelect={onSelect}/>;
+  if(stage==='storyboard')return <FilmStoryboard project={p} selected={selected} onSelect={onSelect} renderEditor={shot=><ResourceEditor key={shot.id+':'+shot.revision} item={shot} project={p} stage="videos" send={send} request={request} notice={notice} hideMedia/>}/>;
   if(stage==='script')return <ScriptEditor key={(p.scriptRevision||1)+':'+Boolean(p.script)} project={p} send={send}/>;
   if(stage==='output')return <div className="fw-delivery"><h3>成片与交付文件</h3>{p.output?<><FilmMedia project={p.id} file={p.output} video/><p>成片、原始素材和历次导出均已保留。</p>{p.renders?.map((r,i)=><div key={r.file}><b>成片版本 {i+1}</b><FileButton project={p.id} file={r.file} request={request}/></div>)}{p.exportFiles&&<div className="fw-actions"><FileButton project={p.id} file={p.exportFiles.timeline} label="下载时间线"/><FileButton project={p.id} file={p.exportFiles.subtitles} label="下载字幕"/></div>}</>:<p>导演完成全部镜头与声音检查后，将在这里显示 MP4。遇到无法恢复的问题会明确暂停。</p>}</div>;
-  return <>{options.length>0&&<ComposerSelect portal label="选择成果" value={item?.id||''} options={options.map(r=>({value:r.id,label:r.name||`镜头 ${r.id}`}))} onChange={onSelect}/>} {item?<ResourceEditor key={item.id+':'+item.revision} item={item} project={p} stage={stage} send={send} request={request} notice={notice}/>:<div className="fw-empty"><h3>等待阶段成果</h3><p>任务完成后会自动显示，不需要逐步点击确认。</p></div>}</>;
+  return <>{options.length>0&&<ResourceNavigator project={p} options={options} selected={item?.id} onSelect={onSelect}/>} {item?<ResourceEditor key={item.id+':'+item.revision} item={item} project={p} stage={stage} send={send} request={request} notice={notice}/>:<div className="fw-empty"><h3>等待阶段成果</h3><p>任务完成后会自动显示，不需要逐步点击确认。</p></div>}</>;
+}
+function ResourceNavigator({project:p,options,selected,onSelect}) {
+  const index=Math.max(0,options.findIndex(r=>r.id===selected));
+  return <section className="fw-resource-browser" aria-label="成果浏览"><div className="fw-resource-browser-heading"><b>{options.some(r=>p.shots?.some(s=>s.id===r.id))?'分镜总览':'设定图总览'} <small>{options.length} 项</small></b><div><button aria-label="上一项成果" disabled={index===0} onClick={()=>onSelect(options[index-1].id)}>上一项</button><button aria-label="下一项成果" disabled={index===options.length-1} onClick={()=>onSelect(options[index+1].id)}>下一项</button></div></div><div className="fw-resource-cards" role="list">{options.map((r,i)=>{const shot=p.shots?.some(s=>s.id===r.id),file=shot?r.frame?.file:(r.output||r.image)?.file;const state=r.stale?'上游已变更':r.paused?'已暂停':r.video?'视频已完成':(p.activeJobs||[]).some(j=>j.resourceId===r.id)?'生成中':file?'图像已完成':'待生成';return <button role="listitem" key={r.id} className={selected===r.id?'selected':''} aria-label={shot?`选择镜头 ${r.id}`:`选择${r.name}`} aria-current={selected===r.id?'true':undefined} onClick={()=>onSelect(r.id)} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const next=Math.max(0,Math.min(options.length-1,i+(['ArrowLeft','ArrowUp'].includes(e.key)?-1:1)));onSelect(options[next].id);e.currentTarget.parentElement.children[next]?.focus();}}}>{file?<div className="fw-resource-thumb"><FilmMedia project={p.id} file={file}/></div>:<div className="fw-resource-thumb empty">{shot?'镜头 '+(i+1):r.type==='face'?'人物':r.category==='scenes'?'场景':'服装'}</div>}<span><b>{shot?`镜头 ${i+1}`:r.name}</b>{shot&&<small>{r.duration}秒</small>}</span><small>{state}{r.locked?' · 已锁定':''}</small></button>;})}</div></section>;
 }
 export function FileButton({project,file,label='下载',request:_request}) {
   const [error,setError]=useState('');
@@ -17,11 +25,12 @@ function ScriptEditor({project:p,send}) {
   const key='film-script-draft:'+p.id+':'+(p.scriptRevision||1);
   const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||p.script;}catch{return p.script;}});
   useEffect(()=>{if(draft)localStorage.setItem(key,JSON.stringify(draft));},[key,draft]);
-  if(!p.script)return <div className="fw-empty"><h3>编剧正在准备剧本</h3><p>{p.plan?.summary||'可以在中间查看真实任务进度。旧版项目保留原分镜，继续使用原有成果。'}</p></div>;
+  if(!p.script && (p.legacy || p.plan))return <div className="fw-editor-form fw-legacy-script"><h3>原始剧本与镜头脚本</h3><p className="fw-caption">此任务在升级前创建。原始内容和已有分镜均保留，不会因查看剧本重新生成素材。</p><h4>原始故事 / 剧本</h4><div className="fw-script-body">{p.story||'该旧任务未保存原始正文'}</div><details><summary>故事梗概</summary><p>{p.plan?.summary}</p></details><h4>已有镜头脚本（{p.shots?.length||0}）</h4>{p.shots?.map((shot,i)=><details key={shot.id} open={i===0}><summary>镜头 {i+1} · {shot.time||'时间见镜头描述'} · {shot.duration}秒</summary><div className="fw-script-body">{shot.prompt}</div>{shot.dialogue&&<p>对白：{shot.dialogue}</p>}</details>)}</div>;
+  if(!p.script)return <div className="fw-empty"><h3>{['failed','needs-input','paused'].includes(p.status)?'剧本尚未完成':'编剧正在编写剧本'}</h3><p>{p.error||'可以在中间查看真实任务进度，剧本生成后会自动显示正文。'}</p></div>;
   const updateScene=(i,key,value)=>setDraft(d=>({...d,scenes:d.scenes.map((s,n)=>n===i?{...s,[key]:value}:s)}));
   return <div className="fw-editor-form"><h3>剧本 <small>版本 {p.scriptRevision||1}</small></h3><label>故事梗概<textarea disabled={p.scriptLocked} value={draft.summary||''} onChange={e=>setDraft({...draft,summary:e.target.value})}/></label>{draft.scenes.map((s,i)=><details key={s.id} open={i===0}><summary>场次 {i+1} · {s.time} · {s.location}</summary><label>时间<input disabled={p.scriptLocked} value={s.time} onChange={e=>updateScene(i,'time',e.target.value)}/></label><label>剧情与动作<textarea disabled={p.scriptLocked} value={s.action||''} onChange={e=>updateScene(i,'action',e.target.value)}/></label><label>旁白<textarea disabled={p.scriptLocked} value={s.narration||''} onChange={e=>updateScene(i,'narration',e.target.value)}/></label><p>{(s.dialogue||[]).map(d=>`${d.character}：${d.text}`).join('\n')}</p></details>)}<div className="fw-actions"><button onClick={()=>send('script-lock',{locked:!p.scriptLocked})}>{p.scriptLocked?'解锁剧本':'锁定剧本'}</button><button className="film-primary" disabled={p.scriptLocked} onClick={()=>send('script',{script:draft})}>保存剧本并续跑</button></div><small>整部剧本修改会重新分析角色、场景和分镜；有锁定资产时需先解锁。局部改动请直接选择对应任务。</small>{p.scriptHistory?.length>0&&<details><summary>剧本历史（{p.scriptHistory.length}）</summary>{p.scriptHistory.map((h,i)=><button key={i} disabled={p.scriptLocked} onClick={()=>send('script',{script:h.script})}>恢复剧本版本 {i+1}</button>)}</details>}</div>;
 }
-function ResourceEditor({item:r,project:p,stage,send,request,notice}) {
+function ResourceEditor({item:r,project:p,stage,send,request,notice,hideMedia=false}) {
   const shot=(p.shots||[]).some(s=>s.id===r.id),key=`film-edit:${p.id}:${r.id}:${r.revision}`;
   const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||r;}catch{return r;}}),[old,setOld]=useState(''),[uploading,setUploading]=useState(false);
   useEffect(()=>{localStorage.setItem(key,JSON.stringify(draft));},[draft,key]);
@@ -32,7 +41,7 @@ function ResourceEditor({item:r,project:p,stage,send,request,notice}) {
   const patch=shot?{prompt:draft.prompt,firstFramePrompt:draft.firstFramePrompt,tailFramePrompt:draft.tailFramePrompt,dialogue:draft.dialogue,duration:Number(draft.duration),time:draft.time,outfitIds:draft.outfitIds,resourceIds:draft.resourceIds}: {name:draft.name,prompt:draft.prompt,attributes:draft.attributes};
   return <div className="fw-editor-form"><div className="fw-result-heading"><h3>{r.name||`镜头 ${r.id}`}</h3><span>v{r.revision||1}{r.locked?' · 已锁定':''}</span></div>
     {r.stale&&<p className="fw-warning">上游已变化，当前锁定成果未被覆盖。<button onClick={()=>send('keep',{id:r.id})}>明确保留当前版本</button></p>}
-    {output?.file?<FilmMedia project={p.id} file={output.file} video={stage==='videos'&&shot} audio={stage==='audio'&&shot}/>:<div className="fw-empty">{task?.status==='running'?'模型正在制作，完成后自动展示':'尚无此项成果'}</div>}
+    {!hideMedia&&(output?.file?<FilmMedia project={p.id} file={output.file} video={stage==='videos'&&shot} audio={stage==='audio'&&shot}/>:<div className="fw-empty">{task?.status==='running'?'模型正在制作，完成后自动展示':'尚无此项成果'}</div>)}
     {shot&&stage==='images'&&r.tail&&<details><summary>查看尾帧</summary><FilmMedia project={p.id} file={r.tail.file}/></details>}
     {stage==='audio'&&r.audio&&<p className="fw-caption">{r.audio.hasAudio?'已保留视频原生声音':'此片段无原生声音'}。{r.audio.note|| (r.audio.alignment==='audio-model'?'字幕由实际音轨转录，仍可人工校正。':'')}</p>}
     <div className="fw-actions"><button onClick={()=>send('lock',{id:r.id,locked:!r.locked})}>{r.locked?'解除锁定':'锁定版本'}</button><button onClick={()=>send('task-pause',{id:r.id,paused:!r.paused})}>{r.paused?'恢复当前任务':'暂停当前任务'}</button>{output?.file&&<FileButton project={p.id} file={output.file}/>}</div>

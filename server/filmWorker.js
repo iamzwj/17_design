@@ -327,14 +327,14 @@ async function quality(p) {
   if (p.status === "review") return;
   p.stage = "quality";
   save(p);
-  for (let i = 0; i < p.shots.length; i++) {
+  await filmPool(p.shots,10,async (shot,i)=>{
     check(p);
-    const shot = p.shots[i];
-    if(!shot.video || shot.stale || shot.paused)continue;
-    if(shot.manualApprovedVersion===shot.revision){shot.review={file:shot.video.file,status:"pass",summary:"用户已确认保留当前版本",manual:true};continue;}
-    if(shot.review?.file===shot.video.file)continue;
+    if(!shot.video || shot.stale || shot.paused)return;
+    if(shot.manualApprovedVersion===shot.revision){shot.review={file:shot.video.file,status:"pass",summary:"用户已确认保留当前版本",manual:true};return;}
+    if(shot.review?.file===shot.video.file)return;
     const reviewedVersion=shot.revision,reviewVideo=shot.video.file,reviewFrame=shot.frame?.file;let reviewResult;
-    const reviewTask=beginTask(p,taskId(shot.id,"review",reviewedVersion),"quality","quality",{name:`镜头 ${shot.id} 一致性检查`});save(p);
+    const reviewTask=beginTask(p,taskId(shot.id,"review",reviewedVersion),"quality","quality",{name:`镜头 ${i+1} 一致性检查`});
+    p.activeJobs ||= [];p.activeJobs.push({id:reviewTask.id,stage:"quality",resourceId:shot.id,message:`正在审核镜头 ${i+1}`,startedAt:Date.now()});save(p);
 
     activity(p, `quality:${reviewVideo}`, `正在核对镜头 ${i + 1} 的人物、服装与场景`);
     try {
@@ -407,11 +407,12 @@ async function quality(p) {
     }
     save(p);
     if(shot.revision===reviewedVersion)shot.review=reviewResult;
+    p.activeJobs=p.activeJobs.filter(j=>j.id!==reviewTask.id);
     finishTask(p,reviewTask,reviewResult);
     if(shot.revision!==reviewedVersion)reviewTask.status="superseded";
     filmEvent(p, `checked:${reviewVideo}`, `镜头 ${i + 1} 画面检查已结束${reviewResult.status === "pass" ? "" : "，需要人工核对"}`);
     save(p);
-  }
+  });
   p.reviewWarning = p.shots.filter((s) => s.review?.status !== "pass").length;
   save(p);
 }
@@ -601,7 +602,7 @@ async function imagesV2(p) {
       await generate(p,r,'image',{model:p.imageModel,prompt:`${p.settings.style}；${r.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?'1:1':'1024x1024',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`asset-${r.id}-v${r.revision}.png`);
     });
   }
-  await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original'),3,async r=>{
+  await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original'),10,async r=>{
     if(r.assetReview?.file===r.output.file)return;
     const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
     try {

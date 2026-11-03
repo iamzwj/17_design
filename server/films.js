@@ -1,3 +1,4 @@
+import {filmMediaIndex} from '../shared/filmMediaIndex.js';
 import {probe} from './filmEditing.js';
 import sharp from 'sharp';
 import { readFilmProject, clone, applyCommand, pendingCommands, queueFilmCommand } from './filmState.js';
@@ -113,6 +114,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     const p = owned(req, res);
     if (p) res.json({ project: {...p, pendingChanges:pendingCommands(root,p).map(c=>({id:c.id,type:c.type,target:c.body?.id}))} });
   });
+  app.get('/api/films/:id/media',requireAuth,(req,res)=>{const p=owned(req,res);if(p)res.json({media:filmMediaIndex(p,req.query.history==='1')});});
   const commandRoute = (fn) => async (req,res,next) => { try { await fn(req,res); } catch(e) { if(e.status) return res.status(e.status).json({error:e.message}); if(/锁定|不存在|无效|未知|上限|先解锁/.test(e.message)) return res.status(400).json({error:e.message}); next(e); } };
   const validateCommand = (p,type,body) => {
     const projected=clone(p);for(const command of pendingCommands(root,p))applyCommand(projected,command);p=projected;
