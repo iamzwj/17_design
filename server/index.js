@@ -1,3 +1,4 @@
+import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
 import { installExternalSkills } from './externalSkills.js'
 import { MAIZI_IMAGE_MODELS, isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
@@ -115,6 +116,7 @@ const festivalAssetFiles = {
 }
 
 function supportsImageRatio(model, resolution, ratio) {
+  if (parseCustomImageSize(ratio)) return !validateCustomImageSize(model, ratio)
   if (model === BANANA_IMAGE_MODEL || isMaiziImageModel(model)) return BANANA_RATIOS.has(ratio)
   if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
   return ['gpt-image-2-vip', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) && ['2k', '4k'].includes(String(resolution).toLowerCase())
@@ -155,13 +157,18 @@ function imageCreditCost(model, count = 1) {
 }
 
 function generationSize(model, resolution, ratio) {
+  if (parseCustomImageSize(ratio)) {
+    const error = validateCustomImageSize(model, ratio)
+    if (error) throw Object.assign(new Error(error), { status: 400 })
+    return ratio
+  }
   if (isMaiziImageModel(model)) return String(resolution).toUpperCase()
   const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
 }
 
 function aspectRatioValue(ratio) {
-  const [width, height] = String(ratio || '').split(':').map(Number)
+  const [width, height] = String(ratio || '').split(/[:x]/).map(Number)
   return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? width / height : null
 }
 
@@ -1671,6 +1678,10 @@ app.post('/api/image', requireAuth, imageSkillMiddleware, knowledgeMiddleware('i
     }
     if (removeBackground) chromaKeyRgb(backgroundColor)
     const settings = imageModelSettings(model, resolution, quality)
+    if (String(aspectRatio).includes('x')) {
+      const error = validateCustomImageSize(settings.model, aspectRatio)
+      if (error) return res.status(400).json({ error })
+    }
     creditCost = imageCreditCost(settings.model)
     chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
@@ -1893,6 +1904,10 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 4) return res.status(400).json({ error: '生成数量必须为 1 至 4 张' })
     if (removeBackground) chromaKeyRgb(backgroundColor)
     const settings = imageModelSettings(model, resolution, quality)
+    if (String(aspectRatio).includes('x')) {
+      const error = validateCustomImageSize(settings.model, aspectRatio)
+      if (error) return res.status(400).json({ error })
+    }
     const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
     const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
     const now = new Date().toISOString()

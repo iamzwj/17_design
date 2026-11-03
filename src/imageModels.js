@@ -1,3 +1,4 @@
+import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 export const MAIZI_IMAGE_MODELS = new Set(['gpt-image-2.5-flare-t', 'gpt-image-2.5-sunburst-t'])
 export const BANANA_IMAGE_MODEL = 'nano-banana-2.1'
 const BANANA_RATIOS = new Set(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'])
@@ -26,6 +27,7 @@ export function supportsImageResolution(model) {
 // Keeping this rule alongside the model metadata prevents the picker from
 // advertising a size that would be silently substituted by the provider.
 export function supportsImageRatio(model, resolution, ratio) {
+  if (parseCustomImageSize(ratio)) return !validateCustomImageSize(model, ratio)
   if (model === BANANA_IMAGE_MODEL || MAIZI_IMAGE_MODELS.has(model)) return BANANA_RATIOS.has(ratio)
   if (!['1:3', '3:1'].includes(ratio)) return true
   return EXTREME_RATIO_MODELS.has(model) && ['2k', '4k'].includes(String(resolution).toLowerCase())
