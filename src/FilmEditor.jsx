@@ -1,3 +1,4 @@
+import {replaceFilmPromptTime} from '../shared/filmWorkflow.js';
 import FilmStoryboard from './FilmStoryboard.jsx';
 import FilmMediaLibrary from './FilmMediaLibrary.jsx';
 import {useEffect,useState} from 'react';
@@ -38,14 +39,14 @@ function ResourceEditor({item:r,project:p,stage,send,request,notice,hideMedia=fa
   const task=[...(p.tasks||[])].reverse().find(t=>t.resourceId===r.id||t.id.startsWith(r.id+':'));
   const output=shot?(stage==='audio'?r.audio:stage==='videos'?r.video:r.frame):r.output||r.image;
   async function upload(file){if(!file)return;setUploading(true);try{const result=await filmUpload(request,p.id,file,shot?'video':'image');await send('upload',{id:r.id,file:result.file,locked:true});}catch(e){notice(e.message);}finally{setUploading(false);}}
-  const patch=shot?{prompt:draft.prompt,firstFramePrompt:draft.firstFramePrompt,tailFramePrompt:draft.tailFramePrompt,dialogue:draft.dialogue,duration:Number(draft.duration),time:draft.time,outfitIds:draft.outfitIds,resourceIds:draft.resourceIds}: {name:draft.name,prompt:draft.prompt,attributes:draft.attributes};
+  const patch=shot?{prompt:draft.time&&draft.time!==r.time?replaceFilmPromptTime(draft.prompt,draft.time):draft.prompt,firstFramePrompt:draft.firstFramePrompt,tailFramePrompt:draft.tailFramePrompt,dialogue:draft.dialogue,duration:Number(draft.duration),time:draft.time,outfitIds:draft.outfitIds,resourceIds:draft.resourceIds}: {name:draft.name,prompt:draft.prompt,attributes:draft.attributes};
   return <div className="fw-editor-form"><div className="fw-result-heading"><h3>{r.name||`镜头 ${r.id}`}</h3><span>v{r.revision||1}{r.locked?' · 已锁定':''}</span></div>
     {r.stale&&<p className="fw-warning">上游已变化，当前锁定成果未被覆盖。<button onClick={()=>send('keep',{id:r.id})}>明确保留当前版本</button></p>}
     {!hideMedia&&(output?.file?<FilmMedia project={p.id} file={output.file} video={stage==='videos'&&shot} audio={stage==='audio'&&shot}/>:<div className="fw-empty">{task?.status==='running'?'模型正在制作，完成后自动展示':'尚无此项成果'}</div>)}
     {shot&&stage==='images'&&r.tail&&<details><summary>查看尾帧</summary><FilmMedia project={p.id} file={r.tail.file}/></details>}
     {stage==='audio'&&r.audio&&<p className="fw-caption">{r.audio.hasAudio?'已保留视频原生声音':'此片段无原生声音'}。{r.audio.note|| (r.audio.alignment==='audio-model'?'字幕由实际音轨转录，仍可人工校正。':'')}</p>}
     <div className="fw-actions"><button onClick={()=>send('lock',{id:r.id,locked:!r.locked})}>{r.locked?'解除锁定':'锁定版本'}</button><button onClick={()=>send('task-pause',{id:r.id,paused:!r.paused})}>{r.paused?'恢复当前任务':'暂停当前任务'}</button>{output?.file&&<FileButton project={p.id} file={output.file}/>}</div>
-    {shot&&<div className="fw-field-row"><label>时间<input disabled={r.locked} value={draft.time||''} onChange={e=>{edit('time',e.target.value);edit('prompt',e.target.value+'；'+(draft.prompt||'').split('；').slice(1).join('；'));}} placeholder="白天 / 夜晚"/></label><label>时长（秒）<input type="number" min="1" max="10" step="0.1" disabled={r.locked} value={draft.duration} onChange={e=>edit('duration',e.target.value)}/></label></div>}
+    {shot&&<div className="fw-field-row"><label>时间<input disabled={r.locked} value={draft.time||''} onChange={e=>edit('time',e.target.value)} placeholder="白天 / 夜晚"/></label><label>时长（秒）<input type="number" min="1" max="10" step="0.1" disabled={r.locked} value={draft.duration} onChange={e=>edit('duration',e.target.value)}/></label></div>}
     {shot&&(r.characterIds||[]).map(id=><ComposerSelect portal key={id} label={`角色${id}服装`} value={(draft.resourceIds||[]).find(key=>p.resources.some(x=>x.id===key&&x.type==='wardrobe'&&x.sourceId===id))||''} options={p.resources.filter(x=>x.type==='wardrobe'&&x.sourceId===id).map(x=>({value:x.id,label:x.name}))} onChange={value=>{const outfit=p.resources.find(x=>x.id===value);const remove=p.resources.filter(x=>x.type==='wardrobe'&&x.sourceId===id).map(x=>x.id);setDraft(d=>({...d,resourceIds:[...(d.resourceIds||[]).filter(x=>!remove.includes(x)),value],outfitIds:[...(d.outfitIds||[]).filter(x=>!p.characters.find(c=>c.id===id).outfits.some(o=>o.id===x)),outfit.outfitId]}));}}/>)}
     {r.type==='face'&&<details><summary>新增一套服装</summary><NewOutfit id={r.id} send={send}/></details>}
     <label>{shot?'视频提示词':'视觉设定'}<textarea disabled={r.locked} value={draft.prompt||''} onChange={e=>edit('prompt',e.target.value)}/></label>

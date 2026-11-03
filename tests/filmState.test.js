@@ -11,3 +11,4 @@ test('uploaded original identity is locked and face sheet is a separate derived 
  const source=p.resources.find(r=>r.type==='reference-original'),face=p.resources.find(r=>r.type==='face');
  assert.equal(source.locked,true);assert.equal(source.output.file,'asset-original.png');assert.equal(face.output,null);assert.deepEqual(face.dependencies,[source.id]);assert.equal(face.locked,false);
 });
+test('explicit first-frame edits survive alongside video prompt edits',()=>{const p=fixture();command(p,'edit',{id:'s1',patch:{prompt:'白天；视频动作',firstFramePrompt:'白天；独立首帧构图'}});assert.equal(p.shots[0].firstFramePrompt,'白天；独立首帧构图');});

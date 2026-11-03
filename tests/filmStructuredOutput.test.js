@@ -5,3 +5,4 @@ test('accepts numeric scene number and intentionally empty dialogue without drop
  const [result]=normalizeShots([shot],p);assert.equal(result.sceneNumber,'1');assert.equal(result.dialogue,'');assert.match(result.prompt,/风声/);assert.ok(result.prompt.startsWith('白天'));
  assert.throws(()=>normalizeShots([{...shot,duration:15}],{...p,duration:15}),/时长/);
 });
+test('changing legacy time preserves the rest of the original prompt',async()=>{const {replaceFilmPromptTime}=await import('../shared/filmWorkflow.js');assert.equal(replaceFilmPromptTime('时间：早晨8点50分。场景：门口。动作：推开车门。','夜晚'),'夜晚。场景：门口。动作：推开车门。');});

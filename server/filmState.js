@@ -92,7 +92,7 @@ export function applyCommand(p,c) {
     else if(type==='edit') {
       const allowed=isShot?['prompt','dialogue','duration','time','sceneId','characterIds','outfitIds','resourceIds','firstFramePrompt','tailFramePrompt','camera','action','continuity','subtitleText']:['prompt','name','attributes'];
       for(const key of allowed) if(body.patch && body.patch[key]!==undefined)target[key]=clone(body.patch[key]);
-      if(isShot && body.patch?.prompt)target.firstFramePrompt=body.patch.prompt;
+      if(isShot && body.patch?.prompt && body.patch.firstFramePrompt===undefined && changed.includes('prompt'))target.firstFramePrompt=body.patch.prompt;
     }
     p.needsRerun=true;
     target.stale=false;target.updatedAt=Date.now();

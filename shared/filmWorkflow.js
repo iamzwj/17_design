@@ -6,3 +6,7 @@ export function workflowStages(p) {
   const active=({plan:'script',assets:'images',frames:'images',quality:'videos',render:'editing',done:'output'})[p.stage]||p.stage;
   return WORKFLOW_STAGES.map(([id,label])=>({id,label,done:counts[id][0],total:counts[id][1],complete:counts[id][1]>0&&counts[id][0]===counts[id][1],active:active===id}));
 }
+export function replaceFilmPromptTime(prompt,time) {
+  const text=String(prompt||'');const match=/^(?:时间[：:]\s*)?([^；。;\n]{1,30})([；。;])/.exec(text);
+  return match&&/^(白天|夜晚|早晨|早上|清晨|上午|中午|下午|傍晚|黄昏|深夜|晚上|凌晨|午夜|\d)/.test(match[1])?String(time)+match[2]+text.slice(match[0].length):String(time)+'；'+text;
+}
