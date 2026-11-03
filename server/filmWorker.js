@@ -55,6 +55,11 @@ async function api(endpoint, body) {
     );
   return d.data || d;
 }
+// Headless validation without a public file host may reuse the provider's own
+// generated asset URL. Production defaults to private 30-minute signed links.
+function referenceImage(p,output) {
+  return process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url?output.url:filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
+}
 async function generate(p,slot,key,body,file) {
   if(slot[key] || slot.paused || slot.stale)return;
   check(p);if(slot.locked)throw Object.assign(Error('锁定资产缺少有效产物，需要人工处理'),{code:'INPUT'});
@@ -303,12 +308,7 @@ async function videos(p) {
               "。人物说出上述台词，声音与口型同步。"
             : ""),
         images: [
-          filmAssetLink(
-            root,
-            p.id,
-            s.frame.file,
-            process.env.FILM_PUBLIC_BASE_URL || "https://17design.fun",
-          ),
+          referenceImage(p,s.frame),
         ],
         aspectRatio:
           p.videoModel === "minimax-h3"
@@ -317,7 +317,7 @@ async function videos(p) {
               : "portrait"
             : p.ratio,
         resolution: "480p",
-        duration: Math.round(s.duration),
+        duration: Math.ceil(s.duration),
       },
       `shot-${i}.mp4`,
     );
@@ -593,7 +593,7 @@ async function render(p) {
 const agents=createFilmAgents({api,save,check});
 async function imagesV2(p) {
   p.stage='images';save(p);if(p.pausedStages?.images)return;
-  const link=r=>filmAssetLink(root,p.id,r.output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
+  const link=r=>referenceImage(p,r.output);
   for(const group of [p.resources.filter(r=>r.type!=='wardrobe'),p.resources.filter(r=>r.type==='wardrobe')]) {
     await filmPool(group,10,async r=>{
       if(r.output){r.image=r.output;return;}if(r.paused||r.stale||p.pausedStages?.[r.category])return;
@@ -616,7 +616,7 @@ async function imagesV2(p) {
     if(shot.paused||shot.stale)return;
     const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
     await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，${p.settings.style}，严格保持参考图身份、服装、环境布局一致。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
-    if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[filmAssetLink(root,p.id,shot.frame.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun')],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
+    if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[referenceImage(p,shot.frame)],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
   });
 }
 async function directorReview(p) {
