@@ -42,3 +42,12 @@
 .review-logo-grid > article > div:last-child { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; }
 .review-logo-grid span { color: var(--review-muted); font-size: 12px; }
 @media(max-width:600px) { .review-logo-grid { grid-template-columns: 1fr; } }
+
+/* Keep review cues distinct from body copy in both themes. */
+.review-report { --review-warning: #935000; --review-problem: #b1384e; }
+:root[data-theme='dark'] .review-report { --review-warning: #ffd08a; --review-problem: #ffadbc; }
+.review-verdict > span, .review-evidence > summary { color: var(--review-accent); }
+.review-verdict.needs-change > strong, .review-section-hint { color: var(--review-warning); }
+.review-section .review-finding-row > b { color: var(--review-problem); }
+.review-section .review-fix > b { color: var(--review-accent); }
+.review-pending > h3, .review-finding.is-pending .review-finding-row > b { color: var(--review-warning); }
