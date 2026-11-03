@@ -12,8 +12,10 @@ export const IP_ASSETS = [
   { id: 'person-detail', group: 'real', kind: '细节特写', name: '真人 IP · 细节特写', note: '配饰与局部细节' },
 ]
 
-export const BRANDS = ['朴邻', '研选家', '万科物业', '万科物业 × 朴里节', '万物云', '住这儿']
+export const BRANDS = ['朴邻', '研选家', '万科物业', '万科物业 × 朴里节', '万物云', '住这儿', '万芊荟']
 const LOGO_FILES = {
+  '万芊荟-彩色': '/material-library/wanqianhui-color.png',
+  '万芊荟-反白': '/material-library/wanqianhui-white.png',
   '住这儿-彩色': '/material-library/zhuzher-color.png',
   '住这儿-反白': '/material-library/zhuzher-white.png',
   '万物云-彩色': '/material-library/onewo-color.png',
