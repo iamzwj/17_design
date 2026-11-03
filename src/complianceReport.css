@@ -47,7 +47,7 @@
 .review-report { --review-warning: #935000; --review-problem: #b1384e; }
 :root[data-theme='dark'] .review-report { --review-warning: #ffd08a; --review-problem: #ffadbc; }
 .review-verdict > span, .review-evidence > summary { color: var(--review-accent); }
-.review-verdict.needs-change > strong, .review-section-hint { color: var(--review-warning); }
+.review-verdict.needs-change:not(.is-blocked) > strong, .review-section-hint { color: var(--review-warning); }
 .review-section .review-finding-row > b { color: var(--review-problem); }
 .review-section .review-fix > b { color: var(--review-accent); }
 .review-pending > h3, .review-finding.is-pending .review-finding-row > b { color: var(--review-warning); }
