@@ -1,3 +1,5 @@
+import { filmShotState } from '../shared/filmProgress.js';
+import FilmProduction from './FilmProduction.jsx';
 import { useEffect, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
@@ -22,9 +24,11 @@ async function request(path = "", body) {
   return d;
 }
 function Media({ project, file, video = false }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!file) return;
+    setUrl("");
+    setMediaError(false);
     let live = true,
       src;
     fetch(base() + `/api/films/${project}/files/${file}`, {
@@ -39,12 +43,12 @@ function Media({ project, file, video = false }) {
         if (live) setUrl(src);
         else URL.revokeObjectURL(src);
       })
-      .catch(() => {});
+      .catch(() => { if (live) setMediaError(true); });
     return () => {
       live = false;
       if (src) URL.revokeObjectURL(src);
     };
-  }, [project, file]);
+  }, [project, file, retry]);
   return url ? (
     video ? (
       <video src={url} controls preload="metadata" />
@@ -52,8 +56,12 @@ function Media({ project, file, video = false }) {
       <img src={url} alt="制作素材" />
     )
   ) : (
-    <span>素材读取中…</span>
+    mediaError ? <button onClick={() => setRetry(v => v + 1)}>素材读取失败，点击重试</button> : <span>素材读取中…</span>
   );
+}
+function ShotStatus({ project, shot, index }) {
+  const status = filmShotState(project, shot, index);
+  return <div className={`film-shot-status ${status.state}`}><b><i aria-hidden="true"/>{status.label}</b><span>{status.detail}</span></div>;
 }
 const stages = {
   plan: "导演正在编写剧本与分镜",
@@ -103,7 +111,8 @@ export default function FilmStudio({ user, onLogin }) {
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("shots"),
     [edits, setEdits] = useState({}),
-    [change, setChange] = useState("");
+    [change, setChange] = useState(""),
+    [lastSynced, setLastSynced] = useState(0);
   const p = projects.find((p) => p.id === id),
     running = p && ["queued", "running"].includes(p.status);
   useEffect(() => {
@@ -112,7 +121,7 @@ export default function FilmStudio({ user, onLogin }) {
     const refresh = () =>
       request()
         .then((d) => {
-          if (live) setProjects(d.projects);
+          if (live) { setProjects(d.projects); setLastSynced(Date.now()); setError(""); }
         })
         .catch((e) => {
           if (live) setError(e.message);
@@ -134,6 +143,7 @@ export default function FilmStudio({ user, onLogin }) {
     localStorage.setItem("dgen-film-selected-" + getAuthToken().slice(-12), id);
     setEdits({});
   }, [id]);
+  useEffect(() => { if (p?.output) setTab("output"); }, [p?.id, p?.output]);
   const field = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   async function action(path, body) {
     setBusy(true);
@@ -181,7 +191,7 @@ export default function FilmStudio({ user, onLogin }) {
     <section className="film-studio">
       <header>
         <div>
-          <small>AI FILM STUDIO</small>
+          <small>AI 导演工作台</small>
           <h1>一键成片</h1>
           <p>把故事变成一部短片，让角色、场景与镜头共同讲述。</p>
         </div>
@@ -277,7 +287,7 @@ export default function FilmStudio({ user, onLogin }) {
                   checked={!form.automatic}
                   onChange={(e) => field("automatic", !e.target.checked)}
                 />{" "}
-                先查看分镜，再开始生成素材和视频
+                仅生成分镜，确认后再制作成片
               </label>
               <p className="film-caption">
                 将调用所选模型生成角色、场景、分镜图和视频，按供应商实际用量计费。离开页面后后台继续制作。
@@ -286,19 +296,13 @@ export default function FilmStudio({ user, onLogin }) {
                 className="film-primary"
                 disabled={busy || !form.story.trim()}
               >
-                {busy ? "正在创建…" : "开始制作"}
+                {busy ? "正在创建…" : form.automatic ? "一键生成成片" : "生成分镜"}
               </button>
             </form>
           ) : (
             <>
-              <h2>{p.title}</h2>
-              <p role="status">
-                {p.status === "failed"
-                  ? "制作暂停，已完成的素材和镜头会保留"
-                  : p.status === "review"
-                    ? "分镜已准备好，请检查后继续"
-                    : stages[p.stage] || "已加入制作队列"}
-              </p>
+              <div className="film-project-heading"><h2>{p.title}</h2><span>{p.duration}秒 · {p.ratio === '16:9' ? '横屏' : '竖屏'}</span></div>
+              <FilmProduction project={p} lastSynced={lastSynced} onStage={(stage) => setTab(stage === 'assets' ? 'assets' : stage === 'render' ? 'output' : 'shots')}/>
               {p.reviewWarning > 0 && (
                 <p className="film-error">
                   有 {p.reviewWarning}{" "}
@@ -306,7 +310,7 @@ export default function FilmStudio({ user, onLogin }) {
                 </p>
               )}
               {p.error && <p className="film-error">{p.error}</p>}
-              <div className="film-actions">
+              <div className="film-actions film-production-actions">
                 {running ? (
                   <button onClick={() => action("/" + p.id + "/cancel", {})}>
                     暂停后续制作
@@ -314,7 +318,7 @@ export default function FilmStudio({ user, onLogin }) {
                 ) : (
                   <button
                     className="film-primary"
-                    disabled={busy}
+                    disabled={busy || (Boolean(p.output) && !p.shots.some((s, i) => edits[i] !== undefined && edits[i] !== s.prompt))}
                     onClick={() =>
                       action("/" + p.id + "/resume", {
                         shots: p.shots.map((s, i) => ({
@@ -324,10 +328,10 @@ export default function FilmStudio({ user, onLogin }) {
                       })
                     }
                   >
-                    {p.status === "failed" ? "继续 / 重试" : "按当前分镜制作"}
+                    {p.status === "failed" || p.status === "cancelled" ? "继续生成成片" : p.output ? "应用修改并重新成片" : "确认分镜，一键成片"}
                   </button>
                 )}
-                {p.output && <button onClick={download}>下载 MP4</button>}
+                {p.output ? <><button className="film-primary" onClick={() => setTab("output")}>播放成片</button><button onClick={download}>下载成片 MP4</button></> : <span className="film-delivery-note">{running ? "完成后自动合成 MP4，无需逐镜头提交。" : "确认后自动完成素材、镜头与成片合成。"}</span>}
               </div>
               {!running && p.plan && (
                 <div className="film-director">
@@ -351,7 +355,7 @@ export default function FilmStudio({ user, onLogin }) {
                   </button>
                 </div>
               )}
-              <nav className="film-tabs">
+              <nav className="film-tabs" aria-label="制作成果">
                 {[
                   ["shots", "剧本与分镜"],
                   ["assets", "角色与场景"],
@@ -368,13 +372,14 @@ export default function FilmStudio({ user, onLogin }) {
               </nav>
               {tab === "shots" && (
                 <>
-                  <p>{p.plan?.summary || "正在理解故事并安排镜头…"}</p>
+                  {p.plan?.summary ? <p className="film-story-summary">{p.plan.summary}</p> : <div className="film-planning-state"><h3>导演正在安排这部短片</h3><p>制作计划返回后，会在这里逐一展示镜头、画面与对白。</p><div className="film-storyboard-skeleton" aria-hidden="true">{[1,2,3].map(i => <div key={i}><span>镜头 {i}</span><i/><i/></div>)}</div></div>}
                   <div className="film-grid">
                     {p.shots.map((s, i) => (
                       <article key={s.id}>
                         <h3>
                           镜头 {i + 1} <small>{s.duration}秒</small>
                         </h3>
+                        <ShotStatus project={p} shot={s} index={i}/>
                         {s.video ? (
                           <Media project={p.id} file={s.video.file} video />
                         ) : s.frame ? (
@@ -450,7 +455,7 @@ export default function FilmStudio({ user, onLogin }) {
                 (p.output ? (
                   <Media project={p.id} file={p.output} video />
                 ) : (
-                  <p>所有镜头完成后，会自动合成 MP4，保留生成音轨。</p>
+                  <div className="film-output-waiting"><span aria-hidden="true">▷</span><h3>{running ? "成片正在制作中" : "还没有生成成片"}</h3><p>全部镜头完成后，导演会自动合成 MP4，保留生成音轨并添加对白字幕。</p><small>完成后可在此播放或下载，无需自己拼接镜头。</small></div>
                 ))}
             </>
           )}

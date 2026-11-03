@@ -1,3 +1,4 @@
+import { filmProgress } from '../shared/filmProgress.js';
 import { filmAssetLink } from "../server/filmLinks.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -38,6 +39,8 @@ test("film project survives worker restart, renders MP4, and remakes only select
     .toBuffer();
   let imageCalls = 0,
     videoCalls = 0;
+  let imageInFlight=0, videoInFlight=0, imagePeak=0, videoPeak=0;
+  let holdResults=false;
   const kinds = new Map();
   let origin;
   const upstream = http.createServer(async (req, res) => {
@@ -91,9 +94,9 @@ test("film project survives worker restart, renders MP4, and remakes only select
                       title: "验收短片",
                       summary: "测试故事",
                       assets: [{ id: "a1", name: "角色", prompt: "人物" }],
-                      shots: [1, 2, 3].map((i) => ({
+                      shots: Array.from({ length: b.messages[1].content.includes("十镜头测试") ? 10 : 3 }, (_, i) => i + 1).map((i) => ({
                         id: "s" + i,
-                        duration: 5,
+                        duration: b.messages[1].content.includes("十镜头测试") ? 6 : 5,
                         assetIds: ["a1"],
                         prompt: "白天人物走向花园",
                         dialogue: i === 1 ? "欢迎回家" : "",
@@ -111,12 +114,16 @@ test("film project survives worker restart, renders MP4, and remakes only select
       kinds.set(id, image);
       if (image) imageCalls++;
       else videoCalls++;
+      if (image) { imageInFlight++; imagePeak=Math.max(imagePeak,imageInFlight); }
+      else { videoInFlight++; videoPeak=Math.max(videoPeak,videoInFlight); }
+      await new Promise(r=>setTimeout(r,80));
+      if (image) imageInFlight--; else videoInFlight--;
       d = { id, status: "running" };
     } else {
       const id = new URL(req.url, origin).searchParams.get("id");
       d = {
         id,
-        status: "succeeded",
+        status: holdResults ? "running" : "succeeded",
         results: [
           { url: origin + (kinds.get(id) ? "/image.png" : "/video.mp4") },
         ],
@@ -165,7 +172,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
   };
   let id;
   async function until(status) {
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 600; i++) {
       const p = (await api("/" + id)).data.project;
       if (p.status === "failed") throw Error(p.error);
       if (p.status === status) return p;
@@ -191,9 +198,19 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.equal((await api("/" + id, undefined, "bob")).status, 404);
     await until("review");
     assert.equal(imageCalls, 0);
+    assert.ok((await api("/" + id)).data.project.events.some(e => e.key === "plan:confirm"));
     await stop();
     start();
+    holdResults = true;
     await api("/" + id + "/resume", {});
+    for (let i=0;i<100;i++) {
+      const inFlight=(await api("/" + id)).data.project;
+      if (inFlight.assets[0].imageTask) break;
+      await new Promise(r=>setTimeout(r,50));
+    }
+    assert.equal(imageCalls,1);
+    assert.ok((await api("/" + id)).data.project.assets[0].imageTask);
+    await stop(); holdResults=false; start();
     const done = await until("succeeded");
     const signed = filmAssetLink(
       film.root,
@@ -216,6 +233,10 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.equal((await fetch(signed.split("?")[0])).status, 404);
     assert.equal(imageCalls, 4);
     assert.equal(videoCalls, 3);
+    assert.equal(filmProgress(done).completed, 6);
+    assert.ok(done.events.some(e => e.message.includes("首帧已完成")));
+    assert.ok(done.events.some(e => e.key.startsWith("output:")));
+    assert.ok(done.activity.startedAt);
     const meta = JSON.parse(
       execFileSync(
         "ffprobe",
@@ -250,6 +271,16 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.ok(edited.data.project.shots.filter(s => s.assetIds.includes(done.assets[0].id)).every(s => !s.frame && !s.video));
     assert.equal(videoCalls, 5);
     assert.equal(imageCalls, 5);
+
+    // Default one-click creation must finish without a resume request.
+    const automatic = await api("", { ...input, requestId: randomUUID(), automatic: true, duration: 60, story: "十镜头测试" });
+    id = automatic.data.project.id;
+    const autoDone = await until("succeeded");
+    assert.ok(autoDone.output);
+    assert.equal(imagePeak, 10);
+    assert.equal(videoPeak, 10);
+    assert.equal(filmProgress(autoDone).completed, 6);
+    assert.equal((await fetch(base + "/api/films/" + id + "/files/" + autoDone.output)).status, 200);
 
   } finally {
     if (child && !child.killed) await stop();

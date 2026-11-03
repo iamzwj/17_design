@@ -1,3 +1,4 @@
+import { filmEvent } from '../shared/filmProgress.js';
 import { filmLinkKey, validFilmLink } from "./filmLinks.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -96,6 +97,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true }) {
       assets: [],
       automatic: b.automatic !== false,
     };
+    filmEvent(p, "created", "已接收故事，等待 AI 导演开始统筹制作");
     write(p);
     res.status(202).json({ project: p });
   });
@@ -141,7 +143,10 @@ export function installFilms(app, { dataDir, requireAuth, worker = true }) {
     }
     p.output = null;
     p.error = null;
+    p.automatic = true;
+    p.activity = null;
     p.status = "queued";
+    filmEvent(p, `resume:${Date.now()}`, "已安排继续成片制作，复用已完成的素材与镜头");
     fs.rmSync(path.join(root, p.id, "cancel"), { force: true });
     write(p);
     res.json({ project: p });
@@ -158,6 +163,8 @@ export function installFilms(app, { dataDir, requireAuth, worker = true }) {
     if (!text || text.length > 2000)
       return res.status(400).json({ error: "请填写修改要求，最多2000字" });
     p.revision = text;
+    p.activity = null;
+    filmEvent(p, `request:${Date.now()}`, "已收到修改要求，导演将调整受影响镜头");
     p.status = "queued";
     p.error = null;
     fs.rmSync(path.join(root, p.id, "cancel"), { force: true });

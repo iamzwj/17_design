@@ -1,3 +1,5 @@
+import { filmPool } from './filmPool.js';
+import { filmEvent } from '../shared/filmProgress.js';
 import { filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +20,12 @@ function save(p) {
   const f = path.join(root, p.id, "project.json");
   fs.writeFileSync(f + ".worker", JSON.stringify(p));
   fs.renameSync(f + ".worker", f);
+}
+function activity(p, key, message) {
+  if (p.activity?.key === key) return;
+  p.activity = { key, message, startedAt: Date.now() };
+  filmEvent(p, key, message);
+  save(p);
 }
 function check(p) {
   if (fs.existsSync(path.join(root, p.id, "cancel")))
@@ -40,10 +48,13 @@ async function api(endpoint, body) {
     );
   return d.data || d;
 }
-async function generate(p, slot, key, body, file) {
+async function generateItem(p, slot, key, body, file) {
   if (slot[key]) return;
   check(p);
   const taskKey = key + "Task";
+  const index = key === "image" ? p.assets.indexOf(slot) : p.shots.indexOf(slot);
+  const subject = key === "image" ? `角色 / 场景「${slot.name}」` : `镜头 ${index + 1} 的${key === "frame" ? "首帧" : "视频"}`;
+
   if (!slot[taskKey]) {
     if (slot[key + "Submitting"])
       throw Error(
@@ -70,6 +81,9 @@ async function generate(p, slot, key, body, file) {
     const d = await api(
       "/v1/api/result?id=" + encodeURIComponent(slot[taskKey]),
     );
+    slot[key + "Status"] = d.status;
+    slot[key + "CheckedAt"] = Date.now();
+    save(p);
     if (d.status === "failed") {
       slot[taskKey] = null;
       save(p);
@@ -88,6 +102,7 @@ async function generate(p, slot, key, body, file) {
       );
       fs.writeFileSync(path.join(root, p.id, file), bytes);
       slot[key] = { file, url };
+      filmEvent(p, `ready:${file}`, `${subject}已完成`);
       save(p);
       return;
     }
@@ -95,11 +110,32 @@ async function generate(p, slot, key, body, file) {
   }
   throw Error("上游生成仍未完成，已保留任务编号，重试将继续查询");
 }
+async function generate(p, slot, key, body, file) {
+  if (slot[key]) return;
+  check(p);
+  const index = key === "image" ? p.assets.indexOf(slot) : p.shots.indexOf(slot);
+  const id = `${p.stage}:${index}`;
+  const message = key === "image" ? `正在制作角色 / 场景「${slot.name}」` : `正在制作镜头 ${index + 1} 的${key === "frame" ? "首帧" : "视频"}`;
+  p.activeJobs ||= [];
+  p.activeJobs.push({ id, stage: p.stage, message, startedAt: Date.now() });
+  slot[key + "Error"] = null;
+  activity(p, `${id}:${slot[key + "Attempts"] || 0}`, message);
+  save(p);
+  try { await generateItem(p, slot, key, body, file); }
+  catch (error) {
+    slot[key + "Error"] = error.message;
+    filmEvent(p, `error:${id}:${Date.now()}`, `${message.replace("正在制作", "制作")}遇到问题；其他已提交任务继续保存`);
+    throw error;
+  } finally {
+    p.activeJobs = p.activeJobs.filter(job => job.id !== id);
+    save(p);
+  }
+}
 async function plan(p) {
   if (p.plan) return;
   check(p);
   p.stage = "plan";
-  save(p);
+  activity(p, p.revision ? `revision:${p.revision}` : "plan:start", p.revision ? "导演正在调整受影响镜头，保留其他素材" : "导演正在编写故事节奏、角色设定与分镜");
   const d = await api("/v1/chat/completions", {
     model: "gemini-3.1-pro",
     messages: [
@@ -148,13 +184,15 @@ async function plan(p) {
   p.assets = j.assets;
   p.shots = j.shots;
   p.status = p.automatic ? "running" : "review";
+  filmEvent(p, "plan:ready", `导演已安排 ${p.shots.length} 个镜头、${p.assets.length} 份角色与场景素材`);
+  if (!p.automatic) filmEvent(p, "plan:confirm", "等待你确认分镜，再继续生成成片");
   save(p);
 }
 async function revise(p) {
   if (!p.revision) return;
   check(p);
   p.stage = "plan";
-  save(p);
+  activity(p, p.revision ? `revision:${p.revision}` : "plan:start", p.revision ? "导演正在调整受影响镜头，保留其他素材" : "导演正在编写故事节奏、角色设定与分镜");
   const d = await api("/v1/chat/completions", {
     model: "gemini-3.1-pro",
     messages: [
@@ -218,8 +256,7 @@ async function images(p) {
   if (p.status === "review") return;
   p.stage = "assets";
   save(p);
-  for (let i = 0; i < p.assets.length; i++) {
-    let a = p.assets[i];
+  await filmPool(p.assets, 10, async (a, i) => {
     await generate(
       p,
       a,
@@ -235,11 +272,10 @@ async function images(p) {
       },
       `asset-${i}.png`,
     );
-  }
+  });
   p.stage = "frames";
   save(p);
-  for (let i = 0; i < p.shots.length; i++) {
-    const s = p.shots[i];
+  await filmPool(p.shots, 10, async (s, i) => {
     await generate(
       p,
       s,
@@ -269,14 +305,13 @@ async function images(p) {
       },
       `frame-${i}.png`,
     );
-  }
+  });
 }
 async function videos(p) {
   if (p.status === "review") return;
   p.stage = "videos";
   save(p);
-  for (let i = 0; i < p.shots.length; i++) {
-    const s = p.shots[i];
+  await filmPool(p.shots, 10, async (s, i) => {
     await generate(
       p,
       s,
@@ -309,7 +344,7 @@ async function videos(p) {
       },
       `shot-${i}.mp4`,
     );
-  }
+  });
 }
 async function quality(p) {
   if (p.status === "review") return;
@@ -319,6 +354,7 @@ async function quality(p) {
     check(p);
     const shot = p.shots[i];
     if (shot.review?.file === shot.video.file) continue;
+    activity(p, `quality:${shot.video.file}`, `正在核对镜头 ${i + 1} 的人物、服装与场景`);
     try {
       const dir = path.join(root, p.id),
         image = path.join(dir, `check-${i}.jpg`);
@@ -386,6 +422,7 @@ async function quality(p) {
           String(e.message).slice(0, 100),
       };
     }
+    filmEvent(p, `checked:${shot.video.file}`, `镜头 ${i + 1} 画面检查已结束${shot.review.status === "pass" ? "" : "，需要人工核对"}`);
     save(p);
   }
   p.reviewWarning = p.shots.filter((s) => s.review?.status !== "pass").length;
@@ -396,7 +433,7 @@ async function render(p) {
   if (p.status === "review") return;
   check(p);
   p.stage = "render";
-  save(p);
+  activity(p, `render:${Date.now()}`, "导演正在汇总镜头，合成音轨、字幕与最终短片");
   const dir = path.join(root, p.id),
     w = p.ratio === "16:9" ? 1280 : 720,
     h = p.ratio === "16:9" ? 720 : 1280;
@@ -563,6 +600,7 @@ async function render(p) {
   p.renders.push({ file: p.output, createdAt: Date.now() });
   p.status = "succeeded";
   p.stage = "done";
+  filmEvent(p, `output:${p.output}`, "成片已生成，可以播放和下载 MP4");
   save(p);
 }
 const State = Annotation.Root({ id: Annotation(), halted: Annotation() });
@@ -574,6 +612,7 @@ const stage =
     try {
       if (first) {
         p.status = "running";
+        p.activeJobs = [];
         p.error = null;
         save(p);
       }
@@ -584,6 +623,7 @@ const stage =
         ? "cancelled"
         : "failed";
       p.error = e.message;
+      filmEvent(p, `stop:${Date.now()}`, p.status === "cancelled" ? "已暂停后续制作，已完成素材保留" : "制作遇到问题，已保留当前成果等待重试");
       save(p);
       return { ...state, halted: true };
     }
