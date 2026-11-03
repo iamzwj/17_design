@@ -55,10 +55,17 @@ export default function KnowledgeStudio({ user, onLogin }) {
     if (!bootstrap || !initialMaterial.current) return
     const asset = MATERIAL_ASSETS.find((a) => a.id === initialMaterial.current)
     const target = asset?.brand ? bootstrap.brands.find((b) => b.name === asset.brand && b.permission >= 2) : null
+    if (asset?.type === 'logo' && !target) {
+      setLinkMaterials(false)
+      setError('当前账号没有该品牌知识库的维护权限，无法关联此Logo。')
+      return
+    }
     if (target) setBrandId(target.id)
+    setSelected(null)
     setTab('documents'); setLinkMaterials(true)
   }, [bootstrap])
-  const linkedDocument = useRef(new URLSearchParams(window.location.search).get('document') || saved.selectedDocumentId)
+  // An explicit material-link entry takes priority over previously opened documents.
+  const linkedDocument = useRef(initialMaterial.current ? null : new URLSearchParams(window.location.search).get('document') || saved.selectedDocumentId)
   const [restoringDocument, setRestoringDocument] = useState(Boolean(linkedDocument.current))
   useEffect(() => {
     if (!bootstrap || !linkedDocument.current) return
