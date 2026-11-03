@@ -19,7 +19,6 @@ import { installAuth } from './auth.js'
 import { installTextTasks } from './textTasks.js'
 import { installSkills } from './skills.js'
 import { createSkillCompletion } from './skillCompletion.js'
-import { installDrama } from './drama.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -475,21 +474,6 @@ const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = in
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
 const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
 const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth, warmRecommendations: true })
-// 短剧工作台：只负责结构化创作数据。资产图与视频仍然复用 /api/image 与
-// /api/video/tasks，避免第二套模型调用链路各自发散。
-installDrama(app, {
-  dataDir: waterfallDataDir,
-  requireAuth,
-  complete: async ({ system, user, timeoutMs }) => {
-    const data = await requestUpstream('/v1/chat/completions', {
-      model: TEXT_REVIEW_MODEL,
-      stream: false,
-      response_format: { type: 'json_object' },
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    }, undefined, timeoutMs || 180_000)
-    return completionText(data)
-  },
-})
 const localSkillRuntime = new Map()
 const waterfallSlotRuns = new Set()
 function prepareGenerationSkill(req, target, previous = null) {
