@@ -28,8 +28,8 @@ export function filmProgress(project) {
 export function filmEvent(project, key, message, now = Date.now()) {
   project.events ||= [];
   if (project.events.at(-1)?.key === key) return;
-  project.events.push({ key, message, stage: project.stage, at: now });
-  project.events = project.events.slice(-80);
+  project.events.push({ key, message, stage: project.stage || "project", at: now });
+
 }
 export function filmShotState(project, shot, index) {
   if (shot.video) return { state:'complete', label:'视频已完成', detail:'可直接播放此镜头，成片合成无需等待操作' };
@@ -41,5 +41,5 @@ export function filmShotState(project, shot, index) {
 }
 
 export function filmTaskName(project) {
-  return `一键成片 · ${project.plan ? project.title : '导演命名中'}`;
+  return `一键成片 · ${(project.plan || project.directorPlan || project.script) ? project.title : '导演命名中'}`;
 }

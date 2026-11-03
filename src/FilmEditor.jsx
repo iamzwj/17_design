@@ -1,0 +1,54 @@
+import {useEffect,useState} from 'react';
+import ComposerSelect from './ComposerSelect.jsx';
+import FilmMedia from './FilmMedia.jsx';
+import {filmUpload} from './filmUpload.js';
+export default function FilmEditor({project:p,stage,selected,onSelect,send,request,notice}) {
+  const options=stage==='characters'||stage==='scenes'?(p.resources||[]).filter(r=>r.category===stage):stage==='images'?[...(p.resources||[]),...(p.shots||[])]:p.shots||[];
+  const item=options.find(r=>r.id===selected)||options[0];
+  if(stage==='script')return <ScriptEditor key={(p.scriptRevision||1)+':'+Boolean(p.script)} project={p} send={send}/>;
+  if(stage==='output')return <div className="fw-delivery"><h3>成片与交付文件</h3>{p.output?<><FilmMedia project={p.id} file={p.output} video/><p>成片、原始素材和历次导出均已保留。</p>{p.renders?.map((r,i)=><div key={r.file}><b>成片版本 {i+1}</b><FileButton project={p.id} file={r.file} request={request}/></div>)}{p.exportFiles&&<div className="fw-actions"><FileButton project={p.id} file={p.exportFiles.timeline} label="下载时间线"/><FileButton project={p.id} file={p.exportFiles.subtitles} label="下载字幕"/></div>}</>:<p>导演完成全部镜头与声音检查后，将在这里显示 MP4。遇到无法恢复的问题会明确暂停。</p>}</div>;
+  return <>{options.length>0&&<ComposerSelect portal label="选择成果" value={item?.id||''} options={options.map(r=>({value:r.id,label:r.name||`镜头 ${r.id}`}))} onChange={onSelect}/>} {item?<ResourceEditor key={item.id+':'+item.revision} item={item} project={p} stage={stage} send={send} request={request} notice={notice}/>:<div className="fw-empty"><h3>等待阶段成果</h3><p>任务完成后会自动显示，不需要逐步点击确认。</p></div>}</>;
+}
+export function FileButton({project,file,label='下载',request:_request}) {
+  const [error,setError]=useState('');
+  return <><button onClick={async()=>{try{const {getAuthToken}=await import('./api.js');const base=String(window.XIAODIE_CONFIG?.API_BASE_URL||import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');const r=await fetch(base+`/api/films/${project}/files/${file}`,{headers:{Authorization:`Bearer ${getAuthToken()}`}});if(!r.ok)throw Error('下载失败');const url=URL.createObjectURL(await r.blob()),a=document.createElement('a');a.href=url;a.download=file;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}catch(e){setError(e.message);}}}>{label}</button>{error&&<small role="alert">{error}</small>}</>;
+}
+function ScriptEditor({project:p,send}) {
+  const key='film-script-draft:'+p.id+':'+(p.scriptRevision||1);
+  const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||p.script;}catch{return p.script;}});
+  useEffect(()=>{if(draft)localStorage.setItem(key,JSON.stringify(draft));},[key,draft]);
+  if(!p.script)return <div className="fw-empty"><h3>编剧正在准备剧本</h3><p>{p.plan?.summary||'可以在中间查看真实任务进度。旧版项目保留原分镜，继续使用原有成果。'}</p></div>;
+  const updateScene=(i,key,value)=>setDraft(d=>({...d,scenes:d.scenes.map((s,n)=>n===i?{...s,[key]:value}:s)}));
+  return <div className="fw-editor-form"><h3>剧本 <small>版本 {p.scriptRevision||1}</small></h3><label>故事梗概<textarea disabled={p.scriptLocked} value={draft.summary||''} onChange={e=>setDraft({...draft,summary:e.target.value})}/></label>{draft.scenes.map((s,i)=><details key={s.id} open={i===0}><summary>场次 {i+1} · {s.time} · {s.location}</summary><label>时间<input disabled={p.scriptLocked} value={s.time} onChange={e=>updateScene(i,'time',e.target.value)}/></label><label>剧情与动作<textarea disabled={p.scriptLocked} value={s.action||''} onChange={e=>updateScene(i,'action',e.target.value)}/></label><label>旁白<textarea disabled={p.scriptLocked} value={s.narration||''} onChange={e=>updateScene(i,'narration',e.target.value)}/></label><p>{(s.dialogue||[]).map(d=>`${d.character}：${d.text}`).join('\n')}</p></details>)}<div className="fw-actions"><button onClick={()=>send('script-lock',{locked:!p.scriptLocked})}>{p.scriptLocked?'解锁剧本':'锁定剧本'}</button><button className="film-primary" disabled={p.scriptLocked} onClick={()=>send('script',{script:draft})}>保存剧本并续跑</button></div><small>整部剧本修改会重新分析角色、场景和分镜；有锁定资产时需先解锁。局部改动请直接选择对应任务。</small>{p.scriptHistory?.length>0&&<details><summary>剧本历史（{p.scriptHistory.length}）</summary>{p.scriptHistory.map((h,i)=><button key={i} disabled={p.scriptLocked} onClick={()=>send('script',{script:h.script})}>恢复剧本版本 {i+1}</button>)}</details>}</div>;
+}
+function ResourceEditor({item:r,project:p,stage,send,request,notice}) {
+  const shot=(p.shots||[]).some(s=>s.id===r.id),key=`film-edit:${p.id}:${r.id}:${r.revision}`;
+  const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||r;}catch{return r;}}),[old,setOld]=useState(''),[uploading,setUploading]=useState(false);
+  useEffect(()=>{localStorage.setItem(key,JSON.stringify(draft));},[draft,key]);
+  const edit=(name,value)=>setDraft(d=>({...d,[name]:value}));
+  const task=[...(p.tasks||[])].reverse().find(t=>t.resourceId===r.id||t.id.startsWith(r.id+':'));
+  const output=shot?(stage==='audio'?r.audio:stage==='videos'?r.video:r.frame):r.output||r.image;
+  async function upload(file){if(!file)return;setUploading(true);try{const result=await filmUpload(request,p.id,file,shot?'video':'image');await send('upload',{id:r.id,file:result.file,locked:true});}catch(e){notice(e.message);}finally{setUploading(false);}}
+  const patch=shot?{prompt:draft.prompt,firstFramePrompt:draft.firstFramePrompt,tailFramePrompt:draft.tailFramePrompt,dialogue:draft.dialogue,duration:Number(draft.duration),time:draft.time,outfitIds:draft.outfitIds,resourceIds:draft.resourceIds}: {name:draft.name,prompt:draft.prompt,attributes:draft.attributes};
+  return <div className="fw-editor-form"><div className="fw-result-heading"><h3>{r.name||`镜头 ${r.id}`}</h3><span>v{r.revision||1}{r.locked?' · 已锁定':''}</span></div>
+    {r.stale&&<p className="fw-warning">上游已变化，当前锁定成果未被覆盖。<button onClick={()=>send('keep',{id:r.id})}>明确保留当前版本</button></p>}
+    {output?.file?<FilmMedia project={p.id} file={output.file} video={stage==='videos'&&shot} audio={stage==='audio'&&shot}/>:<div className="fw-empty">{task?.status==='running'?'模型正在制作，完成后自动展示':'尚无此项成果'}</div>}
+    {shot&&stage==='images'&&r.tail&&<details><summary>查看尾帧</summary><FilmMedia project={p.id} file={r.tail.file}/></details>}
+    {stage==='audio'&&r.audio&&<p className="fw-caption">{r.audio.hasAudio?'已保留视频原生声音':'此片段无原生声音'}。{r.audio.note|| (r.audio.alignment==='audio-model'?'字幕由实际音轨转录，仍可人工校正。':'')}</p>}
+    <div className="fw-actions"><button onClick={()=>send('lock',{id:r.id,locked:!r.locked})}>{r.locked?'解除锁定':'锁定版本'}</button><button onClick={()=>send('task-pause',{id:r.id,paused:!r.paused})}>{r.paused?'恢复当前任务':'暂停当前任务'}</button>{output?.file&&<FileButton project={p.id} file={output.file}/>}</div>
+    {shot&&<div className="fw-field-row"><label>时间<input disabled={r.locked} value={draft.time||''} onChange={e=>{edit('time',e.target.value);edit('prompt',e.target.value+'；'+(draft.prompt||'').split('；').slice(1).join('；'));}} placeholder="白天 / 夜晚"/></label><label>时长（秒）<input type="number" min="1" max="10" step="0.1" disabled={r.locked} value={draft.duration} onChange={e=>edit('duration',e.target.value)}/></label></div>}
+    {shot&&(r.characterIds||[]).map(id=><ComposerSelect portal key={id} label={`角色${id}服装`} value={(draft.resourceIds||[]).find(key=>p.resources.some(x=>x.id===key&&x.type==='wardrobe'&&x.sourceId===id))||''} options={p.resources.filter(x=>x.type==='wardrobe'&&x.sourceId===id).map(x=>({value:x.id,label:x.name}))} onChange={value=>{const outfit=p.resources.find(x=>x.id===value);const remove=p.resources.filter(x=>x.type==='wardrobe'&&x.sourceId===id).map(x=>x.id);setDraft(d=>({...d,resourceIds:[...(d.resourceIds||[]).filter(x=>!remove.includes(x)),value],outfitIds:[...(d.outfitIds||[]).filter(x=>!p.characters.find(c=>c.id===id).outfits.some(o=>o.id===x)),outfit.outfitId]}));}}/>)}
+    {r.type==='face'&&<details><summary>新增一套服装</summary><NewOutfit id={r.id} send={send}/></details>}
+    <label>{shot?'视频提示词':'视觉设定'}<textarea disabled={r.locked} value={draft.prompt||''} onChange={e=>edit('prompt',e.target.value)}/></label>
+    {shot&&<><label>首帧提示词<textarea disabled={r.locked} value={draft.firstFramePrompt||draft.prompt||''} onChange={e=>edit('firstFramePrompt',e.target.value)}/></label><label>对白 / 旁白<textarea disabled={r.locked} value={draft.dialogue||''} onChange={e=>edit('dialogue',e.target.value)}/></label><details><summary>尾帧与连续性</summary><textarea disabled={r.locked} value={draft.tailFramePrompt||''} placeholder="需要控制镜头结尾时填写" onChange={e=>edit('tailFramePrompt',e.target.value)}/><p>{r.continuity}</p><p>场景 {r.sceneId||'旧版场景'} · {(r.outfitIds||[]).join('、')}</p></details></>}
+    {r.attributes&&<details><summary>角色 / 场景属性</summary><dl>{Object.entries(r.attributes).map(([k,v])=><div key={k}><dt>{({age:'年龄',face:'面部',hair:'发型',features:'特征',layout:'空间布局',materials:'材质',light:'光源',props:'道具',day:'白天',night:'夜晚',accessories:'配饰',name:'名称',prompt:'设定'})[k]||k}</dt><dd>{typeof v==='object'?JSON.stringify(v):String(v)}</dd></div>)}</dl></details>}
+    <div className="fw-actions"><button className="film-primary" disabled={r.locked} onClick={()=>send('edit',{id:r.id,patch})}>保存修改并自动续跑</button><button disabled={r.locked} onClick={()=>send('regenerate',{id:r.id,videoOnly:shot&&stage==='videos'})}>重新生成当前{shot&&stage==='videos'?'视频':'任务'}</button></div>
+    <label className="fw-file-control">{uploading?'正在上传…':shot?'替换为本地视频':'上传并锁定参考图'}<input aria-label={shot?'替换视频':'上传参考图'} type="file" disabled={r.locked||uploading} accept={shot?'video/mp4':'image/*'} onChange={e=>void upload(e.target.files[0])}/></label>{!shot&&<small>原图会保留；生成服务通过30分钟有效链接读取参考图。</small>}
+    {r.history?.length>0&&<details><summary>历史版本（{r.history.length}）</summary><ComposerSelect portal label="历史版本" value={old} options={[{value:'',label:'选择要恢复的版本'},...r.history.map(h=>({value:String(h.version),label:`版本 ${h.version} · ${new Date(h.at).toLocaleTimeString('zh-CN')}`}))]} onChange={setOld}/><button disabled={!old||r.locked} onClick={()=>send('restore',{id:r.id,version:Number(old)})}>恢复为新版本</button></details>}
+    {r.assetReview&&<details open><summary>设定图检查</summary><p>{r.assetReview.summary}</p><small>此为模型辅助观察，不代表绝对准确。</small></details>}
+    {r.review&&<details open><summary>质检观察与依据</summary><p>{r.review.summary}</p><small>{r.review.manual?'用户已明确确认。':'模型视觉检查为辅助意见，存在不确定性；对照首帧和实际视频观察。'}</small>{r.review.status!=='pass'&&<button onClick={()=>send('keep',{id:r.id})}>人工确认当前镜头可用</button>}</details>}
+    {task&&<details><summary>生成记录与异常</summary><p>{task.status} · {task.model||task.input?.model||''}</p><small>任务 {task.id}</small>{task.error&&<p role="alert">{task.error}</p>}</details>}
+  </div>;
+}
+
+function NewOutfit({id,send}) { const [name,setName]=useState(''),[prompt,setPrompt]=useState('');return <><label>服装名称<input value={name} onChange={e=>setName(e.target.value)}/></label><label>穿搭要求<textarea value={prompt} onChange={e=>setPrompt(e.target.value)}/></label><button disabled={!name.trim()||!prompt.trim()} onClick={()=>send('add-outfit',{id,name,prompt})}>创建独立服装版本</button></>; }

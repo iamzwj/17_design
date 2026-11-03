@@ -1,5 +1,6 @@
-import { filmShotState, filmTaskName } from '../shared/filmProgress.js';
-import FilmProduction from './FilmProduction.jsx';
+import {knowledgeRequest} from './knowledgeApi.js';
+import { filmTaskName } from '../shared/filmProgress.js';
+import FilmWorkbench from './FilmWorkbench.jsx';
 import { useEffect, useRef, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
@@ -23,46 +24,6 @@ async function request(path = "", body) {
   if (!r.ok) throw Error(d.error || "读取制作项目失败");
   return d;
 }
-function Media({ project, file, video = false }) {
-  const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
-  useEffect(() => {
-    if (!file) return;
-    setUrl("");
-    setMediaError(false);
-    let live = true,
-      src;
-    fetch(base() + `/api/films/${project}/files/${file}`, {
-      headers: { Authorization: `Bearer ${getAuthToken()}` },
-    })
-      .then((r) => {
-        if (!r.ok) throw Error("读取素材失败");
-        return r.blob();
-      })
-      .then((b) => {
-        src = URL.createObjectURL(b);
-        if (live) setUrl(src);
-        else URL.revokeObjectURL(src);
-      })
-      .catch(() => { if (live) setMediaError(true); });
-    return () => {
-      live = false;
-      if (src) URL.revokeObjectURL(src);
-    };
-  }, [project, file, retry]);
-  return url ? (
-    video ? (
-      <video src={url} controls preload="metadata" />
-    ) : (
-      <img src={url} alt="制作素材" />
-    )
-  ) : (
-    mediaError ? <button onClick={() => setRetry(v => v + 1)}>素材读取失败，点击重试</button> : <span>素材读取中…</span>
-  );
-}
-function ShotStatus({ project, shot, index }) {
-  const status = filmShotState(project, shot, index);
-  return <div className={`film-shot-status ${status.state}`}><b><i aria-hidden="true"/>{status.label}</b><span>{status.detail}</span></div>;
-}
 const stages = {
   plan: "导演正在编写剧本与分镜",
   assets: "正在制作角色与场景",
@@ -78,6 +39,7 @@ export default function FilmStudio({ user, onLogin }) {
   const initialId = () => new URLSearchParams(window.location.search).get("filmProject") || localStorage.getItem(selectedKey) || localStorage.getItem("dgen-film-selected-" + getAuthToken().slice(-12)) || "";
   const firstLoad = useRef(true);
   const firstSelectedId = useRef(initialId());
+  const [references,setReferences]=useState({brands:[],skills:[]});
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState(() => new URLSearchParams(window.location.search).get("filmProject") ? "project" : localStorage.getItem(viewKey) || (initialId() ? "project" : "tasks"));
   const [projects, setProjects] = useState([]),
@@ -111,12 +73,8 @@ export default function FilmStudio({ user, onLogin }) {
     }),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [tab, setTab] = useState("shots"),
-    [edits, setEdits] = useState({}),
-    [change, setChange] = useState(""),
     [lastSynced, setLastSynced] = useState(0);
-  const p = projects.find((p) => p.id === id),
-    running = p && ["queued", "running"].includes(p.status);
+  const p = projects.find((p) => p.id === id);
   useEffect(() => {
     if (!user) return;
     let live = true;
@@ -149,7 +107,7 @@ export default function FilmStudio({ user, onLogin }) {
   }, [form]);
   useEffect(() => {
     localStorage.setItem(selectedKey, id);
-    setEdits({});
+
   }, [id, selectedKey]);
   useEffect(() => {
     localStorage.setItem(viewKey, view);
@@ -159,7 +117,8 @@ export default function FilmStudio({ user, onLogin }) {
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [id, view, viewKey]);
   function openProject(projectId) { setId(projectId); setView("project"); }
-  useEffect(() => { if (p?.output) setTab("output"); }, [p?.id, p?.output]);
+
+  useEffect(()=>{if(!user)return;let live=true;Promise.allSettled([knowledgeRequest('/brands'),fetch(base()+'/api/skills?target=video',{headers:{Authorization:`Bearer ${getAuthToken()}`}}).then(r=>r.json())]).then(results=>{if(live)setReferences({brands:results[0].status==='fulfilled'?results[0].value.brands||[]:[],skills:results[1].status==='fulfilled'?results[1].value.skills||[]:[]});});return()=>{live=false;};},[user]);
   const field = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   async function action(path, body) {
     setBusy(true);
@@ -218,7 +177,7 @@ export default function FilmStudio({ user, onLogin }) {
           {error}
         </p>
       )}
-      <div className="film-layout">
+      <div className={`film-layout ${view === "project" ? "is-project" : ""}`}>
         <aside>
           <h3>任务列表</h3>
           {!loaded ? <p role="status">正在恢复任务…</p> : !projects.length && <p>开始制作后，任务会自动保存在这里。</p>}
@@ -255,11 +214,13 @@ export default function FilmStudio({ user, onLogin }) {
                 onChange={(e) => field("story", e.target.value)}
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
+              <label className="film-style-field">视频风格<input value={form.style||"电影写实"} maxLength={200} onChange={e=>field("style",e.target.value)} placeholder="如电影写实、温暖动画、纪实摄影"/></label>
+              <div className="film-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
               <div className="film-options">
                 <ComposerSelect
                   label="成片时长"
                   value={form.duration}
-                  options={[15, 30, 60].map((v) => ({
+                  options={[15, 30, 60, 90, 120].map((v) => ({
                     value: v,
                     label: v + "秒",
                   }))}
@@ -316,164 +277,8 @@ export default function FilmStudio({ user, onLogin }) {
               </button>
             </form>
           ) : (
-            <>
-              <div className="film-project-heading"><h2>{filmTaskName(p)}</h2><span>{p.duration}秒 · {p.ratio === '16:9' ? '横屏' : '竖屏'}</span></div>
-              <FilmProduction project={p} lastSynced={lastSynced} onStage={(stage) => setTab(stage === 'assets' ? 'assets' : stage === 'render' ? 'output' : 'shots')}/>
-              {p.reviewWarning > 0 && (
-                <p className="film-error">
-                  有 {p.reviewWarning}{" "}
-                  个镜头需要人工核对，可在分镜中查看检查说明。
-                </p>
-              )}
-              {p.error && <p className="film-error">{p.error}</p>}
-              <div className="film-actions film-production-actions">
-                {running ? (
-                  <button onClick={() => action("/" + p.id + "/cancel", {})}>
-                    暂停后续制作
-                  </button>
-                ) : (
-                  <button
-                    className="film-primary"
-                    disabled={busy || (Boolean(p.output) && !p.shots.some((s, i) => edits[i] !== undefined && edits[i] !== s.prompt))}
-                    onClick={() =>
-                      action("/" + p.id + "/resume", {
-                        shots: p.shots.map((s, i) => ({
-                          ...s,
-                          prompt: edits[i] ?? s.prompt,
-                        })),
-                      })
-                    }
-                  >
-                    {p.status === "failed" || p.status === "cancelled" ? "继续生成成片" : p.output ? "应用修改并重新成片" : "确认分镜，一键成片"}
-                  </button>
-                )}
-                {p.output ? <><button className="film-primary" onClick={() => setTab("output")}>播放成片</button><button onClick={download}>下载成片 MP4</button></> : <span className="film-delivery-note">{running ? "完成后自动合成 MP4，无需逐镜头提交。" : "确认后自动完成素材、镜头与成片合成。"}</span>}
-              </div>
-              {!running && p.plan && (
-                <div className="film-director">
-                  <label>
-                    和导演一起修改镜头
-                    <textarea
-                      aria-label="导演修改要求"
-                      value={change}
-                      onChange={(e) => setChange(e.target.value)}
-                      placeholder="例如：把第3个镜头改为人物看向镜头，说出欢迎回家…"
-                    />
-                  </label>
-                  <button
-                    disabled={busy || !change.trim()}
-                    onClick={() => {
-                      action("/" + p.id + "/revise", { change });
-                      setChange("");
-                    }}
-                  >
-                    修改并重新制作受影响镜头
-                  </button>
-                </div>
-              )}
-              <nav className="film-tabs" aria-label="制作成果">
-                {[
-                  ["shots", "剧本与分镜"],
-                  ["assets", "角色与场景"],
-                  ["output", "成片"],
-                ].map(([v, t]) => (
-                  <button
-                    className={tab === v ? "active" : ""}
-                    onClick={() => setTab(v)}
-                    key={v}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </nav>
-              {tab === "shots" && (
-                <>
-                  {p.plan?.summary ? <p className="film-story-summary">{p.plan.summary}</p> : <div className="film-planning-state"><h3>导演正在安排这部短片</h3><p>制作计划返回后，会在这里逐一展示镜头、画面与对白。</p><div className="film-storyboard-skeleton" aria-hidden="true">{[1,2,3].map(i => <div key={i}><span>镜头 {i}</span><i/><i/></div>)}</div></div>}
-                  <div className="film-grid">
-                    {p.shots.map((s, i) => (
-                      <article key={s.id}>
-                        <h3>
-                          镜头 {i + 1} <small>{s.duration}秒</small>
-                        </h3>
-                        <ShotStatus project={p} shot={s} index={i}/>
-                        {s.video ? (
-                          <Media project={p.id} file={s.video.file} video />
-                        ) : s.frame ? (
-                          <Media project={p.id} file={s.frame.file} />
-                        ) : (
-                          <div className="film-placeholder">等待制作</div>
-                        )}
-                        <textarea
-                          aria-label={"镜头" + (i + 1) + "提示词"}
-                          disabled={running}
-                          value={edits[i] ?? s.prompt}
-                          onChange={(e) =>
-                            setEdits((x) => ({ ...x, [i]: e.target.value }))
-                          }
-                        />
-                        {s.review && <p>画面检查：{s.review.summary}</p>}
-                        {s.dialogue && <p>对白：{s.dialogue}</p>}
-                        {!running && s.video && (
-                          <button
-                            disabled={busy}
-                            onClick={() =>
-                              action("/" + p.id + "/resume", { redo: i })
-                            }
-                          >
-                            仅重做此镜头
-                          </button>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </>
-              )}
-              {tab === "assets" && (
-                <div className="film-grid">
-                  {p.assets.map((a) => (
-                    <article key={a.id}>
-                      <h3>{a.name}</h3>
-                      {a.image && <Media project={p.id} file={a.image.file} />}
-                      <textarea
-                        disabled={running}
-                        aria-label={a.name + "设定"}
-                        value={edits["asset:" + a.id] ?? a.prompt}
-                        onChange={(e) =>
-                          setEdits((v) => ({
-                            ...v,
-                            ["asset:" + a.id]: e.target.value,
-                          }))
-                        }
-                      />
-                      {!running && (
-                        <button
-                          disabled={
-                            busy || !(edits["asset:" + a.id] || "").trim()
-                          }
-                          onClick={() =>
-                            action(
-                              "/" +
-                                p.id +
-                                "/assets/" +
-                                encodeURIComponent(a.id),
-                              { prompt: edits["asset:" + a.id] },
-                            )
-                          }
-                        >
-                          更新设定并标记相关镜头
-                        </button>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              )}
-              {tab === "output" &&
-                (p.output ? (
-                  <Media project={p.id} file={p.output} video />
-                ) : (
-                  <div className="film-output-waiting"><span aria-hidden="true">▷</span><h3>{running ? "成片正在制作中" : "还没有生成成片"}</h3><p>全部镜头完成后，导演会自动合成 MP4，保留生成音轨并添加对白字幕。</p><small>完成后可在此播放或下载，无需自己拼接镜头。</small></div>
-                ))}
-            </>
+            <FilmWorkbench key={p.id} project={p} lastSynced={lastSynced} request={request} onDownload={download} onProject={(project)=>setProjects(all=>[project,...all.filter(item=>item.id!==project.id)])}/>
+
           )}
         </main>
       </div>

@@ -2014,7 +2014,12 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   res.json({ users: listUsers(), images })
 })
 
-installFilms(app, { dataDir: waterfallDataDir, requireAuth })
+installFilms(app, { dataDir: waterfallDataDir, requireAuth, prepareContext: async (user, input) => {
+  const selection = input.brandId ? { brandId: input.brandId } : null
+  const context = selection ? await knowledge.prepare(user, { knowledge: selection, prompt: input.story, model: input.imageModel }, 'video') : null
+  const skill = input.skillId ? skillLibrary.resolve(user, input.skillId, 'video') : null
+  return { prompt: context?.prompt || '', sources: context?.sources || [], knowledgeTraceId: context?.id || null, skill: skill?.markdown || '', skillTitle: skill?.title || '' }
+} })
 
 const distDir = path.join(rootDir, 'dist')
 if (fs.existsSync(distDir)) {

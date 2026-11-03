@@ -193,6 +193,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     };
     const created = await api("", input);
     id = created.data.project.id;
+    const legacy=film.read(id);legacy.schemaVersion=1;film.write(legacy);
     assert.equal(created.status, 202);
     assert.equal((await api("", input)).data.project.id, id);
     assert.equal((await api("/" + id, undefined, "bob")).status, 404);
@@ -234,7 +235,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.equal(imageCalls, 4);
     assert.equal(videoCalls, 3);
     assert.equal(filmProgress(done).completed, 6);
-    assert.ok(done.events.some(e => e.message.includes("首帧已完成")));
+    assert.ok(done.tasks.some(t => t.kind === "frame" && t.status === "succeeded"));
     assert.ok(done.events.some(e => e.key.startsWith("output:")));
     assert.ok(done.activity.startedAt);
     const meta = JSON.parse(
@@ -275,6 +276,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     // Default one-click creation must finish without a resume request.
     const automatic = await api("", { ...input, requestId: randomUUID(), automatic: true, duration: 60, story: "十镜头测试" });
     id = automatic.data.project.id;
+    const legacyAuto=film.read(id);legacyAuto.schemaVersion=1;film.write(legacyAuto);
     const autoDone = await until("succeeded");
     assert.ok(autoDone.output);
     assert.equal(imagePeak, 10);
