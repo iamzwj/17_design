@@ -14,6 +14,8 @@ export const IP_ASSETS = [
 
 export const BRANDS = ['朴邻', '研选家', '万科物业', '万科物业 × 朴里节', '万物云', '住这儿']
 const LOGO_FILES = {
+  '住这儿-彩色': '/material-library/zhuzher-color.png',
+  '住这儿-反白': '/material-library/zhuzher-white.png',
   '万物云-彩色': '/material-library/onewo-color.png',
   '万物云-反白': '/material-library/onewo-white.png',
   '朴邻-彩色': '/material-library/pulin-color.png',
