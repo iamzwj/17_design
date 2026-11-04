@@ -1,4 +1,6 @@
-import { CharacterLibrary, WarehouseIcon } from "./FilmCharacters.jsx";
+import { createPortal } from 'react-dom';
+import { Icon } from './icons.jsx';
+import { CharacterLibrary } from "./FilmCharacters.jsx";
 import {knowledgeRequest} from './knowledgeApi.js';
 import { filmTaskName } from '../shared/filmProgress.js';
 import FilmWorkbench from './FilmWorkbench.jsx';
@@ -144,13 +146,15 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     );
   return (
     <section className="film-studio">
-      {id && <header className="film-toolbar">
-        <h1>一键成片</h1>
-        <div className="film-header-actions">
-          <button onClick={() => setCharacterLibrary(true)}><WarehouseIcon/> 角色库</button>
-          {id && <button className="film-primary" onClick={onNew}>新建短片</button>}
-        </div>
-      </header>}
+      {document.querySelector(".workspace-title-slot") && createPortal(
+        <div className="film-title-actions">
+          <button type="button" className="film-library-button" onClick={() => setCharacterLibrary(true)}>
+            <Icon name="person" size={18}/><span>角色库</span>
+          </button>
+          {id && <button type="button" className="film-title-new" onClick={onNew}>新建短片</button>}
+        </div>,
+        document.querySelector(".workspace-title-slot"),
+      )}
       {characterLibrary && <CharacterLibrary request={request} onClose={() => setCharacterLibrary(false)}/>}
       {error && (
         <p className="film-error" role="alert">
@@ -171,7 +175,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                   <h1>一键成片</h1>
                   <label htmlFor="film-story">故事梗概</label>
                 </div>
-                <button type="button" className="film-create-library" onClick={() => setCharacterLibrary(true)}><WarehouseIcon/> 角色库</button>
+
               </header>
               <textarea
                 id="film-story"

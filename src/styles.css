@@ -312,7 +312,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .text-answer .message-copy-button.with-label { background: rgba(47,44,57,.94); color: #dde0e6; }
 :root[data-theme='dark'] .answer-layout h3 { color: #f3f4f6; }
 :root[data-theme='dark'] .answer-intro {
-  background: linear-gradient(90deg, rgba(7, 76, 224,.2), rgba(44,39,57,.56));
+  background: linear-gradient(90deg, rgba(7, 76, 224,.2), rgba(36,42,52,.56));
   border-left-color: #86adff;
   color: #eaf1ff;
   box-shadow: inset 0 1px rgba(255,255,255,.045);
