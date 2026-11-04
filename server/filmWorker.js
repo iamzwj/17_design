@@ -294,6 +294,10 @@ async function videos(p) {
   save(p);
   await filmPool(p.shots, 10, async (s, i) => {
     if(!s.frame || s.paused || s.stale)return;
+    const references=p.referenceWorkflow
+      ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && approvedSetting(asset) && asset.output.file===r.file))
+      : [];
+    const videoRefs=references.slice(0,p.videoModel==='wan-3.0'?9:8);
     await generate(
       p,
       s,
@@ -302,6 +306,7 @@ async function videos(p) {
         model: p.videoModel,
         prompt:
           s.prompt +
+          (videoRefs.length ? "。图1提供镜头构图与动作起点，后续图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
           (s.dialogue
             ? "。指定中文对白：" +
               s.dialogue +
@@ -309,6 +314,7 @@ async function videos(p) {
             : ""),
         images: [
           referenceImage(p,s.frame),
+          ...videoRefs.map(r=>referenceImage(p,r)),
         ],
         aspectRatio:
           p.videoModel === "minimax-h3"
@@ -317,7 +323,7 @@ async function videos(p) {
               : "portrait"
             : p.ratio,
         resolution: "480p",
-        duration: Math.ceil(s.duration),
+        duration: Math.max(p.videoModel==='wan-3.0'?2:1,Math.ceil(s.duration)),
       },
       `shot-${i}.mp4`,
     );
@@ -592,44 +598,131 @@ async function render(p) {
   save(p);
 }
 const agents=createFilmAgents({api,save,check});
-async function imagesV2(p) {
-  if (p.characterChoice && (p.awaitingCharacters || !p.characterMode) && p.resources.some((r) => r.type === 'face')) {
-    p.awaitingCharacters = true;
-    p.status = 'review';
-    filmEvent(p, 'characters:choose', '角色提示词已准备好，请选择是否自定义角色。');
-    save(p);
+const settingChecks = {
+  face: '一张图有正面、45°、90°面部特写，三处五官、脸型、发际线和肤色属于同一人；有原始参考时核对身份',
+  wardrobe: '与参考面部图同一身份；全身正面、侧面、背面穿同一套服装，呈现鞋履、配饰和必要细节',
+  environment: '同一空间的白天和夜晚主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节',
+};
+
+function approvedSetting(resource) {
+  return resource?.output && !resource.stale &&
+    (resource.type === 'reference-original' ||
+      resource.approvedVersion === resource.revision);
+}
+
+async function reviewSetting(p, resource, references) {
+  const {revision, output} = resource;
+  const id = taskId(resource.id, 'asset-review', revision);
+  const task = beginTask(p,id,'assets','director',{name:resource.name+' · 导演审核'});
+  save(p);
+  let review;
+  try {
+    const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+settingChecks[resource.type]+
+      '。设计要求：'+resource.prompt+
+      '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。看不清、缺证据或不确定一律 review。只有确认符合全部要求且有依据才 pass。'}];
+    for(const image of [output,...references]) {
+      const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+      parts.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
+    }
+    const response = await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts}],generationConfig:{temperature:0.1}});
+    const raw = (response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
+    review = JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
+    if(!['pass','repair','review'].includes(review.status) || typeof review.summary!=='string' || !review.summary.trim())throw Error('审核返回缺少有效证据');
+    if(review.confidence!=='high')review.status='review';
+    finishTask(p,task,review);
+  } catch(error) {
+    review = {status:'review',confidence:'low',summary:'自动审核未完成，请核对设定图。'+error.message};
+    finishTask(p,task,review,error);
+  }
+  check(p);
+  if(!p.resources.includes(resource) || resource.revision!==revision || resource.output?.file!==output.file)return;
+  resource.assetReview = {...review,file:output.file,version:revision};
+  if(review.status==='pass')resource.approvedVersion=revision;
+  event(p,'director',id,resource.name+' · '+(review.status==='pass'?'通过并锁定引用版本':'待处理')+' · '+review.summary,{type:'decision'});
+  save(p);
+}
+
+async function referenceAssets(p) {
+  if(p.characterChoice && !p.referenceWorkflow && (p.awaitingCharacters || !p.characterMode) && p.resources.some(r=>r.type==='face')) {
+    p.awaitingCharacters=true;
+    p.status='review';
+    filmEvent(p,'characters:choose','角色提示词已准备好，请选择是否自定义角色。');
     return;
   }
-  p.stage='images';save(p);if(p.pausedStages?.images)return;
-  const link=r=>referenceImage(p,r.output);
-  for(const group of [p.resources.filter(r=>r.type!=='wardrobe'),p.resources.filter(r=>r.type==='wardrobe')]) {
+  const strict=p.referenceWorkflow===true;
+  const resources=p.resources.filter(r=>settingChecks[r.type]);
+  p.stage='assets';
+  save(p);
+  const inventoryKey='reference-inventory:'+p.scriptRevision;
+  if(strict && !p.events.some(e=>e.taskId===inventoryKey))event(p,'director',inventoryKey,`识别了 ${p.characters.length} 名角色、${p.scenes.length} 个场景，安排制作 ${resources.length} 张设定图`);
+  for(const group of [resources.filter(r=>r.type!=='wardrobe'),resources.filter(r=>r.type==='wardrobe')]) {
     await filmPool(group,10,async r=>{
-      if(r.output){r.image=r.output;return;}if(r.paused||r.stale||p.pausedStages?.[r.category])return;
-      const refs=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));if(refs.some(r=>!r?.output||r.stale))return;
-      await generate(p,r,'image',{model:p.imageModel,prompt:`${p.settings.style}；${r.characterReference ? '以参考图为准保持角色身份、五官及发型。' : ''}${r.prompt}`,images:r.characterReference?[referenceImage(p,r.characterReference)]:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?'1:1':'1024x1024',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`asset-${r.id}-v${r.revision}.png`);
+      if(p.pausedStages?.images || r.paused || r.stale || p.pausedStages?.[r.category])return;
+      const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
+      if(dependencies.some(dep=>strict ? !approvedSetting(dep) : !dep?.output || dep.stale))return;
+      const references=r.characterReference?[r.characterReference]:dependencies.map(dep=>dep.output);
+      const nano=p.imageModel.startsWith('nano-');
+      const landscape=r.type==='environment';
+      const aspectRatio=nano?(landscape?'16:9':'1:1'):(landscape?'1536x1024':'1024x1024');
+      while(true) {
+        if(!r.output) {
+          await generate(p,r,'image',{
+            model:p.imageModel,
+            prompt:[p.settings.style,references.length?'以参考图为准，保持明确要求保留的身份与特征。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
+            images:references.map(image=>referenceImage(p,image)),
+            aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
+          },`asset-${r.id}-v${r.revision}.png`);
+        }
+        if(!strict || !r.output || approvedSetting(r))return;
+        if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file)await reviewSetting(p,r,references);
+        const review=r.assetReview;
+        if(review?.version!==r.revision || review.status!=='repair' || typeof review.correction!=='string' ||
+          !review.correction.trim() || r.locked || r.qualityRetryUsed)return;
+        applyCommand(p,{id:'asset-repair:'+taskId(r.id,'image',r.revision),type:'regenerate',body:{id:r.id}});
+        r.qualityRetryUsed=true;
+        r.reviewCorrection=review.correction;
+        event(p,'director',r.id,'自动修正一次：'+review.correction,{type:'recovery'});
+        save(p);
+      }
     });
   }
-  await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original'),10,async r=>{
-    if(r.assetReview?.file===r.output.file)return;
-    const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
-    try {
-      const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否在一张完整环境设定图中体现同一空间的白天与夜晚，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
-      const response=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}]}],generationConfig:{temperature:0.1}});
-      const raw=(response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
-      save(p);if(r.revision===version)r.assetReview={...review,file};finishTask(p,t,{...review,file});
-    }catch(e){if(r.revision===version)r.assetReview={file,status:'review',confidence:'low',summary:'设定图自动检查未完成，需人工核对：'+e.message};finishTask(p,t,r.assetReview);}
-    save(p);
-  });
+  if(!strict) {
+    await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original'),10,async r=>{
+      if(r.assetReview?.file===r.output.file)return;
+      const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
+      try {
+        const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否在一张完整环境设定图中体现同一空间的白天与夜晚，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
+        const response=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}]}],generationConfig:{temperature:0.1}});
+        const raw=(response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
+        save(p);if(r.revision===version)r.assetReview={...review,file};finishTask(p,t,{...review,file});
+      }catch(e){if(r.revision===version)r.assetReview={file,status:'review',confidence:'low',summary:'设定图自动检查未完成，需人工核对：'+e.message};finishTask(p,t,r.assetReview);}
+      save(p);
+    });
+    return;
+  }
+  check(p);
+  if(p.needsRerun)return;
+  const pending=resources.filter(r=>!approvedSetting(r));
+  if(pending.length)throw Object.assign(Error('设定图等待处理：'+pending.map(r=>r.name).join('、')),{code:'INPUT'});
+  const handoffKey='reference-handoff:'+resources.map(r=>r.id+'-'+r.revision).join(',');
+  if(!p.events.some(e=>e.taskId===handoffKey))event(p,'director',handoffKey,'已锁定通过审核的设定图版本，交给分镜与视频制作。',{type:'dispatch'});
+}
+
+async function framesV2(p) {
+  p.stage='images';save(p);if(p.pausedStages?.images)return;
+  const link=r=>referenceImage(p,r.output);
   await filmPool(p.shots,10,async shot=>{
     if(shot.paused||shot.stale)return;
     const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
-    await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，${p.settings.style}，严格保持参考图身份、服装、环境布局一致。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
+    if(p.referenceWorkflow && refs.some(r=>!approvedSetting(r)))return;
+    if(!shot.frame)shot.referenceVersions=refs.map(r=>({id:r.id,version:r.revision,file:r.output.file}));
+    await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，${p.settings.style}，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
     if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[referenceImage(p,shot.frame)],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
   });
 }
 async function directorReview(p) {
   const issues=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
-  const assetIssues=(p.resources||[]).filter(r=>r.assetReview?.status==='review'&&!r.assetReview.directorAccepted);
+  const assetIssues=(p.referenceWorkflow?[]:p.resources||[]).filter(r=>r.assetReview?.status==='review'&&!r.assetReview.directorAccepted);
   if(!issues.length&&!assetIssues.length)return;
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {
@@ -706,13 +799,14 @@ const graph = new StateGraph(State)
   .addNode('director',stage(async p=>{await recoverDetached(p);if(p.schemaVersion===2){await agents.director(p);await agents.revise(p);}else {await plan(p);await revise(p);await agents.revise(p);}},true))
   .addNode('screenwriter',stage(async p=>{if(p.schemaVersion===2)await agents.writer(p);}))
   .addNode('character_scene',stage(async p=>{if(p.schemaVersion===2){const results=await Promise.allSettled([agents.characters(p),agents.scenes(p)]);const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;}}))
+  .addNode('reference_assets',stage(async p=>{if(p.schemaVersion===2 && p.referenceWorkflow)await referenceAssets(p);}))
   .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2)await agents.continuity(p);}))
-  .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2)await imagesV2(p);else await images(p);}))
+  .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);if(p.status!=='review')await framesV2(p);}else await images(p);}))
   .addNode('video_shots',stage(videos))
   .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2)await directorReview(p);}))
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))
-  .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();
+  .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','reference_assets').addEdge('reference_assets','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();
 while(true) {
   try {
     const projects=fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x)).flatMap(id=>{try{return [read(id)];}catch{return [];}});

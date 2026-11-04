@@ -40,7 +40,7 @@ export function finishTask(p,t,output,error) {
 function archive(o) { o.history ||= []; o.history.push({version:o.revision||1,at:Date.now(),value:clone({...o,history:undefined})}); }
 function invalidateShot(p,s,reason) {
   if(s.locked) { s.stale=true;s.staleReason=reason;return; }
-  archive(s);s.revision++;s.frame=null;s.tail=null;s.video=null;s.audio=null;s.review=null;
+  archive(s);s.revision++;s.frame=null;s.referenceVersions=null;s.tail=null;s.video=null;s.audio=null;s.review=null;
   for(const key of ['frame','tail','video']) { s[key+'Task']=null;s[key+'Submitting']=false;s[key+'Attempts']=0;s[key+'Error']=null; }
   s.stale=false;
   p.output=null;p.audioReady=false;
@@ -52,7 +52,7 @@ export function invalidateResource(p,r,reason,seen=new Set()) {
     else {archive(child);child.revision++;child.output=null;child.image=null;child.imageTask=null;child.imageSubmitting=false;child.imageAttempts=0;}
     invalidateResource(p,child,reason,seen);
   }
-  for(const s of p.shots || []) if((s.resourceIds || s.assetIds || []).includes(r.id) || (r.sourceId && (s.assetIds || []).includes(r.sourceId))) invalidateShot(p,s,reason);
+  for(const s of p.shots || []) if(!seen.has(s) && ((s.resourceIds || s.assetIds || []).includes(r.id) || (r.sourceId && (s.assetIds || []).includes(r.sourceId)))) {seen.add(s);invalidateShot(p,s,reason);}
   p.output=null;p.audioReady=false;
 }
 export function applyCommand(p,c) {
@@ -78,7 +78,12 @@ export function applyCommand(p,c) {
   else if(type==='stage-pause') {p.pausedStages ||= {};p.pausedStages[body.stage]=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued';}
   else if(type==='lock') { requireTarget();target.locked=Boolean(body.locked); }
   else if(type==='task-pause') { requireTarget();target.paused=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued'; }
-  else if(type==='keep') { requireTarget();target.stale=false;target.staleReason=null;if(isShot)target.manualApprovedVersion=target.revision;p.status=p.schedulingPaused?'paused':'queued'; }
+  else if(type==='keep') { requireTarget();target.stale=false;target.staleReason=null;if(isShot)target.manualApprovedVersion=target.revision;
+    else if(p.referenceWorkflow && target.output) {
+      target.approvedVersion=target.revision;
+      target.assetReview={...target.assetReview,file:target.output.file,version:target.revision,status:'manual',summary:'用户确认使用当前设定图。'};
+    }
+    p.needsRerun=true;p.status=p.schedulingPaused?'paused':'queued'; }
   else if(type==='edit' || type==='regenerate' || type==='restore' || type==='upload') {
     mutable();
     const changed=type==='edit'?Object.keys(body.patch||{}).filter(key=>JSON.stringify(target[key])!==JSON.stringify(body.patch[key])):[];
@@ -105,6 +110,12 @@ export function applyCommand(p,c) {
       const allowed=isShot?['prompt','dialogue','duration','time','sceneId','characterIds','outfitIds','resourceIds','firstFramePrompt','tailFramePrompt','camera','action','continuity','subtitleText']:['prompt','name','attributes'];
       for(const key of allowed) if(body.patch && body.patch[key]!==undefined)target[key]=clone(body.patch[key]);
       if(isShot && body.patch?.prompt && body.patch.firstFramePrompt===undefined && changed.includes('prompt'))target.firstFramePrompt=body.patch.prompt;
+    }
+    if(!isShot) {
+      target.approvedVersion=null;
+      target.qualityRetryUsed=false;
+      target.reviewCorrection=null;
+      if(type==='upload' && target.type==='face')target.characterReference=null;
     }
     p.needsRerun=true;
     target.stale=false;target.updatedAt=Date.now();
