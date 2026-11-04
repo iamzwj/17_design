@@ -4,8 +4,9 @@ import './complianceReport.css'
 
 function Finding({ item, pending, brand }) {
   const logos = pending ? [] : reviewLogoAssets(brand, item)
+  const standaloneText = item.title && !item.location && !item.problem && !item.fix && !item.extra.length && !item.basis.length
   return <article className={`review-finding${pending ? ' is-pending' : ''}`}>
-    <h4>{item.title || (pending ? '需要补充确认' : '发现硬性问题')}</h4>
+    {standaloneText ? <p className="review-standalone">{item.title}</p> : <h4>{item.title || (pending ? '需要补充确认' : '发现硬性问题')}</h4>}
     {item.location && <p className="review-location">{item.location}</p>}
     {item.problem && <div className="review-finding-row"><b>{pending ? '待核验原因' : '问题'}</b><p>{item.problem}</p></div>}
     {item.fix && <div className="review-finding-row review-fix"><b>{pending ? '需确认' : '怎么改'}</b><p>{item.fix}</p></div>}

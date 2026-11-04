@@ -8,10 +8,11 @@
 .review-section > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 22px; color: var(--review-ink); }
 .review-section > h3 > span { font-size: var(--dp-typography-interface); font-weight: 400; color: var(--review-muted); }
 .review-finding { padding: 18px 20px; margin: 0 0 12px; border: 1px solid var(--review-line); border-radius: 12px; background: var(--review-surface); }
-.review-finding > h4 { margin: 0; font-size: 20px; line-height: 1.6; color: var(--review-ink); }
+.review-finding > h4 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.5; color: var(--review-ink); }
 .review-finding > .review-location { margin: 5px 0 12px; font-size: var(--dp-typography-interface); line-height: 1.7; color: var(--review-muted); white-space: pre-line; }
-.review-finding-row { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 10px; margin-top: 10px; font-size: var(--dp-typography-body); line-height: 1.8; }
-.review-finding-row > b { font-size: var(--dp-typography-interface); color: var(--review-muted); font-weight: 500; padding-top: 2px; }.review-finding-row > p { margin: 0; white-space: pre-line; }
+.review-finding-row { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 10px; margin-top: 10px; font-size: 16px; font-weight: 400; line-height: 1.7; }
+.review-finding-row > b { font-size: var(--dp-typography-interface); color: var(--review-muted); font-weight: 500; padding-top: 2px; }.review-finding-row > p { margin: 0; font-weight: 400; white-space: pre-line; }
+.review-standalone { margin: 0; font-size: 16px; font-weight: 400; line-height: 1.7; color: var(--review-ink); white-space: pre-line; }
 .review-fix > b { color: var(--review-accent); }
 .review-evidence { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--review-line); font-size: var(--dp-typography-interface); color: var(--review-muted); line-height: 1.8; }
 .review-evidence > summary, .review-checked > summary { cursor: pointer; width: fit-content; padding: 3px 0; }.review-evidence > p { margin: 7px 0 0; }
@@ -26,7 +27,8 @@
 
 @media(max-width:600px) {
   .review-verdict > p, .review-finding-row, .review-extra, .review-notes > p { font-size: var(--dp-typography-interface); }
-  .review-finding > h4 { font-size: 19px; }
+  .review-finding > h4 { font-size: 17px; }
+  .review-standalone { font-size: 15px; }
 }
 
 .review-logo-assets { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--review-line); }
