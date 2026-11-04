@@ -4,6 +4,31 @@ import { beginTask, finishTask, event, taskId, applyCommand } from './filmState.
 const json = text => JSON.parse(String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
 const validId = id => typeof id==='string' && /^[a-zA-Z0-9_-]{1,60}$/.test(id);
 export const timePrefix = value => /^(时间[:：\s]*)?(白天|夜晚|清晨|早晨|上午|中午|下午|傍晚|黄昏|深夜|凌晨|日间|夜间|\d{1,2}[:：时点])/.test(String(value).trim());
+export function normalizeFilmTime(value) {
+  if (typeof value !== 'string') return value;
+  const time = value.trim();
+  if (timePrefix(time)) return time;
+  const period = /(白天|夜晚|清晨|早晨|上午|中午|下午|傍晚|黄昏|深夜|凌晨|日间|夜间|\d{1,2}[:：时点])/.exec(time);
+  if (!period) return time;
+  const chronology = time.slice(0, period.index).replace(/[·・，,；;：:\s]+$/, '').trim();
+  return `${time.slice(period.index)}；${chronology}`;
+}
+export function normalizeFilmScript(result) {
+  if (!result || typeof result !== 'object' || typeof result.summary !== 'string' ||
+      !Array.isArray(result.scenes) || !result.scenes.length || result.scenes.length > 30)
+    throw Error('剧本场次结构无效：缺少摘要或场次列表');
+  const ids = new Set();
+  const scenes = result.scenes.map((scene, index) => {
+    if (!scene || !validId(scene.id) || ids.has(scene.id))
+      throw Error(`剧本第${index + 1}场 ID 无效或重复`);
+    ids.add(scene.id);
+    const time = normalizeFilmTime(scene.time);
+    if (!timePrefix(time))
+      throw Error(`剧本第${index + 1}场缺少明确时段，请注明白天、夜晚或具体钟点`);
+    return { ...scene, time };
+  });
+  return { ...result, scenes };
+}
 export const FILM_STORY_FIDELITY = '用户原始故事是剧情依据。已有完整剧本时按剧本拍摄，不重新自由创作；保留人物身份与关系、关键事件的因果顺序、具体数字及道具意义、时间跨越、转折与结尾。时间阶段必须以原稿为准，不能把“现在”擅自改成“几年后”；同一人物的年龄状态和角色身份按原稿变化，不能混淆不同人物或互换关系。对白要说明谁对谁说，旁白和内心独白不能强行变成人物口播。时长不足时保留完整的最小因果链，说明压缩取舍，不通过篡改事实、删掉关键转折或编造结尾来凑时长；无法忠实表达则明确指出冲突。';
 export function filmContinuityKey(p) {
   const shots=(p.shots||[]).map(({id,revision,time,sceneId,characterIds,outfitIds,duration,prompt,dialogue,action,continuity,firstFramePrompt})=>({id,revision,time,sceneId,characterIds,outfitIds,duration,prompt,dialogue,action,continuity,firstFramePrompt}));
@@ -19,6 +44,7 @@ export function normalizeShots(raw,p) {
   if(!Array.isArray(raw)||!raw.length||raw.length>40)throw Error('分镜数量无效');
   const ids=new Set(), result=[];
   for(const s of raw) {
+    s.time=normalizeFilmTime(s.time);
     s.sceneNumber=String(s.sceneNumber ?? s.sceneId ?? '');
     for(const key of ['dialogue','ambience','continuity','emotion']){if(s[key]==null)s[key]='';else if(Array.isArray(s[key])&&s[key].every(v=>typeof v==='string'))s[key]=s[key].join('；');}
     if(!validId(s.id)||ids.has(s.id)||!Number.isFinite(s.duration)||s.duration<1||s.duration>10||!timePrefix(s.time)||!p.scenes.some(c=>c.id===s.sceneId)||!Array.isArray(s.characterIds)||s.characterIds.some(id=>!p.characters.some(c=>c.id===id)))throw Error('分镜字段、时间、引用或15秒时长上限校验失败');
@@ -45,6 +71,22 @@ export function createFilmAgents({api,save,check}) {
     const version=p.scriptRevision||1,id=taskId(key,agent,version);
     let existing=p.tasks.find(t=>t.id===id);
     if(existing?.status==='succeeded') {commit(existing.output);return;}
+    if(key==='script' && existing?.status==='failed' && existing.lastStructuredOutput) {
+      let recovered;
+      try {
+        recovered = normalizeFilmScript(existing.lastStructuredOutput);
+      } catch {
+        // Invalid content still goes through the configured model fallback.
+      }
+      if(recovered) {
+        check(p);
+        finishTask(p,existing,recovered);
+        commit(recovered);
+        event(p,'writer',id,'已恢复保存的剧本并统一时间格式',{type:'recovery'});
+        save(p);
+        return;
+      }
+    }
     const t=beginTask(p,id,stage,agent,{name:key,...input},key==='director-plan'?[]:[taskId('script','writer',version)]);save(p);
     const structured=new RunnableLambda({func:async()=>{
       let failure;
@@ -60,7 +102,7 @@ export function createFilmAgents({api,save,check}) {
     catch(error){finishTask(p,t,null,error);save(p);throw error;}
   };
   const director=async p=>{if(p.directorPlan)return;await run(p,'director-plan','director','script','制定制作目标与协作计划。返回{title,goal,style,continuityRules:[字符串],handoffs:[{agent,goal}]}。title根据梗概拟5-12字片名。',{story:p.story,duration:p.duration,style:p.settings.style,brandContext:p.context?.prompt||'',skill:p.context?.skill||''},r=>{if(typeof r.title!=='string'||!Array.isArray(r.handoffs))throw Error('导演计划结构无效');},r=>{p.directorPlan=r;p.title=r.title;});};
-  const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。返回{summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{if(typeof r.summary!=='string'||!Array.isArray(r.scenes)||!r.scenes.length||r.scenes.length>30||r.scenes.some(s=>!validId(s.id)||!timePrefix(s.time)))throw Error('剧本场次结构无效');},r=>{p.script=r;});};
+  const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。返回{summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。id使用唯一英文字母或数字；time以白天、夜晚、清晨或具体钟点开头，年代及相对时间放在其后，例如“白天；三个月前”“傍晚；现在”，不得删掉原故事时间信息。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{normalizeFilmScript(r);},r=>{p.script=normalizeFilmScript(r);});};
   const characters=async p=>{if(p.characters||!p.script)return;await run(p,'characters','character','characters','识别所有实际出镜角色，画外音不算出镜，身份和服装分开，保持唯一 ID。返回{characters:[{id,name,identity:{storyRole,gender,age,face,hair,hairColor,skinTone,height,build,proportions,temperament,features,lookChanges},facePrompt,outfits:[{id,name,prompt,clothes,shoes,materials,colors,accessories,personalItems}]}]}。facePrompt是一张正面、45度、90度同一人面部特写三视图设定图的提示词。outfit是独立全身正侧背穿搭服饰设定，不替换身份。',{script:p.script},r=>{if(!Array.isArray(r.characters)||new Set(r.characters.map(c=>c?.id)).size!==r.characters.length||r.characters.some(c=>!c||!validId(c.id)||!c.name||!c.facePrompt||!Array.isArray(c.outfits)||!c.outfits.length||new Set(c.outfits.map(o=>o?.id)).size!==c.outfits.length||c.outfits.some(o=>!o||!validId(o.id)||!o.prompt)))throw Error('角色设定无效');},r=>{
       p.characters=r.characters;
       for(const c of r.characters){p.resources.push({id:`${c.id}-face`,sourceId:c.id,name:`${c.name} · 面部三视图`,category:'characters',type:'face',agent:'character',attributes:c.identity,prompt:`同一人物面部特写三视图：正面、45°、90°；保持身份、年龄、肤色、发型、发际线和五官比例一致；中性光线、真实皮肤纹理、简洁背景，不加装饰文字或背景人物。${c.facePrompt}`,revision:p.scriptRevision||1,history:[]});for(const o of c.outfits)p.resources.push({id:`${c.id}-look-${o.id}`,sourceId:c.id,outfitId:o.id,name:`${c.name} · ${o.name}`,category:'characters',type:'wardrobe',agent:'character',dependencies:[`${c.id}-face`],attributes:o,prompt:`独立穿搭设定图，保持参考图面部身份：全身正面、侧面、背面，展示服装版型材质、鞋履、配饰和随身物品。${o.prompt}`,revision:p.scriptRevision||1,history:[]});}
