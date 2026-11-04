@@ -11,7 +11,7 @@
   max-height: calc(100dvh - 32px);
   box-sizing: border-box;
 }
-.film-character-dialog::backdrop { background: rgba(18, 16, 25, .64); }
+.film-character-dialog::backdrop { background: rgba(20,20,20, .64); }
 .film-character-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .film-character-dialog h2, .film-character-decision h3 { margin: 0; }
 .film-character-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
