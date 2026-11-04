@@ -64,7 +64,17 @@ export function applyCommand(p,c) {
   const requireTarget=()=>{if(!target)throw Error('未找到目标任务或成果');};
   const mutable=()=>{requireTarget();if(target.locked)throw Error('成果已锁定，请先解锁');};
   if(type==='pause') { p.schedulingPaused=true; p.status=p.activeJobs?.length?'pausing':'paused'; }
-  else if(type==='resume') { p.schedulingPaused=false;p.nextRunAt=0;p.status='queued';p.error=null;for(const r of [...p.resources,...p.shots]) if(body.all)r.paused=false; }
+  else if(type==='character-mode') {
+    if(p.status!=='review'||!p.awaitingCharacters||typeof body.custom!=='boolean')throw Error('角色制作方式无效');
+    p.characterMode=body.custom?'custom':'automatic';
+    if(!body.custom){p.awaitingCharacters=false;p.status='queued';}
+  }
+  else if(type==='character-reference') {
+    if(p.status!=='review'||!p.awaitingCharacters||p.characterMode!=='custom'||target?.type!=='face')
+      throw Error('当前角色参考设置无效');
+    target.characterReference={file:body.file,name:body.name};
+  }
+  else if(type==='resume') { if(p.awaitingCharacters && p.characterMode!=='custom')throw Error('请先选择是否自定义角色，当前恢复操作无效');p.awaitingCharacters=false; p.schedulingPaused=false;p.nextRunAt=0;p.status='queued';p.error=null;for(const r of [...p.resources,...p.shots]) if(body.all)r.paused=false; }
   else if(type==='stage-pause') {p.pausedStages ||= {};p.pausedStages[body.stage]=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued';}
   else if(type==='lock') { requireTarget();target.locked=Boolean(body.locked); }
   else if(type==='task-pause') { requireTarget();target.paused=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued'; }
@@ -125,8 +135,10 @@ export function applyCommand(p,c) {
   p.appliedCommands.push(c.id);
   event(p,'user',body.id || 'project',c.label || ({pause:'暂停新任务调度；已提交的外部任务继续回收结果',resume:'恢复自动制作',lock:body.locked?'锁定当前成果':'解除成果锁定',edit:'更新成果并计算下游影响',regenerate:'重新生成选中任务',restore:'恢复历史版本',upload:'上传并保留原始参考素材',timeline:'更新剪辑工程，仅重新导出成片',revise:'向总导演提交修改要求'}[type]||'更新项目'),{type:'command',commandId:c.id});
 }
+let lastCommandTime = 0;
 export function queueFilmCommand(root,id,type,body={}) {
-  const command={id:randomUUID(),type,body,createdAt:Date.now()};
+  lastCommandTime = Math.max(Date.now(), lastCommandTime + 1);
+  const command={id:randomUUID(),type,body,createdAt:lastCommandTime};
   const dir=path.join(root,id,'commands');fs.mkdirSync(dir,{recursive:true});
   const file=path.join(dir,`${String(command.createdAt).padStart(16,'0')}-${command.id}.json`);
   fs.writeFileSync(file+'.next',JSON.stringify(command),{mode:0o600});fs.renameSync(file+'.next',file);return command;

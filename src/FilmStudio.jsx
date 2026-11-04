@@ -1,3 +1,4 @@
+import { CharacterLibrary, WarehouseIcon } from "./FilmCharacters.jsx";
 import {filmStatusLabel} from '../shared/filmPresentation.js';
 import {knowledgeRequest} from './knowledgeApi.js';
 import { filmTaskName } from '../shared/filmProgress.js';
@@ -26,6 +27,7 @@ async function request(path = "", body) {
   return d;
 }
 export default function FilmStudio({ user, onLogin }) {
+  const [characterLibrary, setCharacterLibrary] = useState(false);
   const selectedKey = "dgen-film-selected-user:" + user?.id;
   const viewKey = "dgen-film-view-user:" + user?.id;
   const initialId = () => new URLSearchParams(window.location.search).get("filmProject") || localStorage.getItem(selectedKey) || localStorage.getItem("dgen-film-selected-" + getAuthToken().slice(-12)) || "";
@@ -162,8 +164,9 @@ export default function FilmStudio({ user, onLogin }) {
           <h1>一键成片</h1>
           <p>把故事变成一部短片，让角色、场景与镜头共同讲述。</p>
         </div>
-        <div className="film-header-actions"><button onClick={() => setView("tasks")}>任务列表{projects.length ? ` (${projects.length})` : ''}</button><button onClick={() => { setId(""); setView("create"); }}>新建短片</button></div>
+        <div className="film-header-actions"><button onClick={() => setCharacterLibrary(true)}><WarehouseIcon/> 角色库</button><button onClick={() => setView("tasks")}>任务列表{projects.length ? ` (${projects.length})` : ''}</button><button onClick={() => { setId(""); setView("create"); }}>新建短片</button></div>
       </header>
+      {characterLibrary && <CharacterLibrary request={request} onClose={() => setCharacterLibrary(false)}/>}
       {error && (
         <p className="film-error" role="alert">
           {error}

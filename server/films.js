@@ -1,3 +1,5 @@
+import { IP_ASSETS } from "../shared/materialCatalog.js";
+import { fileURLToPath } from "node:url";
 import {filmMediaIndex} from '../shared/filmMediaIndex.js';
 import {probe} from './filmEditing.js';
 import sharp from 'sharp';
@@ -6,7 +8,7 @@ import { filmEvent } from '../shared/filmProgress.js';
 import { filmLinkKey, validFilmLink } from "./filmLinks.js";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
 export function installFilms(app, { dataDir, requireAuth, worker = true, prepareContext = async()=>null }) {
   const root = path.join(dataDir, "films");
@@ -105,10 +107,50 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       shots: [],
       assets: [],
       automatic: b.automatic !== false,
+      characterChoice: true,
     };
     filmEvent(p, "created", "已接收故事，等待 AI 导演开始统筹制作");
     write(p);
     res.status(202).json({ project: p });
+  });
+  const brandIPs = IP_ASSETS.filter((asset) => asset.file)
+    .map(({ id, name, file }) => ({ id, name, file, source: "brand" }));
+  const brandPath = (asset) => fileURLToPath(new URL("../public" + asset.file, import.meta.url));
+  const library = (req) => path.join(root, "characters", createHash("sha256").update(String(req.user.id)).digest("hex"));
+  const readCharacter = (req, id) => {
+    if (typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id)) return null;
+    try {
+      return JSON.parse(fs.readFileSync(path.join(library(req), id + ".json")));
+    } catch {
+      return null;
+    }
+  };
+  async function uploadedImage(data) {
+    if (typeof data !== "string" || data.length > 14_000_000 ||
+        !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(data))
+      throw Error("图片格式无效，请上传 10 MB 以内的 PNG、JPEG 或 WebP");
+    try {
+      return await sharp(Buffer.from(data.split(",")[1], "base64"), { limitInputPixels: 40_000_000 })
+        .rotate().resize(2048, 2048, { fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    } catch {
+      throw Error("图片无效或无法解码");
+    }
+  }
+  app.get("/api/films/characters", requireAuth, (req, res) => {
+    const dir = library(req);
+    const ids = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+    res.json({
+      characters: ids.filter((name) => name.endsWith(".json"))
+        .map((name) => readCharacter(req, name.slice(0, -5))).filter(Boolean)
+        .sort((a, b) => b.createdAt - a.createdAt),
+      brandIPs: brandIPs.filter((asset) => fs.existsSync(brandPath(asset))),
+    });
+  });
+  app.get("/api/films/characters/:characterId/image", requireAuth, (req, res) => {
+    const entry = readCharacter(req, req.params.characterId);
+    if (!entry) return res.sendStatus(404);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.sendFile(path.resolve(library(req), entry.id + ".png"));
   });
   app.get("/api/films/:id", requireAuth, (req, res) => {
     const p = owned(req, res);
@@ -118,7 +160,8 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
   const commandRoute = (fn) => async (req,res,next) => { try { await fn(req,res); } catch(e) { if(e.status) return res.status(e.status).json({error:e.message}); if(/锁定|不存在|无效|未知|上限|先解锁/.test(e.message)) return res.status(400).json({error:e.message}); next(e); } };
   const validateCommand = (p,type,body) => {
     const projected=clone(p);for(const command of pendingCommands(root,p))applyCommand(projected,command);p=projected;
-    const allowed=['pause','resume','lock','task-pause','keep','edit','regenerate','restore','script','script-lock','revise','settings','timeline','upload','add-outfit','stage-pause'];
+    const allowed=['character-mode','character-reference','pause','resume','lock','task-pause','keep','edit','regenerate','restore','script','script-lock','revise','settings','timeline','upload','add-outfit','stage-pause'];
+    if(type==='character-reference' && !body.file?.startsWith('asset-character-'))throw Error('角色参考无效');
     if(!allowed.includes(type))throw Error('未知操作');
     if(body.patch?.duration!==undefined && (!Number.isFinite(body.patch.duration)||body.patch.duration<1||body.patch.duration>10))throw Error('镜头时长必须在1至10秒，复杂镜头请拆分');
     if(body.patch?.prompt && (typeof body.patch.prompt!=='string'||body.patch.prompt.length>6000))throw Error('提示词无效');
@@ -139,9 +182,68 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     if(type==='script' && (!Array.isArray(body.script.scenes)||!body.script.scenes.length||body.script.scenes.some(s=>!s.id||!s.time||!s.action)))throw Error('剧本场次无效');
     applyCommand(preview,{id:randomUUID(),type,body});
   };
+  app.post("/api/films/characters", requireAuth, commandRoute(async (req, res) => {
+    let name = String(req.body.name || "").trim().slice(0, 100);
+    let bytes;
+    let id = randomUUID();
+    if (req.body.projectId) {
+      const project = read(req.body.projectId);
+      const asset = project?.resources?.find((item) => item.id === req.body.assetId);
+      const file = (asset?.output || asset?.image)?.file;
+      if (project?.userId !== req.user.id || asset?.type !== "face" ||
+          !/^asset-[a-zA-Z0-9_-]+\.png$/.test(file || ""))
+        return res.status(404).json({ error: "角色图片不可用" });
+      const dir = library(req);
+      const entries = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+      const source = project.id + "/" + file;
+      const existing = entries.filter((entry) => entry.endsWith(".json"))
+        .map((entry) => readCharacter(req, entry.slice(0, -5))).find((entry) => entry?.origin === source);
+      if (existing) return res.json({ character: existing });
+      bytes = fs.readFileSync(path.join(root, project.id, file));
+      name = project.characters?.find((c) => c.id === asset.sourceId)?.name || asset.name;
+      const character = saveCharacter(req, { id, name, origin: source }, bytes);
+      return res.json({ character });
+    }
+    bytes = await uploadedImage(req.body.image);
+    res.json({ character: saveCharacter(req, { id, name }, bytes) });
+  }));
+  function saveCharacter(req, { id, name, origin }, bytes) {
+    const character = { id, name: name || "未命名角色", origin, createdAt: Date.now() };
+    const dir = library(req);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, id + ".png"), bytes);
+    fs.writeFileSync(path.join(dir, id + ".json"), JSON.stringify(character));
+    return character;
+  }
+  app.post("/api/films/:id/character-reference", requireAuth, commandRoute(async (req, res) => {
+    const { id, characterId, source, image } = req.body;
+    let bytes;
+    let name;
+    if (image) {
+      bytes = await uploadedImage(image);
+      name = "上传图片";
+    } else if (source === "brand") {
+      const entry = brandIPs.find((item) => item.id === characterId);
+      if (entry && fs.existsSync(brandPath(entry))) bytes = fs.readFileSync(brandPath(entry));
+      name = entry?.name;
+    } else {
+      const entry = readCharacter(req, characterId);
+      if (entry) bytes = fs.readFileSync(path.join(library(req), entry.id + ".png"));
+      name = entry?.name;
+    }
+    const p = owned(req, res);
+    if (!p) return;
+    if (!bytes) return res.status(404).json({ error: "角色图片不可用" });
+    const file = "asset-character-" + randomUUID() + ".png";
+    const body = { id, file, name };
+    validateCommand(p, "character-reference", body);
+    fs.writeFileSync(path.join(root, p.id, file), bytes);
+    const cmd = queueFilmCommand(root, p.id, "character-reference", body);
+    res.status(202).json({ commandId: cmd.id });
+  }));
   app.post('/api/films/:id/commands',requireAuth,commandRoute((req,res)=>{
     const p=owned(req,res);if(!p)return;
-    const {type,body={}}=req.body;if(JSON.stringify(body).length>120000)throw Error('操作内容超过上限');validateCommand(p,type,body);
+    const {type,body={}}=req.body;if(type==="character-reference")throw Error("请使用角色图片入口");if(JSON.stringify(body).length>120000)throw Error('操作内容超过上限');validateCommand(p,type,body);
     const cmd=queueFilmCommand(root,p.id,type,body);
     res.status(202).json({project:{...p,pendingChanges:[{id:cmd.id,type,target:body.id}]},commandId:cmd.id});
   }));
@@ -162,6 +264,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
   app.post("/api/films/:id/resume", requireAuth, (req, res) => {
     const p = owned(req, res);
     if (!p) return;
+    if (p.awaitingCharacters) return res.status(409).json({ error: "请先完成角色形象选择" });
     if (!["failed", "review", "cancelled", "succeeded"].includes(p.status))
       return res.status(409).json({ error: "项目正在制作中" });
     if (req.body.shots) {

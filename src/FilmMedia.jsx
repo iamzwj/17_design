@@ -1,17 +1,17 @@
 import {useEffect,useState,useRef} from "react";
 import {getAuthToken} from "./api.js";
 const base=()=>String(window.XIAODIE_CONFIG?.API_BASE_URL||import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
-export default function FilmMedia({ project, file, video = false, audio = false }) {
+export default function FilmMedia({ project, file, characterId, video = false, audio = false }) {
   const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
   const container=useRef(null);const [visible,setVisible]=useState(false);
   useEffect(()=>{if(!('IntersectionObserver' in window)){setVisible(true);return;}const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){setVisible(true);observer.disconnect();}},{rootMargin:'200px'});if(container.current)observer.observe(container.current);return()=>observer.disconnect();},[]);
   useEffect(() => {
-    if (!file || !visible) return;
+    if ((!file && !characterId) || !visible) return;
     setUrl("");
     setMediaError(false);
     let live = true,
       src;
-    fetch(base() + `/api/films/${project}/files/${file}`, {
+    fetch(base() + (characterId ? `/api/films/characters/${characterId}/image` : `/api/films/${project}/files/${file}`), {
       headers: { Authorization: `Bearer ${getAuthToken()}` },
     })
       .then((r) => {
@@ -28,7 +28,7 @@ export default function FilmMedia({ project, file, video = false, audio = false 
       live = false;
       if (src) URL.revokeObjectURL(src);
     };
-  }, [project, file, retry,visible]);
+  }, [project, file, characterId, retry, visible]);
   return <div className="film-media" ref={container}>{url ? (
     audio ? <audio src={url} controls preload="metadata"/> : video ? (
       <video src={url} controls preload="metadata" />

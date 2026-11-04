@@ -593,13 +593,20 @@ async function render(p) {
 }
 const agents=createFilmAgents({api,save,check});
 async function imagesV2(p) {
+  if (p.characterChoice && (p.awaitingCharacters || !p.characterMode) && p.resources.some((r) => r.type === 'face')) {
+    p.awaitingCharacters = true;
+    p.status = 'review';
+    filmEvent(p, 'characters:choose', '角色提示词已准备好，请选择是否自定义角色。');
+    save(p);
+    return;
+  }
   p.stage='images';save(p);if(p.pausedStages?.images)return;
   const link=r=>referenceImage(p,r.output);
   for(const group of [p.resources.filter(r=>r.type!=='wardrobe'),p.resources.filter(r=>r.type==='wardrobe')]) {
     await filmPool(group,10,async r=>{
       if(r.output){r.image=r.output;return;}if(r.paused||r.stale||p.pausedStages?.[r.category])return;
       const refs=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));if(refs.some(r=>!r?.output||r.stale))return;
-      await generate(p,r,'image',{model:p.imageModel,prompt:`${p.settings.style}；${r.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?'1:1':'1024x1024',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`asset-${r.id}-v${r.revision}.png`);
+      await generate(p,r,'image',{model:p.imageModel,prompt:`${p.settings.style}；${r.characterReference ? '以参考图为准保持角色身份、五官及发型。' : ''}${r.prompt}`,images:r.characterReference?[referenceImage(p,r.characterReference)]:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?'1:1':'1024x1024',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`asset-${r.id}-v${r.revision}.png`);
     });
   }
   await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original'),10,async r=>{
