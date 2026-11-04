@@ -40,7 +40,6 @@ const MODULES = [
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
   { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
-  { id: 'content', label: '内容创作', caption: '节日海报与品牌内容', icon: 'book' },
   { id: 'skills', label: 'Skill 库', caption: '把经验变成可复用的方法', icon: 'blocks' },
   { id: 'knowledge', label: '知识库', caption: '素材、品牌与营销知识', icon: 'library' },
   { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
