@@ -60,3 +60,7 @@
 .fw-director-input > div { justify-content: flex-end; }
 .fw-director-input > div > small { margin-right: auto; overflow-wrap: anywhere; }
 .film-studio .fw-director-input > div > button { white-space: nowrap; flex: 0 0 auto; }
+
+.fw-asset-board .fw-file-control { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 10px; border-style: solid; font-size: var(--dp-typography-metadata); }
+.fw-asset-board .fw-file-control:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.fw-warning > button { margin: 4px 0 4px 10px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }

@@ -70,8 +70,14 @@ export function applyCommand(p,c) {
     if(!body.custom){p.awaitingCharacters=false;p.status='queued';}
   }
   else if(type==='character-reference') {
-    if(p.status!=='review'||!p.awaitingCharacters||p.characterMode!=='custom'||target?.type!=='face')
-      throw Error('当前角色参考设置无效');
+    if(target?.type!=='face')throw Error('当前角色参考设置无效');
+    if(p.referenceWorkflow) {
+      applyCommand(p,{...c,type:'upload',body:{id:body.id,file:body.file,locked:false}});
+      target.output={file:body.file};target.image=target.output;target.approvedVersion=target.revision;
+      target.assetReview={file:body.file,version:target.revision,status:'manual',summary:'用户选择的角色参考图。'};
+      return;
+    }
+    if(p.status!=='review'||!p.awaitingCharacters||p.characterMode!=='custom')throw Error('当前角色参考设置无效');
     target.characterReference={file:body.file,name:body.name};
   }
   else if(type==='resume') { if(p.awaitingCharacters && p.characterMode!=='custom')throw Error('请先选择是否自定义角色，当前恢复操作无效');p.awaitingCharacters=false; p.schedulingPaused=false;p.nextRunAt=0;p.status='queued';p.error=null;for(const r of [...p.resources,...p.shots]) if(body.all)r.paused=false; }
@@ -83,7 +89,7 @@ export function applyCommand(p,c) {
       target.approvedVersion=target.revision;
       target.assetReview={...target.assetReview,file:target.output.file,version:target.revision,status:'manual',summary:'用户确认使用当前设定图。'};
     }
-    p.needsRerun=true;p.status=p.schedulingPaused?'paused':'queued'; }
+    p.needsRerun=true;p.error=null;p.status=p.schedulingPaused?'paused':'queued'; }
   else if(type==='edit' || type==='regenerate' || type==='restore' || type==='upload') {
     mutable();
     const changed=type==='edit'?Object.keys(body.patch||{}).filter(key=>JSON.stringify(target[key])!==JSON.stringify(body.patch[key])):[];
@@ -120,7 +126,7 @@ export function applyCommand(p,c) {
     p.needsRerun=true;
     target.stale=false;target.updatedAt=Date.now();
     p.output=null;p.audioReady=false;p.lastImpact={sourceId:target.id,fromVersion:previousVersion,toVersion:target.revision,shots:isShot?[target.id]:p.shots.filter(s=>(s.resourceIds||s.assetIds||[]).includes(target.id)||(target.sourceId&&(s.assetIds||[]).includes(target.sourceId))).map(s=>s.id)};
-    p.status=p.schedulingPaused?'paused':'queued';
+    p.error=null;p.status=p.schedulingPaused?'paused':'queued';
   }
   else if(type==='add-outfit') {
     requireTarget();const sourceId=target.sourceId;

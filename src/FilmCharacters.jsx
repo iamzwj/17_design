@@ -6,7 +6,7 @@ export function WarehouseIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13H3Zm4 0V11h10v10M7 15h10M7 18h10"/></svg>;
 }
 
-function readImage(file) {
+export function readImage(file) {
   if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024)
     throw Error("请上传 10 MB 以内的 PNG、JPEG 或 WebP 图片");
   return new Promise((resolve, reject) => {

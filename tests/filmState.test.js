@@ -12,3 +12,13 @@ test('uploaded original identity is locked and face sheet is a separate derived 
  assert.equal(source.locked,true);assert.equal(source.output.file,'asset-original.png');assert.equal(face.output,null);assert.deepEqual(face.dependencies,[source.id]);assert.equal(face.locked,false);
 });
 test('explicit first-frame edits survive alongside video prompt edits',()=>{const p=fixture();command(p,'edit',{id:'s1',patch:{prompt:'白天；视频动作',firstFramePrompt:'白天；独立首帧构图'}});assert.equal(p.shots[0].firstFramePrompt,'白天；独立首帧构图');});
+test('selecting a library identity during production versions the face and only its dependents',()=>{
+ const p=migrateFilm({id:'p',schemaVersion:2,referenceWorkflow:true,status:'needs-input',characters:[{id:'c1',outfits:[]}],resources:[{id:'c1-face',sourceId:'c1',type:'face',revision:1,output:{file:'prior.png'}},{id:'c1-look',type:'wardrobe',dependencies:['c1-face'],revision:1,output:{file:'look.png'}}],shots:[{id:'s1',revision:1,resourceIds:['c1-face'],video:{file:'old.mp4'}},{id:'s2',revision:1,resourceIds:[],video:{file:'other.mp4'}}]});
+ const c={id:'reference-123',type:'character-reference',body:{id:'c1-face',file:'asset-character-new.png',name:'角色'}};
+ applyCommand(p,c);applyCommand(p,c);
+ const face=p.resources.find(r=>r.id==='c1-face');
+ assert.equal(face.revision,2);assert.equal(face.history[0].value.output.file,'prior.png');assert.equal(face.output.file,'asset-character-new.png');assert.equal(face.approvedVersion,2);
+ assert.equal(p.resources.find(r=>r.type==='reference-original').output.file,'asset-character-new.png');
+ assert.equal(p.resources.find(r=>r.id==='c1-look').output,null);assert.equal(p.shots[0].video,null);assert.equal(p.shots[1].video.file,'other.mp4');
+ assert.equal(p.status,'queued');assert.equal(p.appliedCommands.filter(id=>id===c.id).length,1);
+});
