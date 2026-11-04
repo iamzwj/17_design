@@ -23,7 +23,7 @@ function AssetCard({ asset, onPreview }) {
       {available
         ? <img src={asset.file} alt={asset.name} loading="lazy" decoding="async"/>
         : <span className="material-pending"><Icon name={asset.type === 'logo' ? 'library' : 'image'} size={24}/><b>待上传</b><small>素材位已预留</small></span>}
-      <span className={`material-status ${available ? 'ready' : ''}`}>{available ? '可下载' : '待补充'}</span>
+      {!available && <span className="material-status">待补充</span>}
     </button>
     <div className="material-card-copy">
       <span>{asset.kind || `${asset.brand} / ${asset.variant}`}</span>
