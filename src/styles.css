@@ -295,7 +295,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .waterfall-slot { border-color: rgba(255,255,255,.075); background: rgba(255,255,255,.045); }
 :root[data-theme='dark'] .waterfall-asset-loading,:root[data-theme='dark'] .waterfall-asset-unavailable { color: #eaf1ff; background: rgba(255,255,255,.035); }
 :root[data-theme='dark'] .waterfall-download { background: rgba(37,37,37,.92); box-shadow: 0 5px 15px rgba(0,0,0,.26); }
-:root[data-theme='dark'] .waterfall-composer.glass-strong { background: rgba(32,32,32,.94); }
+:root[data-theme='dark'] .waterfall-composer.glass-strong { background: var(--dp-panel); }
 :root[data-theme='dark'] .slot-error { color: #e3a3aa; background: rgba(113,43,52,.18); }
 :root[data-theme='dark'] .user-message,
 :root[data-theme='dark'] .report-conclusion,
