@@ -30,7 +30,7 @@
 .please-day-download:disabled { opacity: .42; cursor: default; }
 
 :root[data-theme='dark'] .please-day-editor-bar,:root[data-theme='dark'] .please-day-zoom,:root[data-theme='dark'] .please-day-zoom button { background: rgba(255,255,255,.055); border-color: rgba(255,255,255,.1); }
-:root[data-theme='dark'] .please-day-frame-tabs button { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.045); }:root[data-theme='dark'] .please-day-frame-tabs button:hover { border-color: rgba(177,160,255,.6); color: #86adff; }:root[data-theme='dark'] .please-day-frame-tabs button.active { border-color: #86adff; background: rgba(138,115,255,.16); color: #86adff; }
+:root[data-theme='dark'] .please-day-frame-tabs button { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.045); }:root[data-theme='dark'] .please-day-frame-tabs button:hover { border-color: rgba(7, 76, 224,.6); color: #86adff; }:root[data-theme='dark'] .please-day-frame-tabs button.active { border-color: #86adff; background: rgba(7, 76, 224,.16); color: #86adff; }
 :root[data-theme='dark'] .please-day-empty { background: #86adff; }
 :root[data-theme='dark'] .please-day-empty:hover { background: #86adff; }
 :root[data-theme='dark'] .please-day-error { background: rgba(184,63,77,.13); color: #e3a3aa; }

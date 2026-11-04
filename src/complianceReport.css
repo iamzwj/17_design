@@ -43,18 +43,29 @@
 .review-logo-grid span { color: var(--review-muted); font-size: var(--dp-typography-small); }
 @media(max-width:600px) { .review-logo-grid { grid-template-columns: 1fr; } }
 
-/* Color indicates risk level; purple is reserved for actions. */
-.review-report { --review-error: #b1384e; --review-warning: #935000; }
-:root[data-theme='dark'] .review-report { --review-error: #ffadbc; --review-warning: #ffd08a; }
+/* Keep status distinctions readable while reducing large areas of highlight color. */
 .review-section:not(.review-pending) > h3,
 .review-section:not(.review-pending) .review-finding > h4,
-.review-section:not(.review-pending) .review-finding-row > b { color: var(--review-error); }
+.review-section:not(.review-pending) .review-finding-row > b,
 .review-verdict.needs-change:not(.is-blocked) > strong,
+.review-verdict.is-blocked > strong,
 .review-pending > h3,
 .review-pending .review-finding > h4,
-.review-pending .review-finding-row > b,
-.review-section-hint { color: var(--review-warning); }
+.review-pending .review-finding-row > b { color: var(--review-ink); }
+.review-section-hint { color: var(--review-muted); }
 .review-evidence > summary { color: var(--review-accent); }
+.review-section:not(.review-pending) > h3::before,
+.review-pending > h3::before {
+  content: "";
+  width: 4px;
+  height: 1em;
+  border-radius: 2px;
+  background: #b9545f;
+  flex: none;
+}
+.review-pending > h3::before { background: #ab7b3f; }
+:root[data-theme='dark'] .review-section:not(.review-pending) > h3::before { background: #db9299; }
+:root[data-theme='dark'] .review-pending > h3::before { background: #d4af79; }
 
 .review-recommendations { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--review-line); color: var(--review-muted); font-size: var(--dp-typography-small); line-height: 1.7; }
 .review-recommendations > b { font-size: var(--dp-typography-small); font-weight: 500; }
