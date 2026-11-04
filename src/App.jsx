@@ -1801,7 +1801,7 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
     localStorage.setItem(THEME_KEY, theme)
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#131217' : '#e8ede3')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#16191f' : '#fcfcfd')
   }, [theme])
 
   function updateConversations(transform) {

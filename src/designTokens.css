@@ -1,0 +1,51 @@
+:root {
+  --dp-color-ground: #fcfcfd;
+  --dp-color-ink: #16191f;
+  --dp-color-ink-secondary: #454c58;
+  --dp-color-ground-muted: #f3f4f6;
+  --dp-color-rule: #dde0e6;
+  --dp-color-accent: #074ce0;
+  --dp-color-field: #16191f;
+  --dp-color-on-field: #fcfcfd;
+  --dp-color-on-field-secondary: #d0d4dd;
+  --dp-color-panel: #fff;
+  --dp-color-on-accent: #fff;
+  --dp-typography-fallback: sans-serif;
+  --dp-typography-body: 16px;
+  --dp-typography-interface: 15px;
+  --dp-typography-small: 14px;
+  --dp-typography-metadata: 13px;
+  --dp-typography-label: 12px;
+  --dp-typography-body-leading: 1.6;
+  --dp-spacing-grid-gap: 24px;
+  --dp-radius-panel: 12px;
+  --dp-border-hairline: 1px;
+  --dp-motion-interaction: 160ms;
+  --dp-motion-easing: ease-out;
+
+  --dp-font-body: 'Instrument Sans', 'Noto Sans SC', 'PingFang SC', system-ui, var(--dp-typography-fallback);
+  --dp-font-heading: 'Host Grotesk', 'Noto Sans SC', 'PingFang SC', system-ui, var(--dp-typography-fallback);
+  --dp-ground: var(--dp-color-ground);
+  --dp-muted: var(--dp-color-ground-muted);
+  --dp-ink: var(--dp-color-ink);
+  --dp-secondary: var(--dp-color-ink-secondary);
+  --dp-panel: var(--dp-color-panel);
+  --dp-rule: var(--dp-color-rule);
+  --dp-link: var(--dp-color-accent);
+  --dp-action-hover: #063eb9;
+  --dp-selected: #eaf1ff;
+  --dp-shadow: 0 8px 24px rgb(22 25 31 / 7%);
+  --dp-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23454c58' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:root[data-theme='dark'] {
+  --dp-ground: var(--dp-color-field);
+  --dp-muted: #282d36;
+  --dp-ink: var(--dp-color-on-field);
+  --dp-secondary: var(--dp-color-on-field-secondary);
+  --dp-panel: #20242c;
+  --dp-rule: #454c58;
+  --dp-link: #9cbcff;
+  --dp-selected: #253655;
+  --dp-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+  --dp-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23d0d4dd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}

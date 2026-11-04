@@ -182,7 +182,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
               <label className="film-style-field">视频风格<input value={form.style||"电影写实"} maxLength={200} onChange={e=>field("style",e.target.value)} placeholder="如电影写实、温暖动画、纪实摄影"/></label>
-              <div className="film-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
+              <div className="film-options film-context-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
               <div className="film-options">
                 <ComposerSelect
                   label="成片时长"
@@ -221,20 +221,17 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                   onChange={(v) => field("videoModel", v)}
                 />
               </div>
-              <p>
-                导演模型：Gemini 3.1
-                Pro。对白、环境音随视频生成，实际发音和口型需在成片中核对。
-              </p>
-              <label>
+              <div className="film-create-footer">
+              <label className="film-storyboard-only">
                 <input
                   type="checkbox"
                   checked={!form.automatic}
                   onChange={(e) => field("automatic", !e.target.checked)}
                 />{" "}
-                仅生成分镜，确认后再制作成片
+                先生成分镜
               </label>
               <p className="film-caption">
-                将调用所选模型生成角色、场景、分镜图和视频，按供应商实际用量计费。离开页面后后台继续制作。
+                按模型实际用量计费。
               </p>
               <button
                 className="film-primary"
@@ -242,6 +239,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               >
                 {busy ? "正在创建…" : form.automatic ? "一键生成成片" : "生成分镜"}
               </button>
+              </div>
             </form>
           ) : (
             <FilmWorkbench key={p.id} project={p} lastSynced={lastSynced} request={request} onDownload={download} onProject={setProject}/>

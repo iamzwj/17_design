@@ -58,7 +58,7 @@ export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
   const items = section === "brand" ? data?.brandIPs : data?.characters;
   return <dialog ref={dialog} className="film-character-dialog" aria-labelledby="film-character-title" onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>
     <header>
-      <div><h2 id="film-character-title">{roleName ? "为「" + roleName + "」选择形象" : "角色库"}</h2><p>在一键成片项目间复用角色形象。</p></div>
+      <div><h2 id="film-character-title">{roleName ? "为「" + roleName + "」选择形象" : "角色库"}</h2></div>
       <button disabled={busy} onClick={onClose}>关闭</button>
     </header>
     <div className="film-character-actions">
@@ -100,7 +100,7 @@ export function CharacterDecision({ project, request, send, busy }) {
   }
   return <section className="film-character-decision" aria-label="导演确认角色">
     <h3>{custom ? "为角色指定形象" : "是否自定义角色？"}</h3>
-    <p>{custom ? "可以上传图片，或从角色库选择。未指定的角色将由导演自动生成。" : "导演已准备好角色提示词。你可以指定角色形象，也可以让导演继续自动制作。"}</p>
+    {custom && <p>未指定的角色将自动生成。</p>}
     {error && <p className="film-error" role="alert">{error}</p>}
     {pending && <p role="status">正在保存角色参考…</p>}
     {custom && <div className="film-character-grid">

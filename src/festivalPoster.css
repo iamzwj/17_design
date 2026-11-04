@@ -3,70 +3,70 @@
 .festival-poster-page > .tool-page-header { width: min(736px,100%); margin-right: auto; margin-left: auto; }
 .festival-poster-layout { display: grid; grid-template-columns: minmax(300px,360px) minmax(0,1fr); gap: 18px; align-items: start; }
 .festival-poster-panel { position: sticky; top: 18px; padding: 20px; border-radius: 22px; }
-.festival-poster-panel > label { display: block; margin-bottom: 8px; color: var(--mid); font-size: 11px; font-weight: 650; }
+.festival-poster-panel > label { display: block; margin-bottom: 8px; color: var(--mid); font-size: var(--dp-typography-metadata); font-weight: 650; }
 .festival-input-row { display: grid; gap: 9px; }
-.festival-input-row input { width: 100%; height: 48px; border: 1px solid rgba(61,79,63,.12); border-radius: 12px; padding: 0 15px; outline: none; background: rgba(255,255,255,.58); color: var(--ink); font: 600 15px inherit; transition: .18s ease; }
-.festival-input-row input:focus { border-color: rgba(107,78,255,.45); box-shadow: 0 0 0 3px rgba(107,78,255,.1); }
-.festival-input-row > button { height: 44px; border: 0; border-radius: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: white; font-size: 12px; font-weight: 650; cursor: pointer; box-shadow: 0 8px 22px rgba(107,78,255,.22); }
+.festival-input-row input { width: 100%; height: 48px; border: 1px solid rgba(22,25,31,.12); border-radius: 12px; padding: 0 15px; outline: none; background: rgba(255,255,255,.58); color: var(--ink); font: 600 15px inherit; transition: .18s ease; }
+.festival-input-row input:focus { border-color: rgba(7,76,224,.45); box-shadow: 0 0 0 3px rgba(7,76,224,.1); }
+.festival-input-row > button { height: 44px; border: 0; border-radius: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--accent); color: white; font-size: var(--dp-typography-small); font-weight: 650; cursor: pointer; box-shadow: 0 8px 22px rgba(7,76,224,.22); }
 .festival-input-row > button:disabled { opacity: .55; cursor: wait; }
-.festival-progress,.festival-error { margin-top: 16px; border-radius: 13px; padding: 11px 12px; font-size: 10px; line-height: 1.5; }
-.festival-progress { display: flex; gap: 9px; align-items: center; background: rgba(107,78,255,.08); color: var(--mid); }
-.festival-progress i { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid rgba(107,78,255,.2); border-top-color: var(--accent); border-radius: 50%; animation: festivalSpin .85s linear infinite; }
+.festival-progress,.festival-error { margin-top: 16px; border-radius: 13px; padding: 11px 12px; font-size: var(--dp-typography-label); line-height: 1.5; }
+.festival-progress { display: flex; gap: 9px; align-items: center; background: rgba(7,76,224,.08); color: var(--mid); }
+.festival-progress i { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid rgba(7,76,224,.2); border-top-color: var(--accent); border-radius: 50%; animation: festivalSpin .85s linear infinite; }
 .festival-error { background: rgba(174,67,75,.1); color: #a4454d; }
 @keyframes festivalSpin { to { transform: rotate(360deg); } }
 .festival-poster-results { min-width: 0; }
 .festival-empty { min-height: 520px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
-.festival-empty b { color: var(--mid); font-size: 13px; }
-.festival-empty span { font-size: 10px; }
+.festival-empty b { color: var(--mid); font-size: var(--dp-typography-small); }
+.festival-empty span { font-size: var(--dp-typography-label); }
 .festival-result-summary { min-height: 48px; margin: 0 3px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .festival-result-summary div { display: flex; align-items: baseline; gap: 8px; }
 .festival-result-summary span { color: #ef8425; font: 400 24px 'Songti SC',serif; }
-.festival-result-summary b { font-size: 12px; }
-.festival-result-summary small { color: var(--muted); font-size: 9px; text-align: right; }
+.festival-result-summary b { font-size: var(--dp-typography-small); }
+.festival-result-summary small { color: var(--muted); font-size: var(--dp-typography-label); text-align: right; }
 .festival-poster-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .festival-poster-card { overflow: hidden; border-radius: 20px; }
-.festival-image-wrap { position: relative; aspect-ratio: 9/16; overflow: hidden; background: rgba(61,79,63,.08); }
+.festival-image-wrap { position: relative; aspect-ratio: 9/16; overflow: hidden; background: rgba(22,25,31,.08); }
 .festival-image-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.festival-image-wrap > span { position: absolute; top: 11px; right: 11px; padding: 5px 9px; border: 1px solid rgba(255,255,255,.54); border-radius: 999px; background: rgba(21,28,24,.52); backdrop-filter: blur(10px); color: white; font-size: 9px; }
+.festival-image-wrap > span { position: absolute; top: 11px; right: 11px; padding: 5px 9px; border: 1px solid rgba(255,255,255,.54); border-radius: 999px; background: rgba(21,28,24,.52); backdrop-filter: blur(10px); color: white; font-size: var(--dp-typography-label); }
 .festival-poster-card footer { min-height: 66px; padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .festival-poster-card footer b,.festival-poster-card footer small { display: block; }
-.festival-poster-card footer b { color: var(--ink); font-size: 11px; }
-.festival-poster-card footer small { margin-top: 3px; color: var(--muted); font-size: 9px; }
-.festival-poster-card footer button { height: 32px; padding: 0 10px; border: 1px solid rgba(61,79,63,.1); border-radius: 10px; display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.48); color: var(--mid); font-size: 9px; cursor: pointer; }
-:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-style-select .composer-select-trigger,:root[data-theme='dark'] .festival-poster-card footer button { background: #23212b; border-color: rgba(255,255,255,.1); }
+.festival-poster-card footer b { color: var(--ink); font-size: var(--dp-typography-metadata); }
+.festival-poster-card footer small { margin-top: 3px; color: var(--muted); font-size: var(--dp-typography-label); }
+.festival-poster-card footer button { height: 32px; padding: 0 10px; border: 1px solid rgba(22,25,31,.1); border-radius: 10px; display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.48); color: var(--mid); font-size: var(--dp-typography-label); cursor: pointer; }
+:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-style-select .composer-select-trigger,:root[data-theme='dark'] .festival-poster-card footer button { background: #20242c; border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-poster-card,:root[data-theme='dark'] .festival-poster-panel,:root[data-theme='dark'] .festival-empty { border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-progress { background: rgba(132,111,255,.13); }
 @media (max-width: 900px) { .festival-poster-layout { grid-template-columns: 1fr; }.festival-poster-panel { position: static; }.festival-poster-grid { max-width: 720px; margin: 0 auto; } }
 @media (max-width: 580px) { .festival-poster-workspace { padding: 10px 14px 36px; }.festival-poster-grid { grid-template-columns: 1fr; }.festival-result-summary { align-items: flex-start; flex-direction: column; }.festival-result-summary small { text-align: left; } }
 
-.festival-waterfall-composer { position: sticky; top: 12px; z-index: 5; width: min(736px,100%); margin: 0 auto; padding: 12px; border: 1px solid rgba(61,79,63,.1); border-radius: 16px; background: rgba(255,255,255,.42); box-shadow: 0 10px 30px rgba(26,46,31,.06); backdrop-filter: blur(20px); }
-.festival-waterfall-composer > label { display: block; margin: 0 0 8px 2px; color: var(--mid); font-size: 10px; font-weight: 650; }
+.festival-waterfall-composer { position: sticky; top: 12px; z-index: 5; width: min(736px,100%); margin: 0 auto; padding: 12px; border: 1px solid rgba(22,25,31,.1); border-radius: 16px; background: rgba(255,255,255,.42); box-shadow: 0 10px 30px rgba(22,25,31,.06); backdrop-filter: blur(20px); }
+.festival-waterfall-composer > label { display: block; margin: 0 0 8px 2px; color: var(--mid); font-size: var(--dp-typography-label); font-weight: 650; }
 .festival-input-row.horizontal { grid-template-columns: minmax(0,1fr) auto auto; }
 .festival-input-row.horizontal > button { min-width: 176px; height: 48px; padding: 0 18px; border-radius: 12px; box-shadow: none; }
 .festival-task-stream { width: min(736px,100%); margin: 14px auto 0; display: grid; gap: 10px; padding-bottom: 40px; }
 .festival-task-card { overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.festival-task-card > header { min-height: 64px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(61,79,63,.07); }
+.festival-task-card > header { min-height: 64px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(22,25,31,.07); }
 .festival-task-leading { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .festival-task-leading > div { min-width: 0; }
 .festival-task-leading > div > div { display: flex; align-items: center; gap: 8px; }
-.festival-task-leading b { color: var(--ink); font-size: 13px; }
-.festival-task-leading em { padding: 3px 7px; border-radius: 999px; background: rgba(107,78,255,.09); color: var(--accent); font-size: 8px; font-style: normal; }
-.festival-task-leading small { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 9px; }
+.festival-task-leading b { color: var(--ink); font-size: var(--dp-typography-small); }
+.festival-task-leading em { padding: 3px 7px; border-radius: 999px; background: rgba(7,76,224,.09); color: var(--accent); font-size: 8px; font-style: normal; }
+.festival-task-leading small { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 5px; overflow: hidden; color: var(--muted); font-size: var(--dp-typography-label); }
 .festival-task-leading small span { position: relative; padding-left: 9px; }
 .festival-task-leading small span::before { content: ''; position: absolute; left: 1px; top: 50%; width: 3px; height: 3px; transform: translateY(-50%); border-radius: 50%; background: currentColor; opacity: .5; }
 .festival-task-actions { display: flex; gap: 7px; }
-.festival-task-actions button { height: 32px; padding: 0 11px; border: 1px solid rgba(107,78,255,.18); border-radius: 10px; background: rgba(107,78,255,.08); color: var(--accent); font-size: 9px; font-weight: 650; cursor: pointer; }
-.festival-task-running { min-height: 84px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 10px; }
-.festival-loader { width: 19px; height: 19px; border: 2px solid rgba(107,78,255,.2); border-top-color: var(--accent); border-radius: 50%; animation: festivalSpin .85s linear infinite; }
+.festival-task-actions button { height: 32px; padding: 0 11px; border: 1px solid rgba(7,76,224,.18); border-radius: 10px; background: rgba(7,76,224,.08); color: var(--accent); font-size: var(--dp-typography-label); font-weight: 650; cursor: pointer; }
+.festival-task-running { min-height: 84px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: var(--dp-typography-label); }
+.festival-loader { width: 19px; height: 19px; border: 2px solid rgba(7,76,224,.2); border-top-color: var(--accent); border-radius: 50%; animation: festivalSpin .85s linear infinite; }
 .festival-error.task-error { margin: 10px 14px 13px; padding: 9px 11px; border-radius: 10px; }
 .festival-task-images { padding: 18px 0 20px; display: grid; grid-template-columns: repeat(2,minmax(260px,360px)); justify-content: center; align-items: start; gap: 16px; }
-.festival-task-images figure { width: 100%; overflow: hidden; margin: 0; border: 1px solid rgba(61,79,63,.08); border-radius: 15px; background: rgba(255,255,255,.25); }
+.festival-task-images figure { width: 100%; overflow: hidden; margin: 0; border: 1px solid rgba(22,25,31,.08); border-radius: 15px; background: rgba(255,255,255,.25); }
 .festival-task-images figure > button { width: 100%; padding: 0; border: 0; display: block; cursor: zoom-in; background: transparent; }
 .festival-task-images img { width: 100%; aspect-ratio: 9/16; display: block; object-fit: cover; }
 .festival-task-images figcaption { min-height: 58px; padding: 9px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .festival-task-images figcaption b,.festival-task-images figcaption small { display: block; }
-.festival-task-images figcaption b { font-size: 10px; }.festival-task-images figcaption small { margin-top: 3px; color: var(--muted); font-size: 8px; }
-.festival-task-images figcaption > button { min-width: 58px; height: 30px; padding: 0 9px; border: 1px solid rgba(61,79,63,.1); border-radius: 9px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; background: rgba(255,255,255,.42); color: var(--mid); font-size: 8px; white-space: nowrap; cursor: pointer; }
+.festival-task-images figcaption b { font-size: var(--dp-typography-label); }.festival-task-images figcaption small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.festival-task-images figcaption > button { min-width: 58px; height: 30px; padding: 0 9px; border: 1px solid rgba(22,25,31,.1); border-radius: 9px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 5px; background: rgba(255,255,255,.42); color: var(--mid); font-size: 8px; white-space: nowrap; cursor: pointer; }
 :root[data-theme='dark'] .festival-waterfall-composer { border-color: rgba(255,255,255,.09); background: rgba(29,28,36,.94); box-shadow: 0 12px 30px rgba(0,0,0,.18); }
 :root[data-theme='dark'] .festival-task-images figure { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.09); }
 :root[data-theme='dark'] .festival-task-images figcaption > button { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
@@ -74,9 +74,9 @@
 
 /* Use the shared selector; an OS-drawn arrow cannot honor our right inset. */
 .festival-style-select { width:160px; min-width:0; }
-.festival-style-select .composer-select-trigger { position:relative; width:100%; max-width:none; height:48px; padding:0 40px 0 14px; border:1px solid rgba(61,79,63,.12); border-radius:12px; background:rgba(255,255,255,.58); color:var(--ink); font-size:12px; font-weight:600; }
+.festival-style-select .composer-select-trigger { position:relative; width:100%; max-width:none; height:48px; padding:0 40px 0 14px; border:1px solid rgba(22,25,31,.12); border-radius:12px; background:rgba(255,255,255,.58); color:var(--ink); font-size: var(--dp-typography-small); font-weight:600; }
 .festival-style-select .composer-select-trigger > svg:last-child { position:absolute; right:14px; top:50%; width:13px; height:13px; margin:0; transform:translateY(-50%) rotate(90deg); }
 .festival-style-select .composer-select-trigger:hover { border-color:var(--accent); }
-.festival-style-select .composer-select-trigger:focus-visible { border-color:var(--accent); box-shadow:0 0 0 3px rgba(107,78,255,.1); }
+.festival-style-select .composer-select-trigger:focus-visible { border-color:var(--accent); box-shadow:0 0 0 3px rgba(7,76,224,.1); }
 .festival-style-select .composer-select-menu { top:calc(100% + 8px); bottom:auto; min-width:100%; max-height:min(240px,40dvh); }
 @media(max-width:700px) { .festival-style-select { width:100%; } }

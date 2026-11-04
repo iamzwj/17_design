@@ -65,7 +65,7 @@ export default function MaterialLibrary() {
   return <section className="workspace material-library-workspace">
     <div className="material-library-page">
       <header className="material-library-header">
-        <div><span>ASSET LIBRARY</span><h1>素材库</h1><p>统一查找、预览并下载品牌与 IP 标准素材。</p></div>
+        <div><span>ASSET LIBRARY</span><h1>素材库</h1></div>
         <label className="material-search"><Icon name="search" size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、品牌或素材类型" aria-label="搜索素材"/>{query && <button type="button" onClick={() => setQuery('')} aria-label="清除搜索"><Icon name="x" size={14}/></button>}</label>
       </header>
 
