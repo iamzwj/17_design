@@ -277,7 +277,7 @@
 .film-header-actions button { white-space:nowrap; }
 .film-restoring { padding:36px 0; }
 .film-restoring h2,.film-task-overview h2 { font-size:22px; margin-top:0; }
-.film-task-overview > p { font-size:13px; line-height:1.8; }
+.film-layout.is-task-list { display: block; }
 .film-studio .film-task-row { display:flex; align-items:center; justify-content:space-between; gap:20px; width:100%; margin-top:12px; padding:18px; text-align:left; }
 .film-task-row > div { display:grid; gap:8px; min-width:0; }
 .film-task-row b { overflow-wrap:anywhere; font-size:14px; font-weight:500; }

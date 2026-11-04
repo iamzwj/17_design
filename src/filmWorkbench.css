@@ -53,3 +53,6 @@
 .fw-clip-time, .fw-clip-shot { grid-column: 1 / -1; }
 .fw-clip-time { font-variant-numeric: tabular-nums; }
 .fw-clip-shot { text-align: left; overflow-wrap: anywhere; }
+
+.film-studio .fw-stage-library > .fw-timeline-toggle { grid-template-columns: 12px 1fr; column-gap: 4px; }
+.fw-timeline-toggle b { white-space: nowrap; }

@@ -172,8 +172,8 @@ export default function FilmStudio({ user, onLogin }) {
           {error}
         </p>
       )}
-      <div className={`film-layout ${view === "project" ? "is-project" : ""}`}>
-        <aside>
+      <div className={`film-layout ${view === "project" ? "is-project" : view === "tasks" ? "is-task-list" : ""}`}>
+        {view === "create" && <aside>
           <h3>任务列表</h3>
           {!loaded ? <p role="status">正在恢复任务…</p> : !projects.length && <p>开始制作后，任务会自动保存在这里。</p>}
           {projects.map((x) => (
@@ -188,9 +188,9 @@ export default function FilmStudio({ user, onLogin }) {
               </small>
             </button>
           ))}
-        </aside>
+        </aside>}
         <main>
-          {!loaded && !p ? <div className="film-restoring" role="status"><h2>正在恢复制作任务</h2><p>正在读取后台保存的进度和素材…</p></div> : view === "tasks" ? <section className="film-task-overview" aria-label="成片任务列表"><h2>任务列表</h2><p>所有制作任务保存在账号中，刷新或离开页面后可继续查看。</p>{!projects.length ? <button className="film-primary" onClick={() => setView("create")}>创建第一个成片任务</button> : projects.map(task => <button className="film-task-row" key={task.id} onClick={() => openProject(task.id)}><div><b>{filmTaskName(task)}</b><small>{new Date(task.createdAt).toLocaleDateString('zh-CN')} · {task.duration}秒</small></div><span>{filmStatusLabel(task)}</span></button>)}</section> : view === "project" && !p ? <div className="film-restoring"><h2>暂未找到该任务</h2><p>任务可能属于其他账号，请返回列表查看。</p><button onClick={() => setView("tasks")}>返回任务列表</button></div> : view === "create" ? (
+          {!loaded && !p ? <div className="film-restoring" role="status"><h2>正在恢复制作任务</h2><p>正在读取后台保存的进度和素材…</p></div> : view === "tasks" ? <section className="film-task-overview" aria-label="成片任务列表"><h2>任务列表</h2>{!projects.length ? <button className="film-primary" onClick={() => setView("create")}>创建第一个成片任务</button> : projects.map(task => <button className="film-task-row" key={task.id} onClick={() => openProject(task.id)}><div><b>{filmTaskName(task)}</b><small>{new Date(task.createdAt).toLocaleDateString('zh-CN')} · {task.duration}秒</small></div><span>{filmStatusLabel(task)}</span></button>)}</section> : view === "project" && !p ? <div className="film-restoring"><h2>暂未找到该任务</h2><p>任务可能属于其他账号，请返回列表查看。</p><button onClick={() => setView("tasks")}>返回任务列表</button></div> : view === "create" ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
