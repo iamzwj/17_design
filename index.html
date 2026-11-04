@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme-selection="disabled">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,7 +10,13 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/dgen-ceramic-favicon.png?v=1" />
     <link rel="apple-touch-icon" sizes="512x512" href="/dgen-ceramic-app-icon.png?v=1" />
     <link rel="preload" as="image" href="/dgen-butterfly-ceramic.png" fetchpriority="high" />
-    <script>document.documentElement.dataset.theme=localStorage.getItem('diefa-display-mode-v1')==='light'?'light':'dark';document.documentElement.style.colorScheme=document.documentElement.dataset.theme</script>
+    <script>
+      const displayModeRoot = document.documentElement
+      const useLightTheme = displayModeRoot.dataset.themeSelection === 'enabled'
+        && localStorage.getItem('diefa-display-mode-v1') === 'light'
+      displayModeRoot.dataset.theme = useLightTheme ? 'light' : 'dark'
+      displayModeRoot.style.colorScheme = displayModeRoot.dataset.theme
+    </script>
     <title>D-Gen</title>
   </head>
   <body>

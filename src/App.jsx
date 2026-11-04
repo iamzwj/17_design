@@ -103,6 +103,7 @@ const MODULE_COPY = {
 
 const STORAGE_KEY = 'diefa-conversations-v1'
 const THEME_KEY = 'diefa-display-mode-v1'
+const THEME_SELECTION_ENABLED = document.documentElement.dataset.themeSelection === 'enabled'
 const IMAGE_MODE_KEY = 'diefa-image-mode-v1'
 const WATERFALL_CACHE_PREFIX = 'diefa-waterfall-cache-v1:'
 const WATERFALL_HISTORY_PAGE_SIZE = 8
@@ -587,13 +588,13 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button onClick={() => { onChangePassword(); setAccountExpanded(false); onClose() }}><Icon name="lock" size={16}/><span>修改密码</span><Icon name="chevron" size={14}/></button>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
-          <div className="theme-menu-row">
+          {THEME_SELECTION_ENABLED && <div className="theme-menu-row">
             <span className="theme-menu-label"><Icon name="sun" size={16}/><span>显示模式</span></span>
             <div className="theme-mode-options" role="group" aria-label="显示模式">
               <button type="button" aria-pressed={theme === 'light'} className={theme === 'light' ? 'active' : ''} onClick={() => onThemeChange('light')}>LIGHT</button>
               <button type="button" aria-pressed={theme === 'dark'} className={theme === 'dark' ? 'active' : ''} onClick={() => onThemeChange('dark')}>DARK</button>
             </div>
-          </div>
+          </div>}
           <button className="account-logout" onClick={onLogout}><Icon name="logout" size={16}/><span>退出登录</span><Icon name="chevron" size={14}/></button>
         </div>}
         {user ? <button className="account" onMouseEnter={keepAccountMenuOpen} onClick={() => { keepAccountMenuOpen(); setAccountExpanded((value) => !value) }}><span>{user.email.slice(0, 2).toUpperCase()}</span><b>{user.email.split('@')[0]}<small>积分 {user.credits ?? 50}</small></b></button> : <button className="guest-account" onClick={onLogin}><Icon name="lock" size={16}/><span>登录以使用 AI 功能</span></button>}
@@ -1757,7 +1758,11 @@ export default function App() {
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
-  const [theme, setTheme] = useState(() => ['light', 'dark'].includes(localPreviewTheme) ? localPreviewTheme : localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark')
+  const [theme, setTheme] = useState(() => {
+    if (!THEME_SELECTION_ENABLED) return 'dark'
+    if (['light', 'dark'].includes(localPreviewTheme)) return localPreviewTheme
+    return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'
+  })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
   const [activeConversationId, setActiveConversationId] = useState(null)
@@ -1792,6 +1797,7 @@ export default function App() {
   }, [user, authState])
 
   useEffect(() => {
+    if (!THEME_SELECTION_ENABLED) return
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
     localStorage.setItem(THEME_KEY, theme)
