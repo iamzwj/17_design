@@ -1,3 +1,4 @@
+import {filmStatusLabel} from '../shared/filmPresentation.js';
 import {knowledgeRequest} from './knowledgeApi.js';
 import { filmTaskName } from '../shared/filmProgress.js';
 import FilmWorkbench from './FilmWorkbench.jsx';
@@ -24,15 +25,6 @@ async function request(path = "", body) {
   if (!r.ok) throw Error(d.error || "读取制作项目失败");
   return d;
 }
-const stages = {
-  plan: "导演正在编写剧本与分镜",
-  assets: "正在制作角色与场景",
-  frames: "正在生成分镜首帧",
-  videos: "正在制作视频镜头",
-  quality: "正在检查人物、服装与场景",
-  render: "正在合成成片",
-  done: "成片已完成",
-};
 export default function FilmStudio({ user, onLogin }) {
   const selectedKey = "dgen-film-selected-user:" + user?.id;
   const viewKey = "dgen-film-view-user:" + user?.id;
@@ -189,17 +181,13 @@ export default function FilmStudio({ user, onLogin }) {
             >
               <b title={filmTaskName(x)}>{filmTaskName(x)}</b>
               <small>
-                {x.status === "failed"
-                  ? "需要处理"
-                  : x.status === "succeeded"
-                    ? "已完成"
-                    : stages[x.stage] || x.status}
+                {filmStatusLabel(x)}
               </small>
             </button>
           ))}
         </aside>
         <main>
-          {!loaded && !p ? <div className="film-restoring" role="status"><h2>正在恢复制作任务</h2><p>正在读取后台保存的进度和素材…</p></div> : view === "tasks" ? <section className="film-task-overview" aria-label="成片任务列表"><h2>任务列表</h2><p>所有制作任务保存在账号中，刷新或离开页面后可继续查看。</p>{!projects.length ? <button className="film-primary" onClick={() => setView("create")}>创建第一个成片任务</button> : projects.map(task => <button className="film-task-row" key={task.id} onClick={() => openProject(task.id)}><div><b>{filmTaskName(task)}</b><small>{new Date(task.createdAt).toLocaleDateString('zh-CN')} · {task.duration}秒</small></div><span>{task.status === 'succeeded' ? '查看成片' : task.status === 'failed' ? '需要处理' : task.status === 'review' ? '待确认分镜' : task.status === 'cancelled' ? '已暂停' : stages[task.stage] || '等待调度'}</span></button>)}</section> : view === "project" && !p ? <div className="film-restoring"><h2>暂未找到该任务</h2><p>任务可能属于其他账号，请返回列表查看。</p><button onClick={() => setView("tasks")}>返回任务列表</button></div> : view === "create" ? (
+          {!loaded && !p ? <div className="film-restoring" role="status"><h2>正在恢复制作任务</h2><p>正在读取后台保存的进度和素材…</p></div> : view === "tasks" ? <section className="film-task-overview" aria-label="成片任务列表"><h2>任务列表</h2><p>所有制作任务保存在账号中，刷新或离开页面后可继续查看。</p>{!projects.length ? <button className="film-primary" onClick={() => setView("create")}>创建第一个成片任务</button> : projects.map(task => <button className="film-task-row" key={task.id} onClick={() => openProject(task.id)}><div><b>{filmTaskName(task)}</b><small>{new Date(task.createdAt).toLocaleDateString('zh-CN')} · {task.duration}秒</small></div><span>{filmStatusLabel(task)}</span></button>)}</section> : view === "project" && !p ? <div className="film-restoring"><h2>暂未找到该任务</h2><p>任务可能属于其他账号，请返回列表查看。</p><button onClick={() => setView("tasks")}>返回任务列表</button></div> : view === "create" ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();

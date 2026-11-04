@@ -1,3 +1,4 @@
+import {legacyResourceCategory} from '../shared/filmPresentation.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +16,7 @@ export function migrateFilm(p) {
   if (p.schemaVersion < 2 && p.plan) {
     p.legacy = true; // Keep already paid/generated projects on their original path.
     for(const a of p.assets) if(!p.resources.some(r=>r.id===a.id)) p.resources.push({ ...clone(a), sourceId:a.id, category:a.kind==='scene'?'scenes':'characters', type:'reference', output:a.image, agent:'visual' });
+    for(const r of p.resources)if(r.type==='reference')r.category=legacyResourceCategory(r);
     p.assets=p.assets.map(a=>p.resources.find(r=>r.id===a.id)||a);
   }
   return p;
