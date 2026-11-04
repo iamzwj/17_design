@@ -18,6 +18,7 @@ import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
+import GenerationWelcome from './GenerationWelcome.jsx'
 import ImagePreview from './ImagePreview.jsx'
 import FestivalPosterStudio from './FestivalPosterStudio.jsx'
 import MaterialLibrary from './MaterialLibrary.jsx'
@@ -731,14 +732,6 @@ function Topbar({ onMenu }) {
   </header>
 }
 
-function WelcomeArt() {
-  return <div className="welcome-art" aria-hidden="true">
-    <div className="art-card back"><span /><span /><span /></div>
-    <div className="art-card front"><Icon name="image" size={34}/><i /><b /></div>
-    <div className="art-spark one">✦</div><div className="art-spark two">✦</div>
-  </div>
-}
-
 function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onUserUpdate, onRequireLogin }) {
   const skillState = useGenerationSkill('image')
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
@@ -919,12 +912,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   return <>
     {imageMode === 'waterfall' ? <WaterfallStudio skillState={skillState} storageKey={waterfallStorageKey} onUserUpdate={onUserUpdate} onRequireLogin={onRequireLogin}/> : <section className={`workspace with-image-mode ${empty ? 'empty' : ''}`}>
     <div className="conversation" ref={conversationScrollRef}>
-      {empty ? <div className="welcome">
-        <WelcomeArt />
-        <div className="eyebrow">GPT-IMAGE-2</div>
-        <h1>把脑海里的画面，<em>带到眼前。</em></h1>
-        <p>描述你的想法，或上传参考图片。你可以像聊天一样不断调整，直到它真正符合你的想象。</p>
-      </div> : <div className="message-list">
+      {empty ? <GenerationWelcome/> : <div className="message-list">
         {messages.map((message, index) => <ImageMessage key={index} message={message} focusRef={!loading && index === messages.length - 1 ? focusRef : null} onPreview={setPreviewImage}/>) }
         {loading && <div ref={focusRef}><LiveTaskStatus startedAt={runningStartedAt}/></div>}
         <div className="conversation-tail-space" aria-hidden="true"/>
