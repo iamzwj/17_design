@@ -488,3 +488,45 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 
 /* Align the Pulin title heading with its full-width composer. */
 .workspace.pulin-title-workspace .pulin-title-page > .tool-page-header { width: 100%; margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+
+/* The shell owns the page title. Tool-local headings remain for standalone previews. */
+.workspace-title-slot {
+  flex: 0 0 auto;
+  margin: 18px 32px 14px;
+}
+.workspace-title-slot > .tool-page-header {
+  height: auto;
+  margin: 0;
+  padding: 0;
+  grid-template-rows: 16px auto;
+  row-gap: 7px;
+}
+.workspace-title-slot .tool-page-header > p { display: none; }
+.has-workspace-title :is(
+  .welcome > .eyebrow, .welcome > h1,
+  .kb-heading h1, .kb-empty > h1,
+  .admin-heading h1, .admin-heading > div > span,
+  .material-library-header h1, .material-library-header > div > span,
+  .skill-header h1, .archive-panel-header h1, .archive-panel-header > div > span,
+  .film-studio > h1, .film-toolbar > h1, .film-create-heading h1
+),
+.has-workspace-title > :not(.workspace-title-slot) .tool-page-header > :is(span, h1, .is-placeholder) {
+  display: none;
+}
+.has-workspace-title > :not(.workspace-title-slot) .tool-page-header {
+  display: block;
+  height: auto;
+  padding-top: 0;
+  margin-bottom: 12px;
+}
+.has-workspace-title > :not(.workspace-title-slot) .tool-page-header:has(.is-placeholder) {
+  display: none;
+}
+.has-workspace-title .film-studio { min-height: 0; flex: 1; height: auto; padding-top: 0; }
+.has-workspace-title .film-layout.is-create { margin-inline: 0; }
+.has-workspace-title .film-toolbar { justify-content: flex-end; }
+.has-workspace-title .film-create-heading { align-items: center; }
+.has-workspace-title .archive-panel-header { justify-content: flex-end; }
+@media (max-width: 700px) {
+  .workspace-title-slot { margin: 12px 16px; }
+}

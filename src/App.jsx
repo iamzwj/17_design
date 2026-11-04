@@ -1,3 +1,4 @@
+import ToolPageHeader from './ToolPageHeader.jsx'
 import FilmStudio, { filmRequest } from './FilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
@@ -49,6 +50,29 @@ const KNOWLEDGE_SECTIONS = [
   { id: 'brand-knowledge', label: '团队品牌知识库' },
   { id: 'assets', label: '素材库' },
 ]
+
+const WORKSPACE_TITLES = {
+  strategy: ['NEW CHAT', '新聊天'],
+  image: ['IMAGE CREATION', '图像创作'],
+  video: ['VIDEO GENERATION', '视频生成'],
+  film: ['AI FILM STUDIO', '一键成片'],
+  compliance: ['COMPLIANCE REVIEW', '合规审核'],
+  content: ['CONTENT CREATION', '朴邻节日节气海报'],
+  skills: ['SKILL LIBRARY', '团队 Skill'],
+  'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
+  'brand-knowledge': ['KNOWLEDGE BASE', '团队品牌知识库'],
+  assets: ['ASSET LIBRARY', '素材库'],
+  'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
+  'marketing-strategy': ['KNOWLEDGE BASE', '营销策略'],
+  admin: ['ADMINISTRATION', '后台管理'],
+  archive: ['ARCHIVE', '已归档对话'],
+}
+const MORE_WORKSPACE_TITLES = {
+  'please-day': ['PLEASE DAY', '朴里节头像框'],
+  'pulin-title': ['MORE TOOLS', '朴里节标题工具'],
+  qr: ['BATCH COMPOSER', '批处理二维码'],
+  logo: ['LOGO PROCESSING', 'Logo 处理'],
+}
 
 const RATIO_OPTIONS = [
   { value: '1:3', label: '1:3' },
@@ -1929,6 +1953,10 @@ export default function App() {
     updateConversations((current) => current.flatMap((conversation) => !conversation.archived ? [conversation] : conversation.type === 'film' ? [{ id: conversation.id, type: 'film', deleted: true }] : []))
   }
 
+  const pageTitle = archiveViewOpen ? WORKSPACE_TITLES.archive
+    : active === 'more' ? MORE_WORKSPACE_TITLES[moreTool]
+    : WORKSPACE_TITLES[active]
+
   const content = archiveViewOpen
     ? <ArchiveWorkspace key={workspaceToken} archived={archivedConversations} onRestore={restoreConversation} onDelete={deleteConversation} onDeleteAll={deleteAllArchived}/>
     : active === 'admin'
@@ -1961,5 +1989,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className="main"><Topbar onMenu={() => setSidebarOpen(true)}/>{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
