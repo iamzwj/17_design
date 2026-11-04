@@ -13,6 +13,7 @@
 .review-finding-row { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 10px; margin-top: 10px; font-size: 16px; font-weight: 400; line-height: 1.7; }
 .review-finding-row > b { font-size: var(--dp-typography-interface); color: var(--review-muted); font-weight: 500; padding-top: 2px; }.review-finding-row > p { margin: 0; font-weight: 400; white-space: pre-line; }
 .review-standalone { margin: 0; font-size: 16px; font-weight: 400; line-height: 1.7; color: var(--review-ink); white-space: pre-line; }
+.review-pending .review-finding-row > p, .review-pending .review-standalone, .review-pending .review-extra { font-size: 15px; }
 .review-fix > b { color: var(--review-accent); }
 .review-evidence { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--review-line); font-size: var(--dp-typography-interface); color: var(--review-muted); line-height: 1.8; }
 .review-evidence > summary, .review-checked > summary { cursor: pointer; width: fit-content; padding: 3px 0; }.review-evidence > p { margin: 7px 0 0; }
@@ -29,6 +30,7 @@
   .review-verdict > p, .review-finding-row, .review-extra, .review-notes > p { font-size: var(--dp-typography-interface); }
   .review-finding > h4 { font-size: 17px; }
   .review-standalone { font-size: 15px; }
+  .review-pending .review-finding-row > p, .review-pending .review-standalone, .review-pending .review-extra { font-size: 14px; }
 }
 
 .review-logo-assets { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--review-line); }
