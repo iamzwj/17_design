@@ -52,11 +52,7 @@ const KNOWLEDGE_SECTIONS = [
 ]
 
 const WORKSPACE_TITLES = {
-  strategy: ['NEW CHAT', '新聊天'],
-  image: ['IMAGE CREATION', '图像创作'],
-  video: ['VIDEO GENERATION', '视频生成'],
   film: ['AI FILM STUDIO', '一键成片'],
-  compliance: ['COMPLIANCE REVIEW', '合规审核'],
   content: ['CONTENT CREATION', '朴邻节日节气海报'],
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
