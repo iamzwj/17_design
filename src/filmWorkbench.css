@@ -56,3 +56,7 @@
 
 .film-studio .fw-stage-library > .fw-timeline-toggle { grid-template-columns: 12px 1fr; column-gap: 4px; }
 .fw-timeline-toggle b { white-space: nowrap; }
+
+.fw-director-input > div { justify-content: flex-end; }
+.fw-director-input > div > small { margin-right: auto; overflow-wrap: anywhere; }
+.film-studio .fw-director-input > div > button { white-space: nowrap; flex: 0 0 auto; }
