@@ -1,4 +1,4 @@
-import FilmStudio from './FilmStudio.jsx'
+import FilmStudio, { filmRequest } from './FilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
@@ -302,6 +302,27 @@ function WaterfallResultImage({ slot, prompt, urls, onPreview, onRetryLogo }) {
   </>
 }
 
+function mergeFilmHistory(conversations, projects) {
+  const records = new Map(conversations.map((conversation) => [conversation.id, conversation]))
+  let changed = false
+  for (const project of projects) {
+    const id = `film:${project.id}`
+    const existing = records.get(id)
+    if (existing?.deleted) continue
+    const title = project.named ? project.title : '一键成片 · 导演命名中'
+    if (existing?.filmTitle === title) continue
+    const createdAt = new Date(project.createdAt).toISOString()
+    records.set(id, {
+      id, type: 'film', projectId: project.id, messages: [], createdAt, updatedAt: createdAt,
+      ...existing,
+      title: existing && existing.title !== existing.filmTitle ? existing.title : title,
+      filmTitle: title,
+    })
+    changed = true
+  }
+  return changed ? [...records.values()].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)) : conversations
+}
+
 function safeConversation(conversation) {
   return {
     ...conversation,
@@ -419,7 +440,7 @@ function TextSources({ sources }) {
 }
 
 function ConversationRow({ conversation, activeConversationId, onSelect, onPin, onArchive, onRename }) {
-  const module = MODULES.find((item) => item.id === conversation.type)
+  const module = MODULES.find((item) => item.id === (conversation.type === 'film' ? 'video' : conversation.type))
   const [editing, setEditing] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const title = conversationTitle(conversation)
@@ -668,7 +689,7 @@ function ArchiveWorkspace({ archived, onRestore, onDelete, onDeleteAll }) {
       <div className="archive-view">
         <div className="archive-list">
           {archived.length === 0 ? <div className="archive-empty"><Icon name="database" size={25}/><b>暂无已归档对话</b><small>归档后的对话会显示在这里</small></div> : archived.map((conversation) => {
-            const module = MODULES.find((item) => item.id === conversation.type)
+            const module = MODULES.find((item) => item.id === (conversation.type === 'film' ? 'video' : conversation.type))
             return <div className="archive-row" key={conversation.id}>
               <span className="archive-row-icon"><Icon name={module?.icon || 'spark'} size={16}/></span>
               <span><b>{conversationTitle(conversation)}</b></span>
@@ -1721,10 +1742,13 @@ export default function App() {
   const [conversations, setConversations] = useState([])
   const [activeConversationId, setActiveConversationId] = useState(null)
   const [workspaceToken, setWorkspaceToken] = useState(0)
+  const [filmDeepLink, setFilmDeepLink] = useState(() => localPreviewParams.get('module') === 'film' ? localPreviewParams.get('filmProject') : null)
+  const activeWorkspace = useRef(workspaceToken)
+  activeWorkspace.current = workspaceToken
   const [archiveViewOpen, setArchiveViewOpen] = useState(false)
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) || null
-  const activeConversations = conversations.filter((conversation) => !conversation.archived)
-  const archivedConversations = conversations.filter((conversation) => conversation.archived)
+  const activeConversations = conversations.filter((conversation) => !conversation.archived && !conversation.deleted)
+  const archivedConversations = conversations.filter((conversation) => conversation.archived && !conversation.deleted)
   const conversationStorageKey = user ? `${STORAGE_KEY}:${user.email}` : STORAGE_KEY
 
   useEffect(() => {
@@ -1757,9 +1781,28 @@ export default function App() {
   function updateConversations(transform) {
     setConversations((current) => {
       const next = transform(current)
+      if (next === current) return current
       try { localStorage.setItem(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
+  }
+
+  useEffect(() => {
+    if (!user || authState !== 'authenticated') return
+    let live = true
+    const sync = () => filmRequest('/history').then(({ projects }) => {
+      if (live) updateConversations((current) => mergeFilmHistory(current, projects))
+    }).catch(() => {})
+    sync()
+    const timer = setInterval(sync, 15000)
+    return () => { live = false; clearInterval(timer) }
+  }, [user, authState, conversationStorageKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function recordFilm(project) {
+    updateConversations((current) => mergeFilmHistory(current, [{
+      ...project, named: Boolean(project.plan || project.directorPlan || project.script),
+    }]))
+    if (activeWorkspace.current === workspaceToken) setActiveConversationId(`film:${project.id}`)
   }
 
   function saveConversation(update) {
@@ -1777,6 +1820,7 @@ export default function App() {
   }
 
   function startNew(type = active) {
+    setFilmDeepLink(null)
     setArchiveViewOpen(false)
     setActive(type)
     setActiveConversationId(null)
@@ -1840,6 +1884,7 @@ export default function App() {
   }
 
   function selectConversation(conversation) {
+    setFilmDeepLink(null)
     setArchiveViewOpen(false)
     if (conversation.unreadComplete || conversation.messages?.some(isFailureMessage)) {
       updateConversations((current) => current.map((item) => item.id === conversation.id
@@ -1877,11 +1922,11 @@ export default function App() {
   }
 
   function deleteConversation(id) {
-    updateConversations((current) => current.filter((conversation) => conversation.id !== id))
+    updateConversations((current) => current.flatMap((conversation) => conversation.id !== id ? [conversation] : conversation.type === 'film' ? [{ id, type: 'film', deleted: true }] : []))
   }
 
   function deleteAllArchived() {
-    updateConversations((current) => current.filter((conversation) => !conversation.archived))
+    updateConversations((current) => current.flatMap((conversation) => !conversation.archived ? [conversation] : conversation.type === 'film' ? [{ id: conversation.id, type: 'film', deleted: true }] : []))
   }
 
   const content = archiveViewOpen
@@ -1906,7 +1951,7 @@ export default function App() {
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
-      : active === 'film' ? <FilmStudio key={user?.id || 'guest'} user={user} onLogin={() => openLogin('film')}/> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }

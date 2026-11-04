@@ -152,6 +152,14 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     res.setHeader("Cache-Control", "private, no-store");
     res.sendFile(path.resolve(library(req), entry.id + ".png"));
   });
+  app.get("/api/films/history", requireAuth, (req, res) => {
+    const projects = fs.readdirSync(root).map(read)
+      .filter((project) => project?.userId === req.user.id)
+      .map(({ id, title, createdAt, plan, directorPlan, script }) => ({
+        id, title, createdAt, named: Boolean(plan || directorPlan || script),
+      }));
+    res.json({ projects });
+  });
   app.get("/api/films/:id", requireAuth, (req, res) => {
     const p = owned(req, res);
     if (p) res.json({ project: {...p, pendingChanges:pendingCommands(root,p).map(c=>({id:c.id,type:c.type,target:c.body?.id}))} });
