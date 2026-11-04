@@ -6,13 +6,13 @@ import {useEffect,useState} from 'react';
 import ComposerSelect from './ComposerSelect.jsx';
 import FilmMedia from './FilmMedia.jsx';
 import {filmUpload} from './filmUpload.js';
-export default function FilmEditor({project:p,stage,selected,onSelect,send,request,notice}) {
+export default function FilmEditor({project:p,stage,selected,onSelect,send,request,notice,onOpenTimeline}) {
   const options=stage==='characters'||stage==='scenes'?(p.resources||[]).filter(r=>r.category===stage):stage==='images'?[...(p.resources||[]),...(p.shots||[])]:p.shots||[];
   const item=options.find(r=>r.id===selected)||options[0];
   if(stage==='media')return <FilmMediaLibrary project={p} onSelect={onSelect}/>;
   if(stage==='storyboard')return <FilmStoryboard project={p} selected={selected} onSelect={onSelect} renderEditor={shot=><ResourceEditor key={shot.id+':'+shot.revision} item={shot} project={p} stage="videos" send={send} request={request} notice={notice} hideMedia/>}/>;
   if(stage==='characters'||stage==='scenes')return <AssetBoard project={p} stage={stage} resources={options} selected={selected} onSelect={onSelect} send={send} request={request} notice={notice}/>;
-  if(stage==='editing')return <div className="fw-editing-home"><h3>剪辑与导出</h3><p>当前工程包含 {p.timeline?.clips?.length||p.shots.length} 个镜头。调整顺序、时长、字幕及音轨后，仅重新合成成片。</p><button className="film-primary" onClick={()=>{const panel=document.querySelector('.fw-timeline');if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});}}}>展开剪辑时间线</button>{p.output&&<FilmMedia project={p.id} file={p.output} video/>}{p.output&&<FileButton project={p.id} file={p.output} label="下载当前成片"/>}</div>;
+  if(stage==='editing')return <div className="fw-editing-home"><h3>剪辑与导出</h3><p>当前工程包含 {p.timeline?.clips?.length||p.shots.length} 个镜头。调整顺序、时长、字幕及音轨后，仅重新合成成片。</p><button className="film-primary" onClick={onOpenTimeline}>展开剪辑时间线</button>{p.output&&<FilmMedia project={p.id} file={p.output} video/>}{p.output&&<FileButton project={p.id} file={p.output} label="下载当前成片"/>}</div>;
   if(stage==='script')return <ScriptEditor key={(p.scriptRevision||1)+':'+Boolean(p.script)} project={p} send={send}/>;
   if(stage==='output')return <div className="fw-delivery"><h3>成片与交付文件</h3>{p.output?<><FilmMedia project={p.id} file={p.output} video/><p>成片、原始素材和历次导出均已保留。</p>{p.renders?.map((r,i)=><div key={r.file}><b>成片版本 {i+1}</b><FileButton project={p.id} file={r.file} request={request}/></div>)}{p.exportFiles&&<div className="fw-actions"><FileButton project={p.id} file={p.exportFiles.timeline} label="下载时间线"/><FileButton project={p.id} file={p.exportFiles.subtitles} label="下载字幕"/></div>}</>:<p>导演完成全部镜头与声音检查后，将在这里显示 MP4。遇到无法恢复的问题会明确暂停。</p>}</div>;
   return <>{options.length>0&&<ResourceNavigator project={p} options={options} selected={item?.id} onSelect={onSelect}/>} {item?<ResourceEditor key={item.id+':'+item.revision} item={item} project={p} stage={stage} send={send} request={request} notice={notice}/>:<div className="fw-empty"><h3>等待阶段成果</h3><p>任务完成后会自动显示，不需要逐步点击确认。</p></div>}</>;
