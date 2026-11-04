@@ -144,13 +144,13 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     );
   return (
     <section className="film-studio">
-      <header className="film-toolbar">
+      {id && <header className="film-toolbar">
         <h1>一键成片</h1>
         <div className="film-header-actions">
           <button onClick={() => setCharacterLibrary(true)}><WarehouseIcon/> 角色库</button>
           {id && <button className="film-primary" onClick={onNew}>新建短片</button>}
         </div>
-      </header>
+      </header>}
       {characterLibrary && <CharacterLibrary request={request} onClose={() => setCharacterLibrary(false)}/>}
       {error && (
         <p className="film-error" role="alert">
@@ -166,8 +166,15 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 action("", { ...form, requestId: crypto.randomUUID() });
               }}
             >
-              <h2>从一个故事开始</h2>
+              <header className="film-create-heading">
+                <div>
+                  <h1>一键成片</h1>
+                  <label htmlFor="film-story">故事梗概</label>
+                </div>
+                <button type="button" className="film-create-library" onClick={() => setCharacterLibrary(true)}><WarehouseIcon/> 角色库</button>
+              </header>
               <textarea
+                id="film-story"
                 required
                 maxLength={12000}
                 value={form.story}

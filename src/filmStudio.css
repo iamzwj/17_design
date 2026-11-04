@@ -277,8 +277,33 @@
 .film-header-actions button { white-space:nowrap; }
 .film-restoring { padding:36px 0; }
 .film-restoring h2 { font-size:22px; margin-top:0; }
-.film-layout.is-create { display: block; }
-.film-layout.is-create > main { max-width: 900px; }
+.film-layout.is-create {
+  display: block;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.film-layout.is-create form { padding: clamp(18px, 3vw, 36px); }
+.film-create-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.film-create-heading h1 {
+  margin: 0 0 20px;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.2;
+}
+.film-create-heading label { font-size: 13px; font-weight: 600; }
+.film-studio .film-create-library {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.film-studio .film-create-library:hover { border-color: var(--accent); }
+
 @media(max-width:700px) { .film-header-actions { gap:6px; max-width:140px; } .film-header-actions button { font-size:12px; padding:8px 10px; } }
 
 
