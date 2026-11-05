@@ -286,6 +286,8 @@ void main() {
 
   float haze = mix(1.0, 1.0 - uFog, pow(1.0 - v, 1.4));
   float light = (pow(level, uContrast) + glint * 0.8) * haze;
+  // Dim the ambient wave before adding pointer-driven illumination.
+  light *= 0.7;
   float glow = 1.0 - exp(-max(ink, 0.0) * uInk * 1.6);
   light = 1.0 - (1.0 - clamp(light, 0.0, 1.0)) * (1.0 - glow);
 
