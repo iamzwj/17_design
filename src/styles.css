@@ -718,3 +718,11 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   background: color-mix(in srgb, var(--dp-highlight) 16%, var(--dp-panel-solid));
   background: color-mix(in srgb, color-mix(in srgb, var(--dp-highlight) 16%, var(--dp-panel-solid)) var(--dp-surface-opacity), transparent);
 }
+
+/* Suppress the browser's autofill rectangle while keeping saved credentials. */
+:root .auth-form input:is(:autofill, :-webkit-autofill) {
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: var(--dp-ink) !important;
+  caret-color: var(--dp-ink);
+}
