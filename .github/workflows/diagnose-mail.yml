@@ -21,24 +21,23 @@ jobs:
           for line in pathlib.Path('/home/ubuntu/17_design/.env').read_text().splitlines():
               if '=' in line:
                   k,v=line.split('=',1); config[k]=v.strip().strip('"').strip("'")
-          client=None
-          stage='connect'
-          try:
-              client=smtplib.SMTP_SSL(config['SMTP_HOST'],int(config.get('SMTP_PORT','465')),timeout=20,context=ssl.create_default_context())
-              stage='EHLO'; code,msg=client.ehlo(config.get('SMTP_HELO','onewo.com')); print(stage,code,msg.decode(errors='replace'))
-              stage='AUTH'; client.login(config['SMTP_USERNAME'],config['SMTP_PASSWORD']); print(stage,'accepted')
-              stage='MAIL FROM'; code,msg=client.mail(config['SMTP_USERNAME']); print(stage,code,msg.decode(errors='replace'))
-              if code==250:
-                  stage='RCPT TO'; code,msg=client.rcpt('shenxx09@onewo.com'); print(stage,code,msg.decode(errors='replace'))
-              client.rset()
-          except Exception as e:
-              text=str(e)
-              for k in ['SMTP_USERNAME','SMTP_PASSWORD']:
-                  if config.get(k):text=text.replace(config[k],'[redacted]')
-              print(json.dumps({'stage':stage,'error':text}))
-          finally:
-              if client:
-                  try:client.quit()
-                  except Exception:client.close()
-          print('No DATA command issued; no email sent')
+
+          host=config.get('SMTP_HOST','')
+          port=int(config.get('SMTP_PORT') or '465')
+          username=config.get('SMTP_USERNAME','')
+          password=config.get('SMTP_PASSWORD','')
+          print('SMTP config:', json.dumps({'host_is_163':host=='smtp.163.com','port':port,'sender_domain':username.rsplit('@',1)[-1] if '@' in username else None,'authorization_present':bool(password),'authorization_has_whitespace':any(c.isspace() for c in password)}))
+          for helo,mechanism in [('onewo.com','LOGIN'),('localhost','LOGIN'),('localhost','PLAIN')]:
+              stage='connect'
+              try:
+                  with smtplib.SMTP_SSL(host,port,timeout=12,context=ssl.create_default_context(),local_hostname=helo) as c:
+                      stage='EHLO'; c.ehlo()
+                      stage='AUTH'; c.user=username; c.password=password
+                      code,_=c.auth(mechanism, c.auth_login if mechanism=='LOGIN' else c.auth_plain, initial_response_ok=False)
+                      print(helo,mechanism,stage,code)
+                      break
+              except smtplib.SMTPResponseException as e:
+                  print(helo,mechanism,stage,e.smtp_code,e.smtp_error==b'User has no permission')
+              except Exception as e:
+                  print(helo,mechanism,stage,type(e).__name__)
           PYREMOTE
