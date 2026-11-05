@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, verifyRegisterCode, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -602,7 +602,6 @@ const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,64}$/
 
 function AuthScreen({ onAuthenticated, onClose }) {
   const [mode, setMode] = useState('login')
-  const [registerStep, setRegisterStep] = useState('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
@@ -618,7 +617,7 @@ function AuthScreen({ onAuthenticated, onClose }) {
   }
 
   function switchMode(next) {
-    setMode(next); setRegisterStep('email'); setCode(''); setPassword(''); setConfirmPassword(''); setError(''); setNotice('')
+    setMode(next); setCode(''); setPassword(''); setConfirmPassword(''); setError(''); setNotice('')
   }
 
   async function submit(event) {
@@ -631,15 +630,8 @@ function AuthScreen({ onAuthenticated, onClose }) {
       if (mode === 'login') {
         const result = await loginAccount({ email: normalizedEmail, password, remember })
         saveAuthToken(result.token, remember); onAuthenticated(result.user)
-      } else if (registerStep === 'email') {
-        const result = await requestRegisterCode(normalizedEmail)
-        setRegisterStep('verify')
-        setNotice(result.devCode ? `本地开发验证码：${result.devCode}` : `验证码已发送至 ${normalizedEmail}`)
-      } else if (registerStep === 'verify') {
-        if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
-        await verifyRegisterCode(normalizedEmail, code)
-        setRegisterStep('password'); setNotice('邮箱验证完成，请设置登录密码')
       } else {
+        if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
         if (!PASSWORD_PATTERN.test(password)) throw new Error('密码须为 8–64 位，且同时包含字母和数字')
         if (password !== confirmPassword) throw new Error('两次输入的密码不一致')
         const result = await registerAccount({ email: normalizedEmail, code, password, remember })
@@ -649,21 +641,32 @@ function AuthScreen({ onAuthenticated, onClose }) {
     finally { setLoading(false) }
   }
 
+  async function sendCode() {
+    setError(''); setNotice('')
+    if (!EMAIL_LOCAL_PATTERN.test(email)) { setError('请输入企业邮箱账号'); return }
+    setLoading(true)
+    try {
+      const result = await requestRegisterCode(`${email}@onewo.com`)
+      setNotice(result.devCode ? `本地开发验证码：${result.devCode}` : '验证码已发送')
+    } catch (requestError) { setError(userError(requestError.message)) }
+    finally { setLoading(false) }
+  }
+
   const isRegister = mode === 'register'
   return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
   <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
-    <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} onClick={() => switchMode('register')}>注册</button></div>
-    {isRegister && <div className="auth-steps"><i className="done">1</i><span className={registerStep !== 'email' ? 'done' : ''}/><i className={registerStep !== 'email' ? 'done' : ''}>2</i><span className={registerStep === 'password' ? 'done' : ''}/><i className={registerStep === 'password' ? 'done' : ''}>3</i></div>}
+    <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} disabled={loading} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} disabled={loading} onClick={() => switchMode('register')}>注册</button></div>
+
     <form className="auth-form" onSubmit={submit}>
-      {(mode === 'login' || registerStep === 'email') && <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/><b>@onewo.com</b></div></label>}
-      {isRegister && registerStep !== 'email' && <div className="auth-fixed-email"><Icon name="check" size={15}/><span>{email.trim().toLowerCase()}@onewo.com</span><button type="button" onClick={() => { setRegisterStep('email'); setCode(''); setNotice('') }}>修改</button></div>}
+      <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/><b>@onewo.com</b></div></label>
+
       {mode === 'login' && <label><span>密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" disabled={loading}/></div></label>}
-      {isRegister && registerStep === 'verify' && <label><span>邮箱验证码</span><div><Icon name="shield" size={17}/><input className="code-input" inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/></div></label>}
-      {isRegister && registerStep === 'password' && <><label><span>设置密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8–64 位字母与数字" disabled={loading}/></div></label><label><span>确认密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="再次输入密码" disabled={loading}/></div></label><small className="password-hint">密码必须同时包含字母和数字，不支持空格及特殊符号</small></>}
-      {(mode === 'login' || registerStep === 'password') && <label className="remember-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}/><span>记住登录状态，30 天内免登录</span></label>}
+      {isRegister && <label><span>邮箱验证码</span><div><Icon name="shield" size={17}/><input className="code-input" inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/><button type="button" className="auth-send-code" onClick={sendCode} disabled={loading}>发送验证码</button></div></label>}
+      {isRegister && <><label><span>设置密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8–64 位字母与数字" disabled={loading}/></div></label><label><span>确认密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="再次输入密码" disabled={loading}/></div></label><small className="password-hint">密码必须同时包含字母和数字，不支持空格及特殊符号</small></>}
+      <label className="remember-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}/><span>记住登录状态，30 天内免登录</span></label>
       {notice && <div className="auth-notice">{notice}</div>}{error && <div className="auth-error">{error}</div>}
-      <button className="auth-submit" disabled={loading}>{loading ? '请稍候…' : mode === 'login' ? '登录' : registerStep === 'email' ? '发送验证码' : registerStep === 'verify' ? '验证邮箱' : '完成注册'}</button>
+      <button className="auth-submit" disabled={loading}>{loading ? '请稍候…' : mode === 'login' ? '登录' : '完成注册'}</button>
     </form>
   </section></div>
 }

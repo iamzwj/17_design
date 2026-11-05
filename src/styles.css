@@ -760,3 +760,16 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 :root .auth-modal-card .auth-tabs button.active {
   border-bottom-color: var(--dp-highlight);
 }
+
+.auth-modal-card { height: min(610px, calc(100dvh - 36px)); }
+.auth-send-code {
+  flex: none;
+  padding: 4px 0 4px 10px;
+  border: 0;
+  border-left: 1px solid var(--dp-rule);
+  background: transparent;
+  color: var(--dp-link);
+  font-size: var(--dp-typography-metadata);
+  cursor: pointer;
+}
+.auth-send-code:disabled { opacity: .6; }
