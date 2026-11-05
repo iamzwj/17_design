@@ -60,6 +60,11 @@
 .fw-asset-board .fw-file-control { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 10px; border-style: solid; font-size: var(--dp-typography-metadata); }
 .fw-asset-board .fw-file-control:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 .fw-warning > button { margin: 4px 0 4px 10px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+:root[data-theme='dark'] .fw-warning { background: #2a292e; border-color: #5a5056; color: #e4d2d5; }
+:root[data-theme='dark'] .fw-activity-row.error p,
+:root[data-theme='dark'] .fw-message.has-error p,
+:root[data-theme='dark'] .fw-state.failed,
+:root[data-theme='dark'] .fw-state.needs-input { color: #e3c5ca; }
 
 @media (min-width: 951px) {
   .fw-stage-library {
