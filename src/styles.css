@@ -690,7 +690,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 
 /* Shared fill for text-entry controls, including module-specific dark overrides. */
-:root .app-shell :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']), select) {
+:root .app-shell :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']), select):not(.auth-form input) {
   background-color: var(--dp-panel) !important;
 }
 
@@ -758,7 +758,4 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 :root .auth-modal-card .auth-tabs button.active {
   border-bottom-color: var(--dp-highlight);
-}
-:root .app-shell .auth-modal-card .auth-form input:not([type='checkbox']) {
-  background-color: transparent !important;
 }
