@@ -749,7 +749,7 @@ const MicroSlats = ({
         const aspect = width / height;
         for (const [u, v, du, dv, turn] of splats) {
           if (turn === null) {
-            splat(fluid.velocity, [u, v], [du * SPLAT_FORCE, dv * SPLAT_FORCE, 0], radius);
+            splat(fluid.velocity, [u, v], [du * SPLAT_FORCE * 0.3, dv * SPLAT_FORCE * 0.3, 0], radius);
             splat(fluid.ink, [u, v], [0.13, 0, 0], radius);
             continue;
           }
