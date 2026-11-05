@@ -66,7 +66,6 @@ const WORKSPACE_TITLES = {
 const MORE_WORKSPACE_TITLES = {
   'please-day': ['PLEASE DAY', '朴里节头像框'],
   qr: ['BATCH COMPOSER', '批处理二维码'],
-  logo: ['LOGO PROCESSING', 'Logo 处理'],
 }
 
 const RATIO_OPTIONS = [
@@ -503,12 +502,9 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
-  const [imageExpanded, setImageExpanded] = useState(false)
-  const [videoExpanded, setVideoExpanded] = useState(() => ['video', 'film'].includes(active))
-  const [knowledgeExpanded, setKnowledgeExpanded] = useState(() => KNOWLEDGE_SECTIONS.some((item) => item.id === active))
-  const [skillsExpanded, setSkillsExpanded] = useState(() => ['skills', 'discover-skills'].includes(active))
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
-  const [moreExpanded, setMoreExpanded] = useState(false)
+  const [expandedMenu, setExpandedMenu] = useState(() => ['video', 'film'].includes(active) ? 'video' : knowledgeActive ? 'knowledge' : ['skills', 'discover-skills'].includes(active) ? 'skills' : active === 'content' ? 'content' : null)
+  const toggleMenu = (menu) => setExpandedMenu((current) => current === menu ? null : menu)
   const accountCloseTimer = useRef(null)
 
   function keepAccountMenuOpen() {
@@ -536,38 +532,37 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
       </div>
       <nav className="module-nav primary-tools">
         {MODULES.map((item) => item.id === 'image' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={imageExpanded} onClick={() => { if (item.disabled) return; setImageExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {imageExpanded && <div className="module-submenu" role="menu" aria-label="图像创作模式">
+          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'image'} onClick={() => { if (item.disabled) return; toggleMenu('image'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'image' && <div className="module-submenu" role="menu" aria-label="图像创作模式">
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'dialogue' ? 'true' : undefined} className={active === 'image' && imageMode === 'dialogue' ? 'active' : ''} onClick={() => { onSelectImageMode('dialogue'); onClose() }}>对话模式</button>
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
           </div>}
         </div> : item.id === 'video' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={['video', 'film'].includes(active) ? 'active' : ''} aria-expanded={videoExpanded} onClick={() => { if (item.disabled) return; setVideoExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {videoExpanded && <div className="module-submenu" role="menu" aria-label="视频生成模式">
+          <button disabled={item.disabled} className={['video', 'film'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'video'} onClick={() => { if (item.disabled) return; toggleMenu('video'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'video' && <div className="module-submenu" role="menu" aria-label="视频生成模式">
             <button type="button" role="menuitem" aria-current={active === 'video' ? 'true' : undefined} className={active === 'video' ? 'active' : ''} onClick={() => { onChange('video'); onClose() }}>视频生成</button>
             <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>一键成片</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={active === 'content'} onClick={() => { if (item.disabled) return; onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {active === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
+          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'content'} onClick={() => { if (item.disabled) return; toggleMenu('content'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'content' && <div className="module-submenu" role="menu" aria-label="内容创作工具列表">
             <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日节气海报</button>
           </div>}
         </div> : item.id === 'skills' ? <div className="more-tool-nav" key={item.id}>
-          <button className={['skills', 'discover-skills'].includes(active) ? 'active' : ''} aria-expanded={skillsExpanded} aria-controls="skills-submenu" onClick={() => setSkillsExpanded((value) => !value)}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {skillsExpanded && <div id="skills-submenu" className="module-submenu" role="menu" aria-label="Skill 库目录">
+          <button className={['skills', 'discover-skills'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'skills'} aria-controls="skills-submenu" onClick={() => toggleMenu('skills')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'skills' && <div id="skills-submenu" className="module-submenu" role="menu" aria-label="Skill 库目录">
             {[['skills', '团队 Skill'], ['discover-skills', '发现 Skill']].map(([id, label]) => <button key={id} type="button" role="menuitem" aria-current={active === id ? 'page' : undefined} className={active === id ? 'active' : ''} onClick={() => { onChange(id); onClose() }}>{label}</button>)}
           </div>}
         </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
-          <button className={knowledgeActive ? 'active' : ''} aria-expanded={knowledgeExpanded} aria-controls="knowledge-submenu" onClick={() => setKnowledgeExpanded((value) => !value)}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {knowledgeExpanded && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
+          <button className={knowledgeActive ? 'active' : ''} aria-expanded={expandedMenu === 'knowledge'} aria-controls="knowledge-submenu" onClick={() => toggleMenu('knowledge')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'knowledge' && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
             {KNOWLEDGE_SECTIONS.map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={moreExpanded} onClick={() => { if (item.disabled) return; setMoreExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {moreExpanded && <div className="module-submenu" role="menu" aria-label="更多工具列表">
+          <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'more'} onClick={() => { if (item.disabled) return; toggleMenu('more'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          {expandedMenu === 'more' && <div className="module-submenu" role="menu" aria-label="更多工具列表">
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'please-day' ? 'true' : undefined} className={active === 'more' && moreTool === 'please-day' ? 'active' : ''} onClick={() => { onSelectMoreTool('please-day'); onClose() }}>朴里节头像框</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>批处理二维码</button>
-            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'logo' ? 'true' : undefined} className={active === 'more' && moreTool === 'logo' ? 'active' : ''} onClick={() => { onSelectMoreTool('logo'); onClose() }}>Logo 处理</button>
           </div>}
         </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
       </nav>
@@ -1717,7 +1712,6 @@ function TextStudio({ type, conversation, onSave }) {
 
 export default function App() {
   const localPreviewParams = new URLSearchParams(window.location.search)
-  const directLogoTool = localPreviewParams.get('tool') === 'logo'
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
   const directContent = localPreviewParams.get('module') === 'content'
@@ -1730,7 +1724,7 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
-  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directLogoTool || directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
     if (active !== 'film') url.searchParams.delete('filmProject')
@@ -1740,7 +1734,7 @@ export default function App() {
     }
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [active])
-  const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
+  const [moreTool, setMoreTool] = useState('please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => {
@@ -1844,10 +1838,9 @@ export default function App() {
   }
 
   function selectMoreTool(tool) {
-    if (!user && !['please-day', 'qr', 'logo'].includes(tool)) { setLoginPromptModule('more-qr'); return }
+    if (!user && !['please-day', 'qr'].includes(tool)) { setLoginPromptModule('more-qr'); return }
     const url = new URL(window.location.href)
-    if (tool === 'logo') url.searchParams.set('tool', 'logo')
-    else if (tool === 'please-day') url.searchParams.set('tool', 'avatar')
+    if (tool === 'please-day') url.searchParams.set('tool', 'avatar')
     else url.searchParams.delete('tool')
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setMoreTool(tool)
