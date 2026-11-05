@@ -405,7 +405,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .sortable-reference-strip .reference-preview { cursor: grab; }
 .sortable-reference-strip .reference-preview img { pointer-events: none; -webkit-user-drag: none; }
 .sortable-reference-strip > .is-sorting { opacity: .45; cursor: grabbing; }
-.sortable-reference-strip > .is-sort-target { border-color: #074ce0; box-shadow: 0 0 0 2px #074ce0; }
+.sortable-reference-strip > .is-sort-target { border-color: var(--dp-color-accent); box-shadow: 0 0 0 2px #074ce0; }
 .sortable-reference-strip .reference-preview:focus-visible { outline: 2px solid #074ce0; outline-offset: 2px; }
 .reference-order { position: absolute; left: 3px; bottom: 3px; min-width: 16px; padding: 1px 4px; border-radius: 4px; background: #26332d; color: #fff; font-size: var(--dp-typography-label); line-height: 14px; text-align: center; pointer-events: none; }
 :root[data-theme='dark'] .sortable-reference-strip > div { border-color: #777080; }
