@@ -1,3 +1,4 @@
+import { filmReviewFingerprint } from '../shared/filmReviewWarnings.js';
 import { IP_ASSETS } from "../shared/materialCatalog.js";
 import { fileURLToPath } from "node:url";
 import {filmMediaIndex} from '../shared/filmMediaIndex.js';
@@ -162,7 +163,18 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
   });
   app.get("/api/films/:id", requireAuth, (req, res) => {
     const p = owned(req, res);
-    if (p) res.json({ project: {...p, pendingChanges:pendingCommands(root,p).map(c=>({id:c.id,type:c.type,target:c.body?.id}))} });
+    if (p) {
+      let reviewDismissed = null;
+      try { reviewDismissed = fs.readFileSync(path.join(root, p.id, 'review-dismissed.json'), 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      res.json({ project: {...p, reviewDismissed, pendingChanges:pendingCommands(root,p).map(c=>({id:c.id,type:c.type,target:c.body?.id}))} });
+    }
+  });
+  app.post('/api/films/:id/review-dismissal', requireAuth, (req, res) => {
+    const p = owned(req, res); if (!p) return;
+    const fingerprint = filmReviewFingerprint(p);
+    if (!p.reviewWarning || req.body?.fingerprint !== fingerprint) return res.status(409).json({ error: '审核结果已更新，请重新查看' });
+    fs.writeFileSync(path.join(root, p.id, 'review-dismissed.json'), fingerprint);
+    res.json({ reviewDismissed: fingerprint });
   });
   app.get('/api/films/:id/media',requireAuth,(req,res)=>{const p=owned(req,res);if(p)res.json({media:filmMediaIndex(p,req.query.history==='1')});});
   const commandRoute = (fn) => async (req,res,next) => { try { await fn(req,res); } catch(e) { if(e.status) return res.status(e.status).json({error:e.message}); if(/锁定|不存在|无效|未知|上限|先解锁/.test(e.message)) return res.status(400).json({error:e.message}); next(e); } };

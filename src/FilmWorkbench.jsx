@@ -1,3 +1,4 @@
+import { filmReviewFingerprint, filmReviewTargets } from '../shared/filmReviewWarnings.js';
 import { userError } from './userErrors.js'
 import { CharacterDecision } from "./FilmCharacters.jsx";
 import FilmActivity from './FilmActivity.jsx';
@@ -13,6 +14,25 @@ const labels={queued:'等待调度',running:'正在制作',pausing:'正在暂停
 export default function FilmWorkbench({project:p,lastSynced,request,onProject,onDownload}) {
   const key='film-workbench:'+p.id;
   const [stage,setStage]=useState(()=>{const value=localStorage.getItem(key+':stage')||'script';return ['images','videos','audio'].includes(value)?'media':value;}),[selected,setSelected]=useState(()=>localStorage.getItem(key+':selected')||''),[message,setMessage]=useState(()=>localStorage.getItem(key+':message')||''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[limit,setLimit]=useState(60),[panel,setPanel]=useState(()=>localStorage.getItem(key+':panel')||'conversation'),[settings,setSettings]=useState(false),[details,setDetails]=useState(false),[recordMode,setRecordMode]=useState(()=>p.status==='succeeded'?'history':'activity');
+  const [dismissedReview,setDismissedReview]=useState(null);
+  const [dismissBusy,setDismissBusy]=useState(false);
+  const reviewCursor=useRef(0);
+  const reviewTargets=filmReviewTargets(p);
+  const reviewFingerprint=filmReviewFingerprint(p);
+  const reviewDismissed=dismissedReview===reviewFingerprint || p.reviewDismissed===reviewFingerprint;
+  function viewReview() {
+    const target=reviewTargets[reviewCursor.current % reviewTargets.length];
+    if (!target) { setStage('storyboard'); setSelected(''); setPanel('editor'); setNotice('当前没有可定位的审核详情，请在分镜中查看。'); return; }
+    reviewCursor.current += 1;
+    setStage(target.stage); setSelected(target.id); setPanel('editor');
+    if(target.stage!=='storyboard')requestAnimationFrame(()=>requestAnimationFrame(()=>document.getElementById('film-asset-'+target.id)?.scrollIntoView({behavior:'smooth',block:'center'})));
+  }
+  async function dismissReview() {
+    setDismissBusy(true);
+    try { const result=await request('/'+p.id+'/review-dismissal',{fingerprint:reviewFingerprint}); setDismissedReview(result.reviewDismissed); }
+    catch(error) { setNotice(userError(error.message)); }
+    finally { setDismissBusy(false); }
+  }
   const [timelineOpen,setTimelineOpen]=useState(false);
   const timelinePanel=useRef(null);
   useEffect(()=>{if(timelineOpen)timelinePanel.current?.scrollIntoView({block:"start"});},[timelineOpen]);
@@ -30,7 +50,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
     {settings&&<ProjectSettings project={p} send={send}/>}
     {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图需要你查看，确认图片或更换角色形象后继续制作。':userError(p.error)||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
-    {p.reviewWarning>0&&<p className="fw-warning">有 {p.reviewWarning} 项检查建议人工核对，请在分镜或设定图中查看依据；不会将不确定项标为确定通过。</p>}
+    {p.reviewWarning>0&&!reviewDismissed&&<div className="fw-warning" role="status">有 {p.reviewWarning} 项检查建议人工核对，请在分镜或设定图中查看依据；不会将不确定项标为确定通过。 <button type="button" onClick={viewReview}>查看</button><button type="button" disabled={dismissBusy} onClick={dismissReview}>忽略</button></div>}
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     {p.lastImpact&&<details className="fw-impact"><summary>最近修改影响了 {p.lastImpact.shots.length} 个镜头</summary><p>{p.lastImpact.sourceId}：v{p.lastImpact.fromVersion} → v{p.lastImpact.toVersion}；相关镜头 {p.lastImpact.shots.join('、')||'无'}。未关联的素材保留。</p></details>}
     <div className="fw-mobile-tabs"><button className={panel==='conversation'?'active':''} onClick={()=>setPanel('conversation')}>导演协作</button><button className={panel==='editor'?'active':''} onClick={()=>setPanel('editor')}>成果与编辑</button></div>
