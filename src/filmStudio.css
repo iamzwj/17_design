@@ -414,7 +414,8 @@
     height: auto;
     min-height: 0;
     flex: 1 1 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .fw-inspector-scroll {
     min-width: 0;
