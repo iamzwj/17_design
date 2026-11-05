@@ -729,14 +729,15 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 
 /* Authentication uses one surface per field and flat mode tabs. */
 .auth-modal-card .auth-brand {
-  justify-content: flex-start;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin: 0 36px 20px 0;
+  gap: 8px;
+  margin: 0 0 20px;
+  text-align: center;
 }
 .auth-modal-card .auth-brand .brand-avatar {
-  flex: 0 0 46px;
-  width: 46px;
+  flex: none;
+  width: 52px;
   height: 36px;
   margin: 0;
 }
