@@ -352,12 +352,64 @@
   .film-title-actions button { min-height: 36px; padding: 7px 9px; font-size: var(--dp-typography-metadata); }
 }
 
-/* Keep the page heading and film content in the same scroll surface. */
+/* Keep the project controls fixed while the active editing panel scrolls. */
 .main:has(> .film-studio) {
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overflow: hidden;
 }
 .has-workspace-title > .film-studio {
-  flex: 0 0 auto;
-  overflow: visible;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.film-studio:has(.film-workbench) {
+  display: flex;
+  flex-direction: column;
+}
+.film-workbench {
+  min-height: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 951px) {
+  .film-workbench > :not(.fw-columns) {
+    flex: 0 0 auto;
+  }
+  .fw-columns {
+    min-height: 0;
+    flex: 1 1 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .fw-stage-nav,
+  .fw-conversation,
+  .fw-inspector {
+    min-height: 0;
+  }
+  .fw-stage-nav,
+  .fw-conversation {
+    overflow: hidden;
+  }
+  .fw-stage-nav {
+    position: static;
+    align-self: stretch;
+    height: auto;
+  }
+  .fw-conversation {
+    position: static;
+    display: flex;
+    flex-direction: column;
+  }
+  .fw-feed {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 0;
+    overflow: hidden;
+  }
+  .fw-inspector {
+    max-height: none;
+    height: 100%;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
 }
