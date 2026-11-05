@@ -351,3 +351,13 @@
   .film-title-actions { gap: 6px; }
   .film-title-actions button { min-height: 36px; padding: 7px 9px; font-size: var(--dp-typography-metadata); }
 }
+
+/* Keep the page heading and film content in the same scroll surface. */
+.main:has(> .film-studio) {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.has-workspace-title > .film-studio {
+  flex: 0 0 auto;
+  overflow: visible;
+}
