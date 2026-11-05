@@ -65,7 +65,7 @@
   padding: 22px;
   border: 1px solid #dde0e6;
   border-radius: 14px;
-  background: #eaf1ff;
+  background: color-mix(in srgb, #eaf1ff var(--dp-surface-opacity), transparent);
 }
 .film-studio textarea {
   width: 100%;
@@ -73,7 +73,7 @@
   min-height: 130px;
   padding: 14px;
   border: 1px solid #dde0e6;
-  background: #fff;
+  background: color-mix(in srgb, #fff var(--dp-surface-opacity), transparent);
   border-radius: 10px;
   color: #282d36;
   resize: vertical;
@@ -155,7 +155,7 @@
   border-color: #454c58;
 }
 :root[data-theme="dark"] .film-studio textarea {
-  background: #20242c;
+  background: color-mix(in srgb, #20242c var(--dp-surface-opacity), transparent);
   color: #f3f4f6;
   border-color: #454c58;
 }

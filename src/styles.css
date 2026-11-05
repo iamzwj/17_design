@@ -615,7 +615,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 :root .film-layout.is-create .film-create-heading { margin: 0; }
 :root .film-layout.is-create textarea {
   min-height: 152px;
-  background: var(--dp-ground);
+  background: color-mix(in srgb, var(--dp-ground) var(--dp-surface-opacity), transparent);
   border-color: var(--dp-rule);
   color: var(--dp-ink);
   font-size: var(--dp-typography-body);
@@ -688,4 +688,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 :root .app-shell :is(.glass-strong, .sidebar, [class$="-card"], [class*="-card "], [class$="-panel"], [class*="-panel "], .video-waterfall-task, .waterfall-composer) {
   background-color: var(--dp-panel);
+}
+
+/* Shared fill for text-entry controls, including module-specific dark overrides. */
+:root .app-shell :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']), select) {
+  background-color: var(--dp-panel) !important;
 }
