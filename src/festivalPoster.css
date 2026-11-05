@@ -33,7 +33,7 @@
 .festival-poster-card footer b { color: var(--ink); font-size: var(--dp-typography-metadata); }
 .festival-poster-card footer small { margin-top: 3px; color: var(--muted); font-size: var(--dp-typography-label); }
 .festival-poster-card footer button { height: 32px; padding: 0 10px; border: 1px solid rgba(22,25,31,.1); border-radius: 10px; display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,.48); color: var(--mid); font-size: var(--dp-typography-label); cursor: pointer; }
-:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-style-select .composer-select-trigger,:root[data-theme='dark'] .festival-poster-card footer button { background: var(--dp-muted); border-color: rgba(255,255,255,.1); }
+:root[data-theme='dark'] .festival-input-row input,:root[data-theme='dark'] .festival-style-select .composer-select-trigger,:root[data-theme='dark'] .festival-poster-card footer button { background: var(--dp-muted-surface); border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-poster-card,:root[data-theme='dark'] .festival-poster-panel,:root[data-theme='dark'] .festival-empty { border-color: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .festival-progress { background: rgba(7, 76, 224,.13); }
 @media (max-width: 900px) { .festival-poster-layout { grid-template-columns: 1fr; }.festival-poster-panel { position: static; }.festival-poster-grid { max-width: 720px; margin: 0 auto; } }

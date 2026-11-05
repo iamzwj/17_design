@@ -16,7 +16,7 @@
 .image-settings-panel small { display: block; font-size: var(--dp-typography-label); color: #454c58; margin-top: 8px; }
 :root[data-theme='dark'] .image-settings-panel { background: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent); color: #f3f4f6; border-color: var(--dp-rule); box-shadow: 0 12px 30px #0006; }
 :root[data-theme='dark'] .image-settings-panel :is(legend,small), :root[data-theme='dark'] .image-settings-panel > header button { color: #d0d4dd; }
-:root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button { background: var(--dp-panel-solid); border-color: var(--dp-rule); color: #dde0e6; }
+:root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button { background: var(--dp-panel); border-color: var(--dp-rule); color: #dde0e6; }
 :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button:hover:not(:disabled), :root[data-theme='dark'] .image-settings-panel :is(.image-settings-ratios,.image-settings-choices) button[aria-pressed='true'] { background: #123568; border-color: #86adff; color: var(--dp-highlight); }
 .image-custom-toggle { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid #dde0e6; border-radius: 7px; background: #fff; color: #454c58; text-align: left; font-size: var(--dp-typography-metadata); cursor: pointer; }
 .image-custom-toggle[aria-pressed='true'] { background: #eaf1ff; border-color: #86adff; color: var(--dp-color-accent); }

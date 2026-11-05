@@ -246,7 +246,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .theme-menu-row,
 :root[data-theme='dark'] .archive-panel-header,
 :root[data-theme='dark'] .report-body h3 { border-color: rgba(255,255,255,.075); }
-:root[data-theme='dark'] .account > span { background: var(--dp-muted); color: #dde0e6; }
+:root[data-theme='dark'] .account > span { background: var(--dp-muted-surface); color: #dde0e6; }
 :root[data-theme='dark'] .account-dropdown {
   background: rgb(18 19 23 / .95);
   border-color: rgba(255,255,255,.1);
@@ -273,7 +273,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .ratio-menu,
 :root[data-theme='dark'] .quality-menu,
 :root[data-theme='dark'] .brand-menu { background: rgb(18 19 23 / .97); box-shadow: inset 0 1px rgba(255,255,255,.07), 0 16px 38px rgba(0,0,0,.34); }
-:root[data-theme='dark'] .skill-trigger { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.045); color: #d0d4dd; }:root[data-theme='dark'] .skill-trigger b { color: #dde0e6; }:root[data-theme='dark'] .skill-trigger.active { border-color: rgba(7, 76, 224,.48); background: rgba(7, 76, 224,.16); color: var(--dp-highlight); }:root[data-theme='dark'] .skill-trigger.active b { color: var(--dp-highlight); }:root[data-theme='dark'] .skill-menu { border-color: rgba(255,255,255,.11); background: var(--dp-panel-solid); box-shadow: inset 0 1px rgba(255,255,255,.06),0 18px 42px rgba(0,0,0,.38); }:root[data-theme='dark'] .skill-option-card { border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.045); }:root[data-theme='dark'] .skill-option-card:hover { border-color: rgba(7, 76, 224,.42); background: rgba(7, 76, 224,.1); }:root[data-theme='dark'] .skill-option-card.active { border-color: rgba(7, 76, 224,.58); background: rgba(7, 76, 224,.15); }:root[data-theme='dark'] .skill-option-copy b { color: #f3f4f6; }:root[data-theme='dark'] .skill-option-copy p { color: #dde0e6; }:root[data-theme='dark'] .waterfall-selected-skill button:hover { background: rgba(7, 76, 224,.15); color: var(--dp-highlight); }
+:root[data-theme='dark'] .skill-trigger { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.045); color: #d0d4dd; }:root[data-theme='dark'] .skill-trigger b { color: #dde0e6; }:root[data-theme='dark'] .skill-trigger.active { border-color: rgba(7, 76, 224,.48); background: rgba(7, 76, 224,.16); color: var(--dp-highlight); }:root[data-theme='dark'] .skill-trigger.active b { color: var(--dp-highlight); }:root[data-theme='dark'] .skill-menu { border-color: rgba(255,255,255,.11); background: var(--dp-panel); box-shadow: inset 0 1px rgba(255,255,255,.06),0 18px 42px rgba(0,0,0,.38); }:root[data-theme='dark'] .skill-option-card { border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.045); }:root[data-theme='dark'] .skill-option-card:hover { border-color: rgba(7, 76, 224,.42); background: rgba(7, 76, 224,.1); }:root[data-theme='dark'] .skill-option-card.active { border-color: rgba(7, 76, 224,.58); background: rgba(7, 76, 224,.15); }:root[data-theme='dark'] .skill-option-copy b { color: #f3f4f6; }:root[data-theme='dark'] .skill-option-copy p { color: #dde0e6; }:root[data-theme='dark'] .waterfall-selected-skill button:hover { background: rgba(7, 76, 224,.15); color: var(--dp-highlight); }
 :root[data-theme='dark'] .ratio-grid button,
 :root[data-theme='dark'] .brand-grid button { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.07); }
 :root[data-theme='dark'] .ratio-grid button:hover,
@@ -289,7 +289,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .waterfall-reference-summary > button,:root[data-theme='dark'] .waterfall-reference-list button { border-color: rgba(255,255,255,.09); background: rgba(255,255,255,.05); color: #d0d4dd; }
 :root[data-theme='dark'] .waterfall-reference-list { border-color: rgba(255,255,255,.1); background: rgb(18 19 23 / .98); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
 :root[data-theme='dark'] .waterfall-reference-summary > button:hover { border-color: rgba(7, 76, 224,.42); color: var(--dp-highlight); }
-:root[data-theme='dark'] .waterfall-reference-stack img { border-color: rgb(18 19 23 / .95); background: var(--dp-panel-solid); }
+:root[data-theme='dark'] .waterfall-reference-stack img { border-color: rgb(18 19 23 / .95); background: var(--dp-panel); }
 :root[data-theme='dark'] .waterfall-task-actions button:hover,
 :root[data-theme='dark'] .waterfall-task-actions button.stop:hover { background: rgba(255,255,255,.14); }
 :root[data-theme='dark'] .waterfall-slot { border-color: rgba(255,255,255,.075); background: rgba(255,255,255,.045); }
@@ -301,7 +301,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .report-conclusion,
 :root[data-theme='dark'] .report-score { background: rgba(255,255,255,.065); border-color: rgba(255,255,255,.09); box-shadow: inset 0 1px rgba(255,255,255,.06), 0 7px 22px rgba(0,0,0,.13); }
 :root[data-theme='dark'] .assistant-label span,
-:root[data-theme='dark'] .assistant-avatar { background: var(--dp-panel-solid); color: var(--dp-highlight); }
+:root[data-theme='dark'] .assistant-avatar { background: var(--dp-panel); color: var(--dp-highlight); }
 :root[data-theme='dark'] .task-elapsed { color: rgba(206,201,214,.52); }
 :root[data-theme='dark'] .message-copy-button { background: rgb(18 19 23 / .94); border-color: rgba(255,255,255,.14); color: #d0d4dd; box-shadow: 0 4px 12px rgba(0,0,0,.22); }
 :root[data-theme='dark'] .message-copy-button:hover, :root[data-theme='dark'] .message-copy-button:focus-visible { background: rgba(69,69,69,.98); color: var(--dp-highlight); border-color: rgba(7, 76, 224,.5); }
@@ -456,8 +456,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .waterfall-logo-recompose { position: absolute; left: 8px; bottom: 8px; min-height: 30px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: #fffafc; color: #454c58; font-size: var(--dp-typography-metadata); cursor: pointer; }
 .waterfall-logo-recompose:hover { background: #eaf1ff; }
 .waterfall-logo-recompose:focus-visible { outline: 2px solid #074ce0; outline-offset: 2px; }
-:root[data-theme='dark'] .waterfall-logo-recompose { background: var(--dp-panel-solid); color: #eaf1ff; }
-:root[data-theme='dark'] .waterfall-logo-recompose:hover { background: var(--dp-muted); }
+:root[data-theme='dark'] .waterfall-logo-recompose { background: var(--dp-panel); color: #eaf1ff; }
+:root[data-theme='dark'] .waterfall-logo-recompose:hover { background: var(--dp-muted-surface); }
 
 
 /* The shell owns the page title. Tool-local headings remain for standalone previews. */
@@ -661,7 +661,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   color: var(--dp-ink);
 }
 :root .film-layout.is-create :is(.film-create-library, .composer-select-trigger):hover {
-  background: var(--dp-muted);
+  background: var(--dp-muted-surface);
   border-color: var(--dp-link);
 }
 .has-workspace-title .material-library-header {
@@ -696,7 +696,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 
 /* Obsidian surfaces keep the canvas deep black and controls distinct. */
 :root[data-theme='dark'] .app-shell .sidebar {
-  background: var(--dp-sidebar);
+  background: var(--dp-sidebar-surface);
   border-color: var(--dp-rule);
   box-shadow: inset 1px 0 0 rgb(255 255 255 / 3%), 8px 0 28px rgb(0 0 0 / 22%);
 }
@@ -704,4 +704,4 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 @media (prefers-reduced-motion: reduce) { :root[data-theme='dark'] .global-background { animation: none; opacity: .2; } }
 :root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) { background: var(--dp-selected); color: #8bb5ff; }
 :root[data-theme='dark'] .send-button { background: var(--dp-highlight); color: #050505; border-color: transparent; }
-:root[data-theme='dark'] :is(.skill-menu, .video-select-menu, .image-settings-panel, .composer-select-menu) { background: var(--dp-muted); border-color: var(--dp-rule); }
+:root[data-theme='dark'] :is(.skill-menu, .video-select-menu, .image-settings-panel, .composer-select-menu) { background: var(--dp-muted-surface); border-color: var(--dp-rule); }

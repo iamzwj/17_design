@@ -150,7 +150,7 @@
 :root[data-theme="dark"] .film-studio button,
 :root[data-theme="dark"] .film-layout main > form,
 :root[data-theme="dark"] .film-grid article {
-  background: var(--dp-panel-solid);
+  background: var(--dp-panel);
   color: #f3f4f6;
   border-color: var(--dp-rule);
 }
@@ -163,7 +163,7 @@
   background: var(--dp-color-accent);
 }
 :root[data-theme="dark"] .film-placeholder {
-  background: var(--dp-muted);
+  background: var(--dp-muted-surface);
 }
 :root[data-theme="dark"] .film-studio .film-error {
   color: #ffadbc;
@@ -247,9 +247,9 @@
 .film-output-waiting > span { color:var(--accent); font-size:40px; }
 .film-output-waiting h3 { font-size:17px; }
 .film-output-waiting p,.film-output-waiting small { font-size: var(--dp-typography-small); line-height:1.8; }
-:root[data-theme="dark"] .film-production { --film-panel:var(--dp-panel-solid); --film-surface:var(--dp-panel-solid); --film-line:var(--dp-rule); --film-text:#d0d4dd; }
-:root[data-theme="dark"] .film-director-mark { color: var(--dp-highlight); background:var(--dp-muted); }
-:root[data-theme="dark"] .film-stage-track .complete .film-stage-dot { background:var(--dp-muted); color: var(--dp-highlight); border-color:var(--dp-rule); }
+:root[data-theme="dark"] .film-production { --film-panel:var(--dp-panel); --film-surface:var(--dp-panel); --film-line:var(--dp-rule); --film-text:#d0d4dd; }
+:root[data-theme="dark"] .film-director-mark { color: var(--dp-highlight); background:var(--dp-muted-surface); }
+:root[data-theme="dark"] .film-stage-track .complete .film-stage-dot { background:var(--dp-muted-surface); color: var(--dp-highlight); border-color:var(--dp-rule); }
 :root[data-theme="dark"] .film-stage-track .working .film-stage-dot,:root[data-theme="dark"] .film-stage-track .current .film-stage-dot { background:#86adff; border-color:#86adff; color:#fff; }
 :root[data-theme="dark"] .film-stage-track .working b,:root[data-theme="dark"] .film-stage-track .current b,:root[data-theme="dark"] .film-work-label b { color: var(--dp-highlight); }
 :root[data-theme="dark"] .film-stage-track .paused .film-stage-dot { color:#ffc28e; border-color:#bb845a; }

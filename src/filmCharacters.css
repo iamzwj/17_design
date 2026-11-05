@@ -18,7 +18,7 @@
 .film-character-actions [aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
 .film-character-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 12px; }
 .film-character-grid article { display: grid; align-content: start; gap: 8px; padding: 10px; border: 1px solid var(--dp-rule); border-radius: 10px; overflow-wrap: anywhere; }
-.film-character-grid img { width: 100%; height: 145px; object-fit: contain; display: block; background: var(--dp-muted); border-radius: 7px; }
+.film-character-grid img { width: 100%; height: 145px; object-fit: contain; display: block; background: var(--dp-muted-surface); border-radius: 7px; }
 .film-character-image { position: relative; }
 .film-studio .film-character-save { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; }
 .film-header-actions svg { vertical-align: middle; }

@@ -32,6 +32,8 @@
   --dp-panel-solid: var(--dp-color-panel);
   --dp-surface-opacity: 90%;
   --dp-panel: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent);
+  --dp-muted-surface: color-mix(in srgb, var(--dp-muted) var(--dp-surface-opacity), transparent);
+  --dp-sidebar-surface: color-mix(in srgb, var(--dp-sidebar, var(--dp-panel-solid)) var(--dp-surface-opacity), transparent);
   --dp-rule: var(--dp-color-rule);
   --dp-highlight: var(--dp-color-accent);
   --dp-link: var(--dp-highlight);
@@ -42,7 +44,7 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --dp-surface-opacity: 100%;
+  --dp-surface-opacity: 90%;
   --dp-action-hover: #6ba1ff;
   --dp-sidebar: #141519;
   --dp-ground: #060709;
