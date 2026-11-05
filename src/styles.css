@@ -677,8 +677,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 
 /* Keep the sea behind all workspace content and opaque control surfaces. */
 #root { isolation: isolate; }
-.global-background { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .14; animation: globalBackgroundBreathe 14s ease-in-out infinite; }
-@keyframes globalBackgroundBreathe { 0%, 100% { opacity: .10; } 50% { opacity: .18; } }
+.global-background { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .14; }
 @media (prefers-reduced-motion: reduce) { .global-background { animation: none; opacity: .14; } }
 
 /* Translucent container fills only; text, media and borders stay opaque. */
@@ -701,8 +700,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   border-color: var(--dp-rule);
   box-shadow: inset 1px 0 0 rgb(255 255 255 / 3%), 8px 0 28px rgb(0 0 0 / 22%);
 }
-:root[data-theme='dark'] .global-background { opacity: .2; animation-name: obsidianBackgroundBreathe; }
-@keyframes obsidianBackgroundBreathe { 0%, 100% { opacity: .16; } 50% { opacity: .24; } }
+:root[data-theme='dark'] .global-background { opacity: .2; }
 @media (prefers-reduced-motion: reduce) { :root[data-theme='dark'] .global-background { animation: none; opacity: .2; } }
 :root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) { background: var(--dp-selected); color: #8bb5ff; }
 :root[data-theme='dark'] .send-button { background: var(--dp-highlight); color: #050505; border-color: transparent; }
