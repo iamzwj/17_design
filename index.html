@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme-selection="disabled">
+<html lang="zh-CN" data-theme-selection="disabled" data-color-theme="blue">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,10 +12,10 @@
     <link rel="preload" as="image" href="/dgen-butterfly-ceramic.png" fetchpriority="high" />
     <script>
       const displayModeRoot = document.documentElement
-      const useLightTheme = displayModeRoot.dataset.themeSelection === 'enabled'
-        && localStorage.getItem('diefa-display-mode-v1') === 'light'
-      displayModeRoot.dataset.theme = useLightTheme ? 'light' : 'dark'
-      displayModeRoot.style.colorScheme = displayModeRoot.dataset.theme
+      const colorTheme = localStorage.getItem('diefa-color-theme-v1')
+      displayModeRoot.dataset.theme = 'dark'
+      displayModeRoot.dataset.colorTheme = colorTheme === 'green' ? 'green' : 'blue'
+      displayModeRoot.style.colorScheme = 'dark'
     </script>
     <title>D-Gen</title>
   </head>

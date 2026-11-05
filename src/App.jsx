@@ -33,6 +33,7 @@ import ComposerSelect from './ComposerSelect.jsx'
 import './complianceBrand.css'
 import { retryWaterfallLogo } from './logoRepair.js'
 import ImageSettings from './ImageSettings.jsx'
+import MicroSlats from './MicroSlats.jsx'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, IMAGE_MODEL_OPTIONS, availableImageModel, imageQualityForModel, supportsImageRatio, supportsImageResolution, imageCreditCost, imageResolutionForModel } from './imageModels.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
@@ -102,8 +103,7 @@ const MODULE_COPY = {
 }
 
 const STORAGE_KEY = 'diefa-conversations-v1'
-const THEME_KEY = 'diefa-display-mode-v1'
-const THEME_SELECTION_ENABLED = document.documentElement.dataset.themeSelection === 'enabled'
+const COLOR_THEME_KEY = 'diefa-color-theme-v1'
 const IMAGE_MODE_KEY = 'diefa-image-mode-v1'
 const WATERFALL_CACHE_PREFIX = 'diefa-waterfall-cache-v1:'
 const WATERFALL_HISTORY_PAGE_SIZE = 8
@@ -500,7 +500,7 @@ function BrandIcon({ alt = '' }) {
   return <span className="brand-icon-static" role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}/>
 }
 
-function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
+function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, colorTheme, onColorThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
@@ -588,13 +588,13 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button onClick={() => { onChangePassword(); setAccountExpanded(false); onClose() }}><Icon name="lock" size={16}/><span>修改密码</span><Icon name="chevron" size={14}/></button>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
-          {THEME_SELECTION_ENABLED && <div className="theme-menu-row">
-            <span className="theme-menu-label"><Icon name="sun" size={16}/><span>显示模式</span></span>
-            <div className="theme-mode-options" role="group" aria-label="显示模式">
-              <button type="button" aria-pressed={theme === 'light'} className={theme === 'light' ? 'active' : ''} onClick={() => onThemeChange('light')}>LIGHT</button>
-              <button type="button" aria-pressed={theme === 'dark'} className={theme === 'dark' ? 'active' : ''} onClick={() => onThemeChange('dark')}>DARK</button>
+          <div className="theme-menu-row">
+            <span className="theme-menu-label"><Icon name="spark" size={16}/><span>主题色</span></span>
+            <div className="theme-mode-options" role="group" aria-label="主题色">
+              <button type="button" aria-pressed={colorTheme === 'blue'} className={colorTheme === 'blue' ? 'active' : ''} onClick={() => onColorThemeChange('blue')}>古典蓝</button>
+              <button type="button" aria-pressed={colorTheme === 'green'} className={colorTheme === 'green' ? 'active' : ''} onClick={() => onColorThemeChange('green')}>幽暗绿</button>
             </div>
-          </div>}
+          </div>
           <button className="account-logout" onClick={onLogout}><Icon name="logout" size={16}/><span>退出登录</span><Icon name="chevron" size={14}/></button>
         </div>}
         {user ? <button className="account" onMouseEnter={keepAccountMenuOpen} onClick={() => { keepAccountMenuOpen(); setAccountExpanded((value) => !value) }}><span>{user.email.slice(0, 2).toUpperCase()}</span><b>{user.email.split('@')[0]}<small>积分 {user.credits ?? 50}</small></b></button> : <button className="guest-account" onClick={onLogin}><Icon name="lock" size={16}/><span>登录以使用 AI 功能</span></button>}
@@ -1745,10 +1745,9 @@ export default function App() {
   const [moreTool, setMoreTool] = useState(() => directLogoTool ? 'logo' : 'please-day')
   const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
-  const [theme, setTheme] = useState(() => {
-    if (!THEME_SELECTION_ENABLED) return 'dark'
-    if (['light', 'dark'].includes(localPreviewTheme)) return localPreviewTheme
-    return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'
+  const [colorTheme, setColorTheme] = useState(() => {
+    if (localPreviewTheme === 'green' || localPreviewTheme === 'blue') return localPreviewTheme
+    return localStorage.getItem(COLOR_THEME_KEY) === 'green' ? 'green' : 'blue'
   })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
@@ -1784,12 +1783,12 @@ export default function App() {
   }, [user, authState])
 
   useEffect(() => {
-    if (!THEME_SELECTION_ENABLED) return
-    document.documentElement.dataset.theme = theme
-    document.documentElement.style.colorScheme = theme
-    localStorage.setItem(THEME_KEY, theme)
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#16191f' : '#fcfcfd')
-  }, [theme])
+    document.documentElement.dataset.theme = 'dark'
+    document.documentElement.dataset.colorTheme = colorTheme
+    document.documentElement.style.colorScheme = 'dark'
+    localStorage.setItem(COLOR_THEME_KEY, colorTheme)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colorTheme === 'green' ? '#020303' : '#16191f')
+  }, [colorTheme])
 
   function updateConversations(transform) {
     setConversations((current) => {
@@ -1978,5 +1977,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/>{colorTheme === "green" && <div className="micro-slats-background" aria-hidden="true"><MicroSlats color="#38ff8e" glintColor="#8dffb7" backgroundColor="#020303" speed={0} interactive={false} intro={false} /></div>}<Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} colorTheme={colorTheme} onColorThemeChange={setColorTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen requiredModule={loginPromptModule} onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }

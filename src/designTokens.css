@@ -10,6 +10,12 @@
   --dp-color-on-field-secondary: #d0d4dd;
   --dp-color-panel: #fff;
   --dp-color-on-accent: #fff;
+  --dp-accent-rgb: 7 76 224;
+  --dp-accent-base: #074ce0;
+  --dp-accent-strong: #063eb9;
+  --dp-accent-soft: #86adff;
+  --dp-accent-muted: #9cbcff;
+  --dp-accent-pale: #eaf1ff;
   --dp-typography-fallback: sans-serif;
   --dp-typography-body: 16px;
   --dp-typography-interface: 15px;
@@ -48,4 +54,40 @@
   --dp-selected: #253655;
   --dp-shadow: 0 8px 24px rgb(0 0 0 / 20%);
   --dp-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23d0d4dd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:root[data-color-theme='green'] {
+  --dp-color-ground: #020303;
+  --dp-color-ink: #f8fffa;
+  --dp-color-ink-secondary: #c2cbc5;
+  --dp-color-ground-muted: #151817;
+  --dp-color-rule: #304c3b;
+  --dp-color-accent: #38ff8e;
+  --dp-color-field: #020303;
+  --dp-color-on-field: #f8fffa;
+  --dp-color-on-field-secondary: #d3dbd5;
+  --dp-color-panel: #0c0d0d;
+  --dp-color-on-accent: #020303;
+  --dp-accent-rgb: 56 255 142;
+  --dp-accent-base: #38ff8e;
+  --dp-accent-strong: #1cc96a;
+  --dp-accent-soft: #8dffb7;
+  --dp-accent-muted: #b8ffd0;
+  --dp-accent-pale: #defee7;
+  --dp-font-body: 'IBM Plex Mono', 'Noto Sans SC', 'PingFang SC', ui-monospace, monospace;
+  --dp-font-heading: 'IBM Plex Sans', 'Noto Sans SC', 'PingFang SC', sans-serif;
+  --dp-radius-panel: 0;
+  --dp-motion-interaction: 0s;
+  --dp-motion-easing: linear;
+  --dp-ground: var(--dp-color-ground);
+  --dp-muted: var(--dp-color-ground-muted);
+  --dp-ink: var(--dp-color-ink);
+  --dp-secondary: var(--dp-color-ink-secondary);
+  --dp-panel: var(--dp-color-panel);
+  --dp-rule: var(--dp-color-rule);
+  --dp-link: var(--dp-color-accent);
+  --dp-action-hover: #8dffb7;
+  --dp-selected: #1d211f;
+  --dp-shadow: none;
+  --dp-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%2338ff8e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }

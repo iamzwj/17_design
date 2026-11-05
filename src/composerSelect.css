@@ -8,7 +8,7 @@
 .composer-select-trigger:disabled { opacity: .5; cursor: default; }
 .composer-select-menu { position: absolute; z-index: 45; left: 0; bottom: calc(100% + 8px); min-width: 100%; width: max-content; max-width: min(330px,calc(100vw - 40px)); max-height: min(400px,55vh); overflow-y: auto; padding: 5px; border: 1px solid #dde0e6; border-radius: 12px; background: #fcfcfd; box-shadow: 0 12px 30px #0002; color: #282d36; }
 .composer-select-options button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 0; padding: 9px 10px; border-radius: 7px; background: transparent; text-align: left; color: inherit; cursor: pointer; font-size: var(--dp-typography-metadata); }
-.composer-select-options button:hover, .composer-select-options button:focus-visible, .composer-select-options button[aria-selected='true'] { background: #074ce012; color: #074ce0; outline: none; }
+.composer-select-options button:hover, .composer-select-options button:focus-visible, .composer-select-options button[aria-selected='true'] { background: rgb(var(--dp-accent-rgb) / .07); color: var(--dp-accent-base); outline: none; }
 .composer-select-footer { border-top: 1px solid #dde0e6; margin-top: 5px; padding: 10px; font-size: var(--dp-typography-metadata); line-height: 1.7; }
 .composer-select-footer p { margin: 0 0 8px; }
 .composer-tools .tool-group { flex-wrap: wrap; min-width: 0; }
@@ -17,6 +17,6 @@
 :root[data-theme='dark'] .composer-select-trigger { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.045); color: #dde0e6; }
 :root[data-theme='dark'] .composer-select-trigger:hover { background: rgba(255,255,255,.1); }
 :root[data-theme='dark'] .composer-select-menu { background: #282d36; border-color: #454c58; color: #f3f4f6; box-shadow: 0 12px 30px #0006; }
-:root[data-theme='dark'] .composer-select-options button:hover, :root[data-theme='dark'] .composer-select-options button:focus-visible, :root[data-theme='dark'] .composer-select-options button[aria-selected='true'] { background: #86adff26; color: #86adff; }
+:root[data-theme='dark'] .composer-select-options button:hover, :root[data-theme='dark'] .composer-select-options button:focus-visible, :root[data-theme='dark'] .composer-select-options button[aria-selected='true'] { background: rgb(var(--dp-accent-rgb) / .15); color: var(--dp-accent-soft); }
 :root[data-theme='dark'] .composer-select-footer { border-color: #454c58; color: #d0d4dd; }
 @media(max-width:520px) { .composer-select-menu { max-width: min(270px,calc(100vw - 40px)); }.composer-tools .tool-group { flex: 1; }.composer-tools { gap: 8px; align-items: flex-end; }.composer-select-trigger { max-width: 175px; } }

@@ -8,8 +8,8 @@
 .skill-page button:hover { border-color:var(--accent); }
 .skill-page button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-page :is(button,input,textarea):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
-.skill-page .skill-primary { display:inline-flex; gap:8px; justify-content:center; align-items:center; background:#074ce0; border-color:#074ce0; color:#fff; }
-.skill-page .skill-primary:hover { background:#074ce0; }
+.skill-page .skill-primary { display:inline-flex; gap:8px; justify-content:center; align-items:center; background:var(--dp-accent-base); border-color:var(--dp-accent-base); color:#fff; }
+.skill-page .skill-primary:hover { background:var(--dp-accent-base); }
 .skill-header > button { flex-shrink:0; margin-top:3px; padding:12px 19px; }
 .skill-toolbar { display:flex; justify-content:space-between; align-items:center; gap:20px; border-bottom:1px solid var(--sk-border); padding-bottom:18px; }
 .skill-tabs { display:flex; gap:6px; }
@@ -48,7 +48,7 @@
 .skill-steps { display:flex; gap:26px; margin:24px 0 32px; }
 .skill-page .skill-steps button { background:transparent; border:0; display:flex; align-items:center; gap:9px; padding:0; color:var(--sk-muted); }
 .skill-steps span { width:25px; height:25px; display:grid; place-items:center; border:1px solid var(--sk-border); border-radius:50%; }
-.skill-page .skill-steps button[aria-current='step'] { color:var(--sk-text); font-weight:600; }.skill-steps [aria-current='step'] span { background:#074ce0; border-color:#074ce0; color:#fff; }
+.skill-page .skill-steps button[aria-current='step'] { color:var(--sk-text); font-weight:600; }.skill-steps [aria-current='step'] span { background:var(--dp-accent-base); border-color:var(--dp-accent-base); color:#fff; }
 .skill-editor fieldset { margin:0; padding:0; border:0; min-width:0; }
 .skill-guide { max-width:720px; margin:auto; }.skill-guide h2 { margin:0 0 10px; font-size:23px; font-weight:500; }.skill-guide > p,.skill-proposal > p { margin:0 0 28px; font-size: var(--dp-typography-small); line-height:1.9; color:var(--sk-muted); }
 .skill-editor label { display:grid; gap:10px; font-size: var(--dp-typography-small); margin:0 0 22px; line-height:1.8; }.skill-editor label small { color:var(--sk-muted); }
