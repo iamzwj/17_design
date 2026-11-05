@@ -702,7 +702,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 :root[data-theme='dark'] .global-background { opacity: .2; }
 @media (prefers-reduced-motion: reduce) { :root[data-theme='dark'] .global-background { animation: none; opacity: .2; } }
-:root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) { background: var(--dp-selected); color: #8bb5ff; }
+:root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) { background: var(--dp-selected); color: var(--dp-ink); }
 :root[data-theme='dark'] .send-button { background: var(--dp-highlight); color: #050505; border-color: transparent; }
 :root[data-theme='dark'] :is(.skill-menu, .video-select-menu, .image-settings-panel, .composer-select-menu) { background: var(--dp-muted-surface); border-color: var(--dp-rule); }
 
