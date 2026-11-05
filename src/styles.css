@@ -5,7 +5,7 @@
 :root {
   font-family: var(--dp-font-body);
   color: #16191f;
-  background: #fcfcfd;
+  background: var(--dp-ground);
   font-synthesis: none;
   --ink: var(--dp-ink);
   --mid: var(--dp-secondary);
