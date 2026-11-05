@@ -342,6 +342,9 @@
   cursor: pointer;
 }
 .film-title-actions button svg { display: block; width: 18px; height: 18px; flex: none; }
+.film-title-actions .film-library-button { gap: 7px; }
+.film-title-actions .film-library-button > * { position: relative; left: -2px; }
+.film-title-actions .film-library-button svg { top: -1px; }
 .film-title-actions button:hover { border-color: var(--dp-link); }
 .film-title-actions button:focus-visible { outline: 2px solid var(--dp-link); outline-offset: 2px; }
 .film-title-actions .film-title-new { background: var(--dp-color-accent); border-color: var(--dp-color-accent); color: #fff; }
