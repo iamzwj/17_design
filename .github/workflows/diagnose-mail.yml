@@ -1,4 +1,4 @@
-name: Diagnose registration mail without sending
+name: Send one SMTP test
 on:
   workflow_dispatch:
 permissions:
@@ -13,32 +13,34 @@ jobs:
           printf '%s\n' "${{ secrets.SERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
-      - name: Check SMTP stages without sending a message
+
+      - name: Send the requested test email
         run: |
           ssh -i ~/.ssh/id_ed25519 ubuntu@49.235.121.231 python3 - <<'PYREMOTE'
-          import pathlib, smtplib, ssl, json
+          import pathlib, smtplib, ssl
+          from email.message import EmailMessage
           config={}
           for line in pathlib.Path('/home/ubuntu/17_design/.env').read_text().splitlines():
               if '=' in line:
                   k,v=line.split('=',1); config[k]=v.strip().strip('"').strip("'")
-          client=None
           stage='connect'
           try:
-              client=smtplib.SMTP_SSL(config['SMTP_HOST'],int(config.get('SMTP_PORT','465')),timeout=20,context=ssl.create_default_context())
-              stage='EHLO'; code,msg=client.ehlo(config.get('SMTP_HELO','onewo.com')); print(stage,code,msg.decode(errors='replace'))
-              stage='AUTH'; client.login(config['SMTP_USERNAME'],config['SMTP_PASSWORD']); print(stage,'accepted')
-              stage='MAIL FROM'; code,msg=client.mail(config['SMTP_USERNAME']); print(stage,code,msg.decode(errors='replace'))
-              if code==250:
-                  stage='RCPT TO'; code,msg=client.rcpt('shenxx09@onewo.com'); print(stage,code,msg.decode(errors='replace'))
-              client.rset()
+              client=smtplib.SMTP_SSL(config['SMTP_HOST'],int(config.get('SMTP_PORT','465')),timeout=20,context=ssl.create_default_context(),local_hostname=config.get('SMTP_HELO','onewo.com'))
+              stage='AUTH'
+              client.login(config['SMTP_USERNAME'],config['SMTP_PASSWORD'])
+              msg=EmailMessage()
+              msg['From']=config['SMTP_USERNAME']
+              msg['To']='289849464@qq.com'
+              msg['Subject']='D-Gen SMTP test'
+              msg.set_content('666')
+              stage='send'
+              client.send_message(msg)
+              print('SMTP accepted the test email')
+              client.close()
+          except smtplib.SMTPResponseException as e:
+              print(f'SMTP rejected at {stage}: {e.smtp_code}')
+              raise SystemExit(1)
           except Exception as e:
-              text=str(e)
-              for k in ['SMTP_USERNAME','SMTP_PASSWORD']:
-                  if config.get(k):text=text.replace(config[k],'[redacted]')
-              print(json.dumps({'stage':stage,'error':text}))
-          finally:
-              if client:
-                  try:client.quit()
-                  except Exception:client.close()
-          print('No DATA command issued; no email sent')
+              print(f'Test failed at {stage}: {type(e).__name__}')
+              raise SystemExit(1)
           PYREMOTE
