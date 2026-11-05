@@ -181,17 +181,24 @@ export function installAuth(app, { dataDir }) {
       socket.once('error', fail)
       socket.once('timeout', () => fail(new Error('SMTP 连接超时')))
     })
-    const command = async (value, expected) => {
+    const command = async (value, expected, stage = '连接') => {
       if (value) socket.write(`${value}\r\n`)
       const response = await read()
-      if (!expected.some((code) => response.startsWith(String(code)))) throw new Error(`邮件服务器拒绝请求 (${response.slice(0, 3)})`)
+      if (!expected.some((code) => response.startsWith(String(code)))) {
+        console.error('registration-smtp-rejected', { stage, code: response.slice(0, 3) })
+        const error = new Error(stage === '账号验证'
+          ? '验证码邮件服务暂不可用，请联系管理员zhangwj159检查发信账号的 SMTP 授权'
+          : '验证码邮件发送失败，请联系管理员zhangwj159处理')
+        error.status = 503
+        throw error
+      }
     }
     try {
       await command('', [220])
       await command(`EHLO ${process.env.SMTP_HELO || 'onewo.com'}`, [250])
-      await command('AUTH LOGIN', [334])
-      await command(Buffer.from(username).toString('base64'), [334])
-      await command(Buffer.from(password).toString('base64'), [235])
+      await command('AUTH LOGIN', [334], '账号验证')
+      await command(Buffer.from(username).toString('base64'), [334], '账号验证')
+      await command(Buffer.from(password).toString('base64'), [235], '账号验证')
       await command(`MAIL FROM:<${username}>`, [250])
       await command(`RCPT TO:<${email}>`, [250, 251])
       await command('DATA', [354])
@@ -200,11 +207,12 @@ export function installAuth(app, { dataDir }) {
       socket.write(`From: D-Gen <${username}>\r\nTo: <${email}>\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n\./g, '\r\n..')}\r\n.\r\n`)
       const delivered = await read()
       if (!delivered.startsWith('250')) throw new Error('邮件服务器未接受验证码邮件')
-      await command('QUIT', [221])
+      await command('QUIT', [221]).catch(() => {})
       return true
     } finally { socket.end() }
   }
 
+  const pendingCodeEmails = new Set()
   app.post('/api/auth/register/code', async (req, res, next) => {
     try {
       cleanup()
@@ -213,13 +221,17 @@ export function installAuth(app, { dataDir }) {
       try { ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
       if (store.users.some((item) => item.email === email)) return res.status(409).json({ error: '该邮箱已注册，请直接登录' })
       const recent = store.codes.find((item) => item.email === email && item.sentAt > Date.now() - 60_000)
-      if (recent) return res.status(429).json({ error: '请 60 秒后再获取验证码' })
+      if (recent) return res.status(429).json({ error: `验证码已发送，请 ${Math.max(1, Math.ceil((recent.sentAt + 60_000 - Date.now()) / 1000))} 秒后重试` })
+      if (pendingCodeEmails.has(email)) return res.status(429).json({ error: '验证码正在发送，请稍候' })
       const code = String(Math.floor(100000 + Math.random() * 900000))
-      store.codes = store.codes.filter((item) => item.email !== email)
-      store.codes.push({ email, codeHash: tokenHash(code), attempts: 0, sentAt: Date.now(), expiresAt: Date.now() + CODE_TTL })
-      save()
-      const sent = await sendCode(email, code)
-      res.json({ ok: true, ...(sent ? {} : { devCode: code }) })
+      pendingCodeEmails.add(email)
+      try {
+        const sent = await sendCode(email, code)
+        store.codes = store.codes.filter((item) => item.email !== email)
+        store.codes.push({ email, codeHash: tokenHash(code), attempts: 0, sentAt: Date.now(), expiresAt: Date.now() + CODE_TTL })
+        save()
+        res.json({ ok: true, ...(sent ? {} : { devCode: code }) })
+      } finally { pendingCodeEmails.delete(email) }
     } catch (error) { next(error) }
   })
 
