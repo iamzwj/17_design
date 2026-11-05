@@ -1,7 +1,7 @@
 :root {
   --dp-color-ground: #f0f1f4;
-  --dp-color-ink: #16191f;
-  --dp-color-ink-secondary: #454c58;
+  --dp-color-ink: #181818;
+  --dp-color-ink-secondary: #555555;
   --dp-color-ground-muted: #f3f4f6;
   --dp-color-rule: #dde0e6;
   --dp-color-accent: #164bb8;
@@ -29,6 +29,8 @@
   --dp-muted: var(--dp-color-ground-muted);
   --dp-ink: var(--dp-color-ink);
   --dp-secondary: var(--dp-color-ink-secondary);
+  --dp-hint: #737373;
+  --dp-placeholder: var(--dp-hint);
   --dp-panel-solid: var(--dp-color-panel);
   --dp-surface-opacity: 90%;
   --dp-panel: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent);
@@ -50,7 +52,8 @@
   --dp-ground: #060709;
   --dp-muted: #181a1f;
   --dp-ink: #f5f5f5;
-  --dp-secondary: #a5a8b0;
+  --dp-secondary: #b3b3b3;
+  --dp-hint: #969696;
   --dp-panel-solid: #111216;
   --dp-rule: #2a2d34;
   --dp-highlight: #4589ff;
