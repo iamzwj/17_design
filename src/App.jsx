@@ -65,7 +65,6 @@ const WORKSPACE_TITLES = {
 }
 const MORE_WORKSPACE_TITLES = {
   'please-day': ['PLEASE DAY', '朴里节头像框'],
-  'pulin-title': ['MORE TOOLS', '朴里节标题工具'],
   qr: ['BATCH COMPOSER', '批处理二维码'],
   logo: ['LOGO PROCESSING', 'Logo 处理'],
 }
@@ -567,7 +566,6 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={moreExpanded} onClick={() => { if (item.disabled) return; setMoreExpanded((value) => !value); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {moreExpanded && <div className="module-submenu" role="menu" aria-label="更多工具列表">
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'please-day' ? 'true' : undefined} className={active === 'more' && moreTool === 'please-day' ? 'active' : ''} onClick={() => { onSelectMoreTool('please-day'); onClose() }}>朴里节头像框</button>
-            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'pulin-title' ? 'true' : undefined} className={active === 'more' && moreTool === 'pulin-title' ? 'active' : ''} onClick={() => { onSelectMoreTool('pulin-title'); onClose() }}>朴里节标题工具</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>批处理二维码</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'logo' ? 'true' : undefined} className={active === 'more' && moreTool === 'logo' ? 'active' : ''} onClick={() => { onSelectMoreTool('logo'); onClose() }}>Logo 处理</button>
           </div>}
@@ -1951,7 +1949,7 @@ export default function App() {
     : active === 'admin'
       ? <AdminStudio key={workspaceToken}/>
     : active === 'more'
-      ? <MoreTools key={workspaceToken} tool={moreTool} onUserUpdate={setUser} onRequireLogin={() => openLogin('more-pulin-title')}/>
+      ? <MoreTools key={workspaceToken} tool={moreTool}/>
     : active === 'image'
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'content'

@@ -459,8 +459,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .waterfall-logo-recompose { background: #282d36; color: #eaf1ff; }
 :root[data-theme='dark'] .waterfall-logo-recompose:hover { background: #363d49; }
 
-/* Align the Pulin title heading with its full-width composer. */
-.workspace.pulin-title-workspace .pulin-title-page > .tool-page-header { width: 100%; margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
 
 /* The shell owns the page title. Tool-local headings remain for standalone previews. */
 .workspace-title-slot {
@@ -505,7 +503,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .has-workspace-title:has(> .skill-workspace) { --workspace-title-inset: calc(40px + max(0px, (100% - 1320px) / 2)); }
 .has-workspace-title:has(> :is(.please-day-workspace, .batch-workspace, .logo-tool-workspace)) { --workspace-title-inset: max(28px, (100% - 1180px) / 2); }
 .has-workspace-title:has(> .festival-poster-workspace) { --workspace-title-inset: max(24px, (100% - 1180px) / 2); }
-.has-workspace-title:has(> .pulin-title-workspace) { --workspace-title-inset: max(24px, (100% - 980px) / 2); }
 .has-workspace-title:has(> .admin-workspace) { --workspace-title-inset: max(28px, (100% - 1060px) / 2); }
 .has-workspace-title:has(> .archive-workspace) { --workspace-title-inset: max(24px, (100% - 900px) / 2); }
 @media (max-width: 1100px) {
@@ -522,7 +519,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
   .has-workspace-title:has(> .kb-page) { --workspace-title-inset: 16px; }
 }
 @media (max-width: 680px) {
-  .has-workspace-title:has(> .pulin-title-workspace) { --workspace-title-inset: 14px; }
 }
 @media (max-width: 650px) {
   .has-workspace-title:has(> .skill-workspace) { --workspace-title-inset: 16px; }
