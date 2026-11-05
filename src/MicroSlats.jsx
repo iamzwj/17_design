@@ -342,7 +342,7 @@ void main() {
     vec2 turned = vec2(c * offset.x + s * offset.y, c * offset.y - s * offset.x);
     vec2 halfSize = vec2(uSlat.x * 0.5, uSlat.y * 0.5 * field.g);
     float radius = uRound * min(halfSize.x, halfSize.y);
-    float alpha = clamp(0.5 - pill(turned, halfSize, radius) * uDpr, 0.0, 1.0) * field.r;
+    float alpha = clamp(0.5 - pill(turned, halfSize, radius) * uDpr, 0.0, 1.0) * smoothstep(0.32, 0.85, field.r);
     if (alpha > slat.a) slat = vec4(mix(uColor, uGlintColor, field.b) * alpha, alpha);
   }
   fragColor = slat + background * (1.0 - slat.a);
