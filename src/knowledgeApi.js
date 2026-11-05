@@ -4,13 +4,13 @@ import { readKnowledgeResponse } from './knowledgeResponse.js'
 export function knowledgeKey(suffix = '') { return `dgen-knowledge:${getAuthToken().slice(-12) || 'guest'}:${suffix}` }
 export function getKnowledgeSelection() { try { return JSON.parse(localStorage.getItem(knowledgeKey('context'))) || {} } catch { return {} } }
 export async function knowledgeRequest(path, body, method = body === undefined ? 'GET' : 'POST', { signal } = {}) {
-  const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const response = await fetch(`${base}/api/knowledge${path}`, { method, signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   return readKnowledgeResponse(response)
 }
 const enqueuePreview = createPreviewQueue(2)
 export async function knowledgeDownload(path, name, preview = false, { signal } = {}) {
-  const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const load = async () => {
     const response = await fetch(`${base}/api/knowledge${path}`, { signal, headers: { Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store' })
     if (!response.ok) throw new Error('文件不存在或无权访问')

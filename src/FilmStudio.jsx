@@ -10,7 +10,6 @@ import ComposerSelect from "./ComposerSelect.jsx";
 import "./filmStudio.css";
 const base = () =>
   String(
-    window.XIAODIE_CONFIG?.API_BASE_URL ||
       import.meta.env.VITE_API_BASE_URL ||
       "",
   ).replace(/\/$/, "");

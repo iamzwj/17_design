@@ -1,7 +1,5 @@
 import { getKnowledgeSelection } from './knowledgeApi.js'
-const configuredApiBase = typeof window !== 'undefined'
-  ? window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || ''
-  : import.meta.env.VITE_API_BASE_URL || ''
+const configuredApiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 const apiBase = String(configuredApiBase).trim().replace(/\/$/, '')
 const AUTH_TOKEN_KEY = 'diefa-auth-token-v1'
@@ -237,10 +235,7 @@ export async function cancelWaterfallTask(id) {
 
 export async function fetchBatchImage(sourceUrl, { signal } = {}) {
   const path = `/api/batch-image?url=${encodeURIComponent(sourceUrl)}`
-  // Cloudflare Pages forwards same-origin /api requests through public/_worker.js.
-  // Keeping batch downloads on the page origin avoids browser CORS failures on deploy previews.
-  const usePageProxy = typeof window !== 'undefined' && window.location.hostname.endsWith('.pages.dev')
-  const response = await fetch(usePageProxy ? path : apiUrl(path), {
+  const response = await fetch(apiUrl(path), {
     headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
     signal,
   })
@@ -253,9 +248,7 @@ export async function fetchBatchImage(sourceUrl, { signal } = {}) {
 
 export async function fetchBatchSpreadsheet(sourceUrl, { signal } = {}) {
   const path = `/api/batch-spreadsheet?url=${encodeURIComponent(sourceUrl)}`
-  // Keep this on the same origin for Pages previews, just like QR image downloads.
-  const usePageProxy = typeof window !== 'undefined' && window.location.hostname.endsWith('.pages.dev')
-  const response = await fetch(usePageProxy ? path : apiUrl(path), {
+  const response = await fetch(apiUrl(path), {
     headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
     signal,
   })

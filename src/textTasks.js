@@ -9,7 +9,7 @@ function session() {
   return value
 }
 async function request(kind, id, payload) {
-  const base = String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const response = await fetch(`${base}/api/${kind}/tasks${payload ? '' : `/${encodeURIComponent(id)}`}`, {
     method: payload ? 'POST' : 'GET', cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'X-Text-Session': session(), ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}) },

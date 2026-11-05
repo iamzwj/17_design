@@ -1,6 +1,6 @@
 import { getAuthToken } from './api.js'
 import { readLocalSkill, writeLocalSkill, removeLocalSkill } from './localSkillFiles.js'
-const base = () => String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const base = () => String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 export async function externalRequest(path, body, method = body === undefined ? 'GET' : 'POST', token = getAuthToken()) {
   const response = await fetch(`${base()}/api/skills/external${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || '外部 Skill 服务暂时不可用，请重试'); return data

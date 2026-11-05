@@ -1,5 +1,5 @@
 import { getAuthToken } from './api.js'
-const base = () => String(window.XIAODIE_CONFIG?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const base = () => String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 export async function skillRequest(path = '', body, method = body === undefined ? 'GET' : 'POST') {
   const response = await fetch(`${base()}/api/skills${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   const data = await response.json().catch(() => ({}))

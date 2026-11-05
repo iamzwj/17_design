@@ -1,6 +1,6 @@
 import {useEffect,useState,useRef} from "react";
 import {getAuthToken} from "./api.js";
-const base=()=>String(window.XIAODIE_CONFIG?.API_BASE_URL||import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
+const base=()=>String(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 export default function FilmMedia({ project, file, characterId, video = false, audio = false }) {
   const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
   const container=useRef(null);const [visible,setVisible]=useState(false);

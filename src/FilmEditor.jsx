@@ -42,7 +42,7 @@ function DeliveryPanel({project:p,request}) {
 }
 export function FileButton({project,file,label='下载',request:_request}) {
   const [error,setError]=useState('');
-  return <><button onClick={async()=>{try{const {getAuthToken}=await import('./api.js');const base=String(window.XIAODIE_CONFIG?.API_BASE_URL||import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');const r=await fetch(base+`/api/films/${project}/files/${file}`,{headers:{Authorization:`Bearer ${getAuthToken()}`}});if(!r.ok)throw Error('下载失败');const url=URL.createObjectURL(await r.blob()),a=document.createElement('a');a.href=url;a.download=file;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}catch(e){setError(e.message);}}}>{label}</button>{error&&<small role="alert">{error}</small>}</>;
+  return <><button onClick={async()=>{try{const {getAuthToken}=await import('./api.js');const base=String(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');const r=await fetch(base+`/api/films/${project}/files/${file}`,{headers:{Authorization:`Bearer ${getAuthToken()}`}});if(!r.ok)throw Error('下载失败');const url=URL.createObjectURL(await r.blob()),a=document.createElement('a');a.href=url;a.download=file;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}catch(e){setError(e.message);}}}>{label}</button>{error&&<small role="alert">{error}</small>}</>;
 }
 function ScriptEditor({project:p,send}) {
   const key='film-script-draft:'+p.id+':'+(p.scriptRevision||1);

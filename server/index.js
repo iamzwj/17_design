@@ -1639,7 +1639,7 @@ app.post('/api/text', requireAuth, knowledgeMiddleware('text'), handleTextComple
 app.post('/api/compliance/review', (req, res, next) => (req.headers.authorization || req.body.knowledge?.brandId) ? requireAuth(req, res, next) : next(), knowledgeMiddleware('compliance'), handleTextCompletion)
 
 // On the server deployment, user reference images are stored on the instance
-// instead of passing through Cloudflare KV or requiring a Google Drive session.
+// without requiring a Google Drive session.
 app.post('/api/google-drive/uploads', requireAuth, async (req, res, next) => {
   try {
     const { source, name } = req.body || {}

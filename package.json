@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "concurrently -k \"node --watch server/index.js\" \"vite\"",
     "build": "vite build",
-    "build:pages": "vite build --outDir cloudflare-pages",
     "start": "node server/index.js",
     "check": "eslint ."
   },
