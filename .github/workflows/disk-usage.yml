@@ -1,0 +1,24 @@
+name: Inspect disk usage
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
+      - name: Inspect remaining disk usage without deletion
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ubuntu@49.235.121.231 <<'REMOTE'
+            sudo du -x -h -d 1 / /home /var /tmp /root /opt 2>/dev/null | sort -h | tail -45
+            du -h -d 1 /home/ubuntu /home/ubuntu/.cache /home/ubuntu/.npm /home/ubuntu/17_design 2>/dev/null | sort -h | tail -35
+            sudo journalctl --disk-usage
+            sudo find /var/log /tmp /home/ubuntu/.cache /home/ubuntu/.npm -xdev -type f -size +200M -printf '%s %p\n' 2>/dev/null | sort -nr | head -20
+            true
+          REMOTE
