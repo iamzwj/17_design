@@ -6,6 +6,7 @@ import {workflowStages} from '../shared/filmWorkflow.js';
 import {filmTaskName} from '../shared/filmProgress.js';
 import FilmEditor from './FilmEditor.jsx';
 import FilmTimeline from './FilmTimeline.jsx';
+import ComposerSelect from './ComposerSelect.jsx';
 import './filmWorkbench.css';
 const labels={queued:'等待调度',running:'正在制作',pausing:'正在暂停调度',paused:'已暂停',cancelled:'已暂停',failed:'执行失败',review:'等待分镜确认','needs-input':'需要人工处理',succeeded:'成片已完成'};
 export default function FilmWorkbench({project:p,lastSynced,request,onProject,onDownload}) {
