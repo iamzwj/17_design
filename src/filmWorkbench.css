@@ -25,6 +25,7 @@
 .fw-version-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:14px}.fw-version-list>li{border:1px solid var(--fw-border);padding:12px;border-radius:8px}.fw-version-list li>header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size: var(--dp-typography-metadata);margin-bottom:10px}.fw-version-list time{font-size: var(--dp-typography-label);color:var(--fw-muted)}.fw-version-list li>p{font-size: var(--dp-typography-metadata);line-height:1.8;max-height:65px;overflow:auto;white-space:pre-wrap}.fw-version-preview .film-media img,.fw-version-preview .film-media video{height:150px!important;max-height:150px;object-fit:contain}
 
 .fw-script-body.fw-original-story{font-size: var(--dp-typography-body);line-height:1.9}
+:root[data-theme='dark'] .fw-script-body { color: #c8c8c8; font-weight: 400; }
 
 
 .fw-stage-library { display: grid; gap: 7px; }
