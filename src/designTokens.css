@@ -30,7 +30,7 @@
   --dp-ink: var(--dp-color-ink);
   --dp-secondary: var(--dp-color-ink-secondary);
   --dp-panel-solid: var(--dp-color-panel);
-  --dp-surface-opacity: 5%;
+  --dp-surface-opacity: 90%;
   --dp-panel: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent);
   --dp-rule: var(--dp-color-rule);
   --dp-highlight: var(--dp-color-accent);
