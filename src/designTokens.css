@@ -29,7 +29,9 @@
   --dp-muted: var(--dp-color-ground-muted);
   --dp-ink: var(--dp-color-ink);
   --dp-secondary: var(--dp-color-ink-secondary);
-  --dp-panel: var(--dp-color-panel);
+  --dp-panel-solid: var(--dp-color-panel);
+  --dp-surface-opacity: 5%;
+  --dp-panel: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent);
   --dp-rule: var(--dp-color-rule);
   --dp-highlight: var(--dp-color-accent);
   --dp-link: var(--dp-highlight);
@@ -43,7 +45,7 @@
   --dp-muted: #282d36;
   --dp-ink: var(--dp-color-on-field);
   --dp-secondary: var(--dp-color-on-field-secondary);
-  --dp-panel: #20242c;
+  --dp-panel-solid: #20242c;
   --dp-rule: #454c58;
   --dp-highlight: #6da7ff;
   --dp-selected: #123568;

@@ -680,3 +680,12 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .global-background { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .14; animation: globalBackgroundBreathe 14s ease-in-out infinite; }
 @keyframes globalBackgroundBreathe { 0%, 100% { opacity: .10; } 50% { opacity: .18; } }
 @media (prefers-reduced-motion: reduce) { .global-background { animation: none; opacity: .14; } }
+
+/* Translucent container fills only; text, media and borders stay opaque. */
+:root .skill-workspace {
+  --sk-paper: var(--dp-panel);
+  --sk-panel: var(--dp-panel);
+}
+:root .app-shell :is(.glass-strong, .sidebar, [class$="-card"], [class*="-card "], [class$="-panel"], [class*="-panel "], .video-waterfall-task, .waterfall-composer) {
+  background-color: var(--dp-panel);
+}
