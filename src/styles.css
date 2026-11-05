@@ -545,12 +545,12 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   border-color: transparent;
 }
 :root .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) {
-  background: #d4e2ff;
-  color: #073da9;
+  background: #c7ddff;
+  color: #003cae;
 }
 :root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) {
-  background: #344f80;
-  color: #d5e3ff;
+  background: #174a9a;
+  color: #e2edff;
 }
 :root .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) > svg { color: inherit; }
 :root :is(.send-button, .new-task, .film-studio .film-primary, .skill-page .skill-primary, .kb-page .kb-primary) {
