@@ -43,3 +43,24 @@
   .please-day-editor-bar { grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
   .please-day-editor-bar small { font-size: var(--dp-typography-metadata); }
 }
+
+/* Frame choices use the same 90% surface fill as other controls. */
+:root .please-day-frame-tabs button {
+  background: var(--dp-panel);
+  border-color: var(--dp-rule);
+  color: var(--dp-secondary);
+}
+:root .please-day-frame-tabs button:hover {
+  background: var(--dp-muted-surface);
+  border-color: var(--dp-highlight);
+  color: var(--dp-highlight);
+}
+:root .please-day-frame-tabs button.active {
+  background: color-mix(in srgb, var(--dp-selected) var(--dp-surface-opacity), transparent);
+  border-color: var(--dp-highlight);
+  color: var(--dp-highlight);
+}
+:root .please-day-frame-tabs button:focus-visible {
+  outline: 2px solid var(--dp-highlight);
+  outline-offset: 3px;
+}
