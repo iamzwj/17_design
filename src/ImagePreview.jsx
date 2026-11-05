@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useMemo, useState } from 'react'
 import { downloadGeneratedImage } from './api.js'
 import { Icon } from './icons.jsx'
@@ -34,7 +35,7 @@ export default function ImagePreview({ url, urls, prompt, onClose }) {
     try {
       await downloadGeneratedImage(activeUrl, prompt)
     } catch (error) {
-      window.alert(`下载失败：${error.message || '请稍后重试'}`)
+      window.alert(`下载失败：${userError(error.message) || '请稍后重试'}`)
     }
   }
 

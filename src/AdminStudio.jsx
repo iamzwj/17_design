@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useMemo, useState } from 'react'
 import { getAdminOverview } from './api.js'
 import { Icon } from './icons.jsx'
@@ -35,7 +36,7 @@ export default function AdminStudio() {
 
   async function refresh() {
     setLoading(true); setError('')
-    try { setOverview(await getAdminOverview()) } catch (requestError) { setError(requestError.message || '后台数据加载失败') }
+    try { setOverview(await getAdminOverview()) } catch (requestError) { setError(userError(requestError.message) || '后台数据加载失败') }
     finally { setLoading(false) }
   }
 

@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useRef, useState } from "react";
 import FilmMedia from "./FilmMedia.jsx";
 import "./filmCharacters.css";
@@ -44,7 +45,7 @@ export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
     request("/characters").then((result) => {
       if (active) setData(result);
     }).catch((error) => {
-      if (active) setError(error.message);
+      if (active) setError(userError(error.message));
     });
     return () => { active = false; };
   }, [request, retry]);
@@ -52,7 +53,7 @@ export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
     setBusy(true);
     setError("");
     try { await work(); }
-    catch (error) { setError(error.message); }
+    catch (error) { setError(userError(error.message)); }
     finally { setBusy(false); }
   }
   const items = section === "brand" ? data?.brandIPs : data?.characters;
@@ -112,7 +113,7 @@ export function CharacterDecision({ project, request, send, busy }) {
             setUploading(true);
             setError("");
             try { await reference(role.id, { image: await readImage(file) }); }
-            catch (error) { setError(error.message); }
+            catch (error) { setError(userError(error.message)); }
             finally { setUploading(false); }
           }}/>
           <button disabled={disabled} onClick={() => setSelected(role)}>角色库</button>
@@ -143,7 +144,7 @@ export function SaveCharacterButton({ project, asset, request, notice }) {
       notice("已加入角色库");
     } catch (error) {
       setState("idle");
-      notice(error.message);
+      notice(userError(error.message));
     }
   }}><WarehouseIcon/></button>;
 }

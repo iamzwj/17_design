@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from './icons.jsx'
 import { externalSkillFit } from '../shared/externalSkillFit.js'
@@ -16,7 +17,7 @@ const POPULAR_LABELS = {
 export default function DiscoverSkills({ user, onLogin, onUse }) {
   const owner = user?.id || 'guest'
   const [state, setState] = useState(() => readDiscovery(owner)), [installed, setInstalled] = useState([]), [loading, setLoading] = useState(false), [localDetail, setLocalDetail] = useState(null)
-  const load = useCallback(async () => { if (!user) return; setLoading(true); try { const records = await installedLocalSkills(); setInstalled(records) } catch (error) { updateDiscovery(owner, { error: error.message }) } finally { setLoading(false) } }, [user, owner])
+  const load = useCallback(async () => { if (!user) return; setLoading(true); try { const records = await installedLocalSkills(); setInstalled(records) } catch (error) { updateDiscovery(owner, { error: userError(error.message) }) } finally { setLoading(false) } }, [user, owner])
   useEffect(() => {
     if (!user) return
     recoverDiscovery(owner)
@@ -40,7 +41,7 @@ export default function DiscoverSkills({ user, onLogin, onUse }) {
   const visibleInstalled = installed.filter((record) => matches(record, state.installedFilter || 'all'))
   const canUsePreview = preview?.compatibility.usable && fitOf(preview).targets.length > 0
   const running = Object.entries(state.jobs).filter(([, job]) => job.status === 'running')
-  async function viewLocal(record) { try { setLocalDetail({ record, markdown: await localSkillText(owner, record) }) } catch (error) { patch({ error: error.message }); void load() } }
+  async function viewLocal(record) { try { setLocalDetail({ record, markdown: await localSkillText(owner, record) }) } catch (error) { patch({ error: userError(error.message) }); void load() } }
   function exportText(markdown, name = 'SKILL.md') { const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' })), a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000) }
   const use = (record, target) => { if (!record.localReady || !record.compatibility.usable) return; onUse(record, target) }
   return <section className="skill-workspace"><div className="skill-page discover-page">

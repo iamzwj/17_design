@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
@@ -30,7 +31,7 @@ export default function SkillLibrary({ user, onLogin, onUse }) {
   useEffect(() => {
     let live = true
     if (!user) return
-    const refresh = async () => { try { await load() } catch (e) { if (live) setError(e.message) } finally { if (live) setLoading(false) } }
+    const refresh = async () => { try { await load() } catch (e) { if (live) setError(userError(e.message)) } finally { if (live) setLoading(false) } }
     void refresh()
     const interval = setInterval(() => { void refresh() }, 4000)
     return () => { live = false; clearInterval(interval) }
@@ -38,7 +39,7 @@ export default function SkillLibrary({ user, onLogin, onUse }) {
   async function action(fn) {
     if (lock.current) return
     lock.current = true; setBusy(true); setError(''); setNotice('')
-    try { await fn() } catch (e) { setError(e.message) } finally { lock.current = false; setBusy(false) }
+    try { await fn() } catch (e) { setError(userError(e.message)) } finally { lock.current = false; setBusy(false) }
   }
   async function importFile(event) {
     const file = event.target.files?.[0]
@@ -88,7 +89,7 @@ export default function SkillLibrary({ user, onLogin, onUse }) {
     const task = session.proposal
     edit(task.result); update({ proposal: null, step: 2, handled: [...session.handled, task.id] }); setNotice('已应用到本地草稿，请保存或发布。')
   }
-  async function changeView(view) { update({ view }); setLoading(true); try { const data = await skillRequest(view === 'mine' ? '?mine=1' : ''); setSkills(data.skills) } catch (e) { setError(e.message) } finally { setLoading(false) } }
+  async function changeView(view) { update({ view }); setLoading(true); try { const data = await skillRequest(view === 'mine' ? '?mine=1' : ''); setSkills(data.skills) } catch (e) { setError(userError(e.message)) } finally { setLoading(false) } }
   const visibleTasks = tasks.filter((t) => !session.handled.includes(t.id)).sort((a, b) => b.createdAt - a.createdAt)
   const filtered = skills.filter((s) => (category === '全部' || s.category === category) && `${s.title} ${s.summary} ${s.author}`.toLowerCase().includes(query.trim().toLowerCase()))
   const editor = session.editor

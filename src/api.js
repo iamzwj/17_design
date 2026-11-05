@@ -1,3 +1,4 @@
+import { localizeErrors } from './userErrors.js'
 import { getKnowledgeSelection } from './knowledgeApi.js'
 const configuredApiBase = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -74,7 +75,7 @@ async function post(path, body, signal) {
     error.status = 0
     throw error
   }
-  const data = await response.json().catch(() => {
+  const data = await response.json().then(localizeErrors).catch(() => {
     throw new Error(signal?.aborted ? '回复等待超时，请稍后重试' : '服务器返回内容不完整，请重试')
   })
   if (!response.ok) {
@@ -95,7 +96,7 @@ export const recordPleaseDayAvatarDownload = () => post('/api/please-day/avatar-
 
 export async function getPleaseDayAvatarDownloadCount() {
   const response = await fetch(apiUrl('/api/please-day/avatar-downloads'))
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载次数失败 (${response.status})`)
   return data
 }
@@ -104,7 +105,7 @@ export async function getCurrentAccount() {
   const response = await fetch(apiUrl('/api/auth/me'), {
     headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
   })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `登录状态无效 (${response.status})`)
   return data
 }
@@ -114,7 +115,7 @@ export async function getAdminOverview() {
     cache: 'no-store',
     headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
   })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载后台数据失败 (${response.status})`)
   return data
 }
@@ -124,7 +125,7 @@ export const createFestivalPosterTask = (payload) => post('/api/festival-posters
 export const generateFestivalPosterImages = (id, plans) => post(`/api/festival-posters/tasks/${encodeURIComponent(id)}/generate`, { plans })
 export async function listFestivalPosterTasks() {
   const response = await fetch(apiUrl('/api/festival-posters/tasks'), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.error || `加载节日海报历史失败 (${response.status})`)
     error.status = response.status
@@ -134,7 +135,7 @@ export async function listFestivalPosterTasks() {
 }
 export async function getFestivalPosterTask(id) {
   const response = await fetch(apiUrl(`/api/festival-posters/tasks/${encodeURIComponent(id)}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.error || `加载节日海报任务失败 (${response.status})`)
     error.status = response.status
@@ -160,13 +161,13 @@ export const uploadVideoReference = (payload) => post('/api/video/references', p
 export const createVideoTask = (payload) => post('/api/video/tasks', payload)
 export async function listVideoTasks() {
   const response = await fetch(apiUrl('/api/video/tasks'), { headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载视频任务失败 (${response.status})`)
   return data
 }
 export async function getVideoTask(id) {
   const response = await fetch(apiUrl(`/api/video/tasks/${encodeURIComponent(id)}`), { headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载视频任务失败 (${response.status})`)
   return data
 }
@@ -177,7 +178,7 @@ export const createWaterfallTask = async (payload) => {
 
 export async function getWaterfallTask(id) {
   const response = await fetch(apiUrl(`/api/waterfall/tasks/${encodeURIComponent(id)}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) {
     const error = new Error(data.error || `加载任务失败 (${response.status})`)
     error.status = response.status
@@ -221,14 +222,14 @@ export function waitForConversationImageTask(id) {
 
 export async function listWaterfallTasks(offset = 0, limit = 8) {
   const response = await fetch(apiUrl(`/api/waterfall/tasks?offset=${offset}&limit=${limit}`), { cache: 'no-store', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `加载任务失败 (${response.status})`)
   return { ...data, tasks: (data.tasks || []).map(hydrateWaterfallTask) }
 }
 
 export async function cancelWaterfallTask(id) {
   const response = await fetch(apiUrl(`/api/waterfall/tasks/${encodeURIComponent(id)}`), { method: 'DELETE', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `停止任务失败 (${response.status})`)
   return { ...data, task: hydrateWaterfallTask(data.task) }
 }
@@ -240,7 +241,7 @@ export async function fetchBatchImage(sourceUrl, { signal } = {}) {
     signal,
   })
   if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
+    const data = await response.json().then(localizeErrors).catch(() => ({}))
     throw new Error(data.error || `图片下载失败 (${response.status})`)
   }
   return response.blob()
@@ -252,7 +253,7 @@ export async function fetchBatchSpreadsheet(sourceUrl, { signal } = {}) {
     headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {},
     signal,
   })
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().then(localizeErrors).catch(() => ({}))
   if (!response.ok) throw new Error(data.error || `在线表格读取失败 (${response.status})`)
   return data
 }

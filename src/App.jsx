@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import ToolPageHeader from './ToolPageHeader.jsx'
 import FilmStudio, { filmRequest } from './FilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
@@ -644,7 +645,7 @@ function AuthScreen({ onAuthenticated, onClose, requiredModule = 'general' }) {
         const result = await registerAccount({ email: normalizedEmail, code, password, remember })
         saveAuthToken(result.token, remember); onAuthenticated(result.user)
       }
-    } catch (requestError) { setError(requestError.message) }
+    } catch (requestError) { setError(userError(requestError.message)) }
     finally { setLoading(false) }
   }
 
@@ -682,7 +683,7 @@ function ChangePasswordModal({ onClose }) {
     if (newPassword !== confirmPassword) { setError('两次输入的新密码不一致'); return }
     setLoading(true)
     try { await changeAccountPassword({ currentPassword, newPassword }); window.alert('密码修改成功'); onClose() }
-    catch (requestError) { setError(requestError.message) }
+    catch (requestError) { setError(userError(requestError.message)) }
     finally { setLoading(false) }
   }
   return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="password-modal glass-strong"><button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button><span className="modal-icon"><Icon name="lock" size={22}/></span><h2>修改密码</h2><p>新密码必须同时包含字母和数字</p><form className="auth-form" onSubmit={submit}><label><span>当前密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}/></div></label><label><span>新密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="8–64 位字母与数字"/></div></label><label><span>确认新密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}/></div></label>{error && <div className="auth-error">{error}</div>}<button className="auth-submit" disabled={loading}>{loading ? '保存中…' : '保存新密码'}</button></form></section></div>
@@ -775,9 +776,9 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
           setEditImage(nextEditImage)
           onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: nextEditImage, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: true })
         }).catch((err) => {
-          const failedMessages = [...(conversation.messages || []), { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(conversation.runningStartedAt || Date.now()).getTime(), failedAt: new Date().toISOString() }]
+          const failedMessages = [...(conversation.messages || []), { role: 'error', content: userError(err.message), elapsedMs: Date.now() - new Date(conversation.runningStartedAt || Date.now()).getTime(), failedAt: new Date().toISOString() }]
           setMessages(failedMessages)
-          setError(err.message)
+          setError(userError(err.message))
           onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: conversation.editImage || null, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
         }).finally(() => { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) })
         return
@@ -836,7 +837,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         const replacements = new Map(results.filter((result) => result.status === 'fulfilled').map((result) => [result.value.source, result.value.url]))
         if (replacements.size) setReferences((current) => current.map((reference) => replacements.has(reference.src) ? { ...reference, src: replacements.get(reference.src) } : reference))
       })
-    } catch (error) { setError(error.message || '图片读取失败') }
+    } catch (error) { setError(userError(error.message) || '图片读取失败') }
   }
 
   async function addFiles(event) {
@@ -893,8 +894,8 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       } catch {
         onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 50) + creditCost } : current)
       }
-      setError(err.message)
-      const failedMessages = [...userMessages, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
+      setError(userError(err.message))
+      const failedMessages = [...userMessages, { role: 'error', content: userError(err.message), elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
       setMessages(failedMessages)
       scrollToLatestResult()
       onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
@@ -990,7 +991,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         for (const task of fetchedTasks) {
           if (task.slots?.some((slot) => slot.phase === 'needs-local-skill') && !localSkillResumeAttempts.current.has(task.id)) {
             localSkillResumeAttempts.current.add(task.id)
-            void resumeLocalSkillTask(task).catch((error) => { if (active) setError(error.message) })
+            void resumeLocalSkillTask(task).catch((error) => { if (active) setError(userError(error.message)) })
           }
         }
         setTasks((current) => {
@@ -1095,7 +1096,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         const replacements = new Map(results.filter((result) => result.status === 'fulfilled').map((result) => [result.value.source, result.value.url]))
         if (replacements.size) setReferences((current) => current.map((reference) => replacements.has(reference.src) ? { ...reference, src: replacements.get(reference.src) } : reference))
       })
-    } catch (error) { setError(error.message || '图片读取失败') }
+    } catch (error) { setError(userError(error.message) || '图片读取失败') }
   }
 
   function appendGeneratedReference(source) {
@@ -1140,7 +1141,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         setRefreshToken((current) => current + 1)
         return
       }
-      setTasks((current) => current.map((item) => item.id === optimisticTask.id ? failedWaterfallTask(item, err.message) : item))
+      setTasks((current) => current.map((item) => item.id === optimisticTask.id ? failedWaterfallTask(item, userError(err.message)) : item))
     }
     finally { setSubmitting(false) }
   }
@@ -1157,7 +1158,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         setError('该任务已失效，已从列表移除。')
         return
       }
-      setError(err.message)
+      setError(userError(err.message))
     }
   }
 
@@ -1215,7 +1216,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
         setRefreshToken((current) => current + 1)
         return
       }
-      setTasks((current) => current.map((item) => item.id === optimisticTask.id ? failedWaterfallTask(item, `再次生成失败：${err.message || '请求未完成，请稍后重试'}`) : item))
+      setTasks((current) => current.map((item) => item.id === optimisticTask.id ? failedWaterfallTask(item, `再次生成失败：${userError(err.message) || '请求未完成，请稍后重试'}`) : item))
     })
   }
 
@@ -1248,7 +1249,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
           return <article className="waterfall-task" key={task.id}>
           <header><div className="waterfall-task-leading">{referenceImages.length > 0 && <div className="waterfall-reference-summary"><button type="button" onClick={() => toggleTaskReferences(task.id)} aria-expanded={referencesExpanded} aria-label={`${referencesExpanded ? '收起' : '展开'}参考图`} title={`${referencesExpanded ? '收起' : '展开'}参考图`}><span className="waterfall-reference-stack" aria-hidden="true">{referenceThumbnails.slice(0, 3).map((url, index) => <QuietReferenceImage src={url} key={`${url}-${index}`}/>)}</span></button>{referencesExpanded && <div className="waterfall-reference-list">{referenceImages.map((url, index) => <button type="button" key={`${url}-${index}`} onClick={() => setPreviewImage({ url: referenceThumbnails[index], prompt: task.prompt })} aria-label={`预览参考图 ${index + 1}`}><QuietReferenceImage src={referenceThumbnails[index]}/></button>)}</div>}</div>}<div className="waterfall-task-info"><div className="waterfall-prompt-line"><b>{task.prompt}</b><button type="button" aria-label="复制提示词" title="复制提示词" onClick={() => navigator.clipboard.writeText(task.prompt)}><Icon name="copy" size={14}/></button></div><small>{task.skillSnapshot?.title && `${task.skillSnapshot.title} · `}{new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · {imageModelLabel(task.model)} · {task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO} · {waterfallPixelSize(task)}</small></div></div>{task.status === 'running' ? !task.optimistic && <div className="waterfall-task-actions"><button type="button" onClick={() => editTask(task)}>编辑</button><button className="stop" type="button" onClick={() => stopTask(task.id)}>停止</button></div> : <div className="waterfall-task-actions">{isFailedWaterfallTask(task) && <span className="waterfall-task-status failed" title={task.error || task.slots?.find((slot) => slot.error)?.error || '生成失败'}>生图失败</span>}{task.status === 'cancelled' && <span className="waterfall-task-status cancelled">已取消任务</span>}<button type="button" onClick={() => editTask(task)}>重新编辑</button><button type="button" onClick={() => generateAgain(task)}>再次生成</button></div>}</header>
           {visibleSlots.length > 0 && <div className={`waterfall-grid count-${visibleSlots.length}`}>{visibleSlots.map((slot) => <div className={`waterfall-slot ${slot.status}`} style={{ aspectRatio: (task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO).replace(/[:x]/, ' / ') }} key={slot.index}>
-            {slot.status === 'running' && slot.phase === 'needs-local-skill' && <div className="waterfall-brand-progress" role="status">等待本机 Skill 文件，请在发现 Skill → 已安装中重新下载</div>}{slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage} onRetryLogo={async () => { try { await retryWaterfallLogo(task.id, slot.index); setRefreshToken((v) => v + 1) } catch (err) { setError(err.message) } }}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
+            {slot.status === 'running' && slot.phase === 'needs-local-skill' && <div className="waterfall-brand-progress" role="status">等待本机 Skill 文件，请在发现 Skill → 已安装中重新下载</div>}{slot.status === 'running' && slot.phase === 'brand-logo' && <div className="waterfall-brand-progress" role="status">检查Logo并合成原图…</div>}{slot.status === 'succeeded' && slot.url ? <WaterfallResultImage slot={slot} prompt={task.prompt} urls={visibleSlots.filter((item) => item.status === 'succeeded' && item.url).map((item) => waterfallThumbnailUrl(item.url))} onPreview={setPreviewImage} onRetryLogo={async () => { try { await retryWaterfallLogo(task.id, slot.index); setRefreshToken((v) => v + 1) } catch (err) { setError(userError(err.message)) } }}/> : <div className="bubble-loader" aria-label="生成中"><i/><i/><i/></div>}
           </div>)}</div>}
         </article>})}
       </div>}
@@ -1267,7 +1268,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
           <KnowledgeContext tool="image"/>
         </div><div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model, count)}</b> 分</span><button className="send-button" type="button" aria-label={submitting ? '提交中' : `生成，消耗 ${imageCreditCost(model, count)} 积分`} onClick={submitTask} disabled={!prompt.trim() || submitting}><Icon name="arrowUp" size={18}/></button></div></div>
       </div>
-      {error && <small className="composer-note error">{error}{error.includes('Google Drive 授权已失效') && <button className="drive-reconnect" type="button" onClick={() => { void reconnectGoogleDrive().catch((err) => setError(err.message || '无法打开 Google Drive 授权页面')) }}>重新连接 Google Drive</button>}</small>}
+      {error && <small className="composer-note error">{error}{error.includes('Google Drive 授权已失效') && <button className="drive-reconnect" type="button" onClick={() => { void reconnectGoogleDrive().catch((err) => setError(userError(err.message) || '无法打开 Google Drive 授权页面')) }}>重新连接 Google Drive</button>}</small>}
     </div>
     {previewImage && <ImagePreview url={previewImage.url || previewImage} urls={previewImage.urls} prompt={previewImage.prompt} onClose={() => setPreviewImage(null)}/>} 
   </section>
@@ -1502,7 +1503,7 @@ function TextStudio({ type, conversation, onSave }) {
             updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
         }).catch((error) => {
-          if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: error.message, failedAt: new Date().toISOString() }])
+          if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: userError(error.message), failedAt: new Date().toISOString() }])
         }).finally(() => {
           finishTask(task.id)
           saveTaskState(messagesRef.current, { unreadComplete: true })
@@ -1557,7 +1558,7 @@ function TextStudio({ type, conversation, onSave }) {
       }))
       setAttachments((current) => [...current, ...encoded].slice(0, 4))
       setAttachmentError('')
-    } catch (error) { setAttachmentError(error.message || '文件解析失败') }
+    } catch (error) { setAttachmentError(userError(error.message) || '文件解析失败') }
   }
 
   async function addComplianceFiles(event) {
@@ -1627,7 +1628,7 @@ function TextStudio({ type, conversation, onSave }) {
           return { ...file, src: url }
         }))
       } catch (error) {
-        setAttachmentError(error.message || '图片保存失败，请重试')
+        setAttachmentError(userError(error.message) || '图片保存失败，请重试')
         setInput((current) => current || submittedInput)
         setAttachments((current) => current.length ? current : submittedAttachments)
       } finally {
@@ -1667,11 +1668,11 @@ function TextStudio({ type, conversation, onSave }) {
       completed = true
     } catch (err) {
       if (needsImageUpload) {
-        setAttachmentError(err.message || '图片保存失败，请重试')
+        setAttachmentError(userError(err.message) || '图片保存失败，请重试')
         setInput((current) => current || submittedInput)
         setAttachments((current) => current.length ? current : submittedAttachments)
       } else {
-        const failedMessages = [...messagesRef.current, { role: 'error', content: err.message, elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
+        const failedMessages = [...messagesRef.current, { role: 'error', content: userError(err.message), elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
         updateMessages(failedMessages)
         scrollToLatestResult()
       }

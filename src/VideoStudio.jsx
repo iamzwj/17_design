@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createVideoTask, fileToDataUrl, getVideoTask, listVideoTasks, uploadVideoReference } from './api.js'
 import { Icon } from './icons.jsx'
@@ -94,7 +95,7 @@ export default function VideoStudio() {
       window.requestAnimationFrame(() => {
         if (resultsRef.current) resultsRef.current.scrollTop = 0
       })
-    }).catch((requestError) => setError(requestError.message)).finally(() => setLoadingTasks(false))
+    }).catch((requestError) => setError(userError(requestError.message))).finally(() => setLoadingTasks(false))
   }, [])
 
   useEffect(() => {
@@ -138,7 +139,7 @@ export default function VideoStudio() {
         return { name: prepared.name, src: await fileToDataUrl(prepared), kind: 'image' }
       }))
       setReferences((current) => [...current, ...next]); setError('')
-    } catch (uploadError) { setError(uploadError.message || '图片读取失败') }
+    } catch (uploadError) { setError(userError(uploadError.message) || '图片读取失败') }
   }
 
   async function appendVideos(files) {
@@ -150,7 +151,7 @@ export default function VideoStudio() {
     try {
       const next = await Promise.all(valid.map(async (file) => ({ name: file.name, src: await fileToDataUrl(file), kind: 'video' })))
       setReferences((current) => [...current, ...next]); setError('')
-    } catch (uploadError) { setError(uploadError.message || '视频读取失败') }
+    } catch (uploadError) { setError(userError(uploadError.message) || '视频读取失败') }
   }
 
   function selectMode(nextMode) { setReferenceMode(nextMode); setReferences([]); setError('') }

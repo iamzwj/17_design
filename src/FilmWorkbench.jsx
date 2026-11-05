@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { CharacterDecision } from "./FilmCharacters.jsx";
 import FilmActivity from './FilmActivity.jsx';
 import {filmMediaIndex} from '../shared/filmMediaIndex.js';
@@ -18,7 +19,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
   const feed=useRef(null),submitting=useRef(false);const stages=workflowStages(p).filter(s=>!['images','videos','audio'].includes(s.id)).map(s=>s.id==='storyboard'?{...s,done:p.shots.filter(shot=>shot.frame&&shot.video).length,total:p.shots.length,complete:p.shots.length>0&&p.shots.every(shot=>shot.frame&&shot.video),active:['storyboard','images','frames','videos','quality','audio'].includes(p.stage)}:s),complete=stages.filter(s=>s.complete).length;const phaseLabel=({plan:'导演规划',script:'剧本编写',characters:'角色设定',scenes:'场景设定',storyboard:'分镜规划',assets:'角色与场景制作',frames:'分镜图片生成',images:'图片生成',videos:'视频生成',quality:'镜头审核',audio:'声音处理',editing:'成片剪辑',render:'成片合成',done:'已完成'})[p.stage]||'等待调度';const mediaCount=filmMediaIndex(p).length;
   useEffect(()=>{localStorage.setItem(key+':stage',stage);localStorage.setItem(key+':selected',selected);localStorage.setItem(key+':message',message);localStorage.setItem(key+':panel',panel);},[key,stage,selected,message,panel]);
   useEffect(()=>{if(feed.current&&recordMode==='activity')feed.current.scrollTop=feed.current.scrollHeight;},[p.events?.length,recordMode]);
-  async function send(type,body={}) {if(submitting.current)return false;submitting.current=true;setBusy(true);setNotice('');try{const result=await request('/'+p.id+'/commands',{type,body});if(result.project)onProject(result.project);setNotice('操作已保存，后台将在安全点应用；已完成结果会保留。');return true;}catch(e){setNotice(e.message);return false;}finally{submitting.current=false;setBusy(false);}}
+  async function send(type,body={}) {if(submitting.current)return false;submitting.current=true;setBusy(true);setNotice('');try{const result=await request('/'+p.id+'/commands',{type,body});if(result.project)onProject(result.project);setNotice('操作已保存，后台将在安全点应用；已完成结果会保留。');return true;}catch(e){setNotice(userError(e.message));return false;}finally{submitting.current=false;setBusy(false);}}
   function chooseStage(value){setStage(value);setSelected('');setPanel('editor');}
   function chooseTask(id){const task=p.tasks?.find(t=>t.id===id);const resource=p.resources?.find(r=>r.id===(task?.resourceId||id));if(resource){setStage(resource.category);setSelected(resource.id);}else if(p.shots?.some(s=>s.id===(task?.resourceId||id))){setStage('storyboard');setSelected(task?.resourceId||id);}else if(task?.stage){setStage(stages.some(s=>s.id===task.stage)?task.stage:'script');}setPanel('editor');}
   const pendingAssets=(p.resources||[]).filter(r=>r.output && r.assetReview?.version===r.revision && r.approvedVersion!==r.revision && !r.stale);
@@ -28,7 +29,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
 
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
     {settings&&<ProjectSettings project={p} send={send}/>}
-    {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图需要你查看，确认图片或更换角色形象后继续制作。':p.error||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
+    {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图需要你查看，确认图片或更换角色形象后继续制作。':userError(p.error)||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
     {p.reviewWarning>0&&<p className="fw-warning">有 {p.reviewWarning} 项检查建议人工核对，请在分镜或设定图中查看依据；不会将不确定项标为确定通过。</p>}
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     {p.lastImpact&&<details className="fw-impact"><summary>最近修改影响了 {p.lastImpact.shots.length} 个镜头</summary><p>{p.lastImpact.sourceId}：v{p.lastImpact.fromVersion} → v{p.lastImpact.toVersion}；相关镜头 {p.lastImpact.shots.join('、')||'无'}。未关联的素材保留。</p></details>}

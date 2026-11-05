@@ -1,3 +1,4 @@
+import { localizeErrors } from './userErrors.js'
 function fallbackMessage(status) {
   if (status === 413) return '上传请求过大，服务器未能接收。单个文件最多 100MB；若文件未超限，请刷新后重试。'
   if (status === 401) return '登录已过期，请重新登录。'
@@ -7,7 +8,7 @@ function fallbackMessage(status) {
 }
 export async function readKnowledgeResponse(response) {
   let data
-  try { data = await response.json() } catch { /* Gateways can return HTML instead of application JSON. */ }
+  try { data = await response.json().then(localizeErrors) } catch { /* Gateways can return HTML instead of application JSON. */ }
   if (response.status === 204 && response.ok) return {}
   if (!response.ok || !data || typeof data !== 'object' || Array.isArray(data)) {
     const message = typeof data?.error === 'string' && data.error.trim() ? data.error : fallbackMessage(response.status)

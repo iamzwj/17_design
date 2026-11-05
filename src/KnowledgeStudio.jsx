@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../shared/knowledgeUpload.js'
 import { useEffect, useRef, useState } from 'react'
 import { knowledgeDownload, knowledgeKey, knowledgeRequest, readKnowledgeSearch, startKnowledgeSearch } from './knowledgeApi.js'
@@ -14,7 +15,7 @@ function initial() { try { return JSON.parse(localStorage.getItem(knowledgeKey('
 const imageVersion = (v) => ['.png', '.jpg', '.jpeg', '.webp'].includes(v?.ext)
 function AssetImage({ documentId, version, onError }) {
   const [url, setUrl] = useState('')
-  useEffect(() => { let live = true, current; const controller = new AbortController(); knowledgeDownload(`/documents/${documentId}/files/${version.id}`, version.originalName, true, { signal: controller.signal }).then((value) => { current = value; if (live) setUrl(value); else URL.revokeObjectURL(value) }).catch((e) => { if (live) onError(e.message) }); return () => { live = false; controller.abort(); if (current) URL.revokeObjectURL(current) } }, [documentId, version.id, version.originalName, onError])
+  useEffect(() => { let live = true, current; const controller = new AbortController(); knowledgeDownload(`/documents/${documentId}/files/${version.id}`, version.originalName, true, { signal: controller.signal }).then((value) => { current = value; if (live) setUrl(value); else URL.revokeObjectURL(value) }).catch((e) => { if (live) onError(userError(e.message)) }); return () => { live = false; controller.abort(); if (current) URL.revokeObjectURL(current) } }, [documentId, version.id, version.originalName, onError])
   return url ? <img className="kb-asset-preview" src={url} alt={version.title}/> : <p>正在读取图片…</p>
 }
 function KnowledgeDropZone({ busy, onUpload, onChoose }) {
@@ -79,7 +80,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
       const preferred = params.get('version') || (saved.selectedDocumentId === documentId ? saved.versionId : '')
       const targetVersion = d.versions.some((v) => v.id === preferred) ? preferred : d.permission >= 2 ? d.document.latestVersionId : d.document.publishedVersionId
       setBrandId(d.document.brandId); setTab('documents'); setSelected(d); setVersionId(targetVersion)
-    }).catch((e) => { if (live) setError(e.message) }).finally(() => { if (live) { linkedDocument.current = null; setRestoringDocument(false) } })
+    }).catch((e) => { if (live) setError(userError(e.message)) }).finally(() => { if (live) { linkedDocument.current = null; setRestoringDocument(false) } })
     return () => { live = false; controller.abort() }
   }, [bootstrap, saved.selectedDocumentId, saved.versionId])
   const selectedId = selected?.document.id
@@ -122,15 +123,15 @@ export default function KnowledgeStudio({ user, onLogin }) {
           const next = { brandId, documents: data.documents, jobs: data.jobs }
           listingCache.current.set(brandId, next); setListing(next)
         }
-      } catch (e) { if (live && currentBrand.current === brandId) setError(e.message) }
+      } catch (e) { if (live && currentBrand.current === brandId) setError(userError(e.message)) }
       finally { if (live) timer = setTimeout(load, 3000) }
     }
     void load()
     return () => { live = false; controller.abort(); clearTimeout(timer) }
   }, [brandId, user])
-  useEffect(() => { if (!brandId || tab !== 'traces') return; let live = true; knowledgeRequest(`/traces?brandId=${brandId}`).then((d) => { if (live && currentBrand.current === brandId) setTraces(d.traces) }).catch((e) => { if (live && currentBrand.current === brandId) setError(e.message) }); return () => { live = false } }, [brandId, tab])
+  useEffect(() => { if (!brandId || tab !== 'traces') return; let live = true; knowledgeRequest(`/traces?brandId=${brandId}`).then((d) => { if (live && currentBrand.current === brandId) setTraces(d.traces) }).catch((e) => { if (live && currentBrand.current === brandId) setError(userError(e.message)) }); return () => { live = false } }, [brandId, tab])
   async function refresh() { if (!currentBrand.current) return; const b = currentBrand.current; const d = await knowledgeRequest(`/documents?brandId=${b}`); if (b === currentBrand.current) { const next = { brandId: b, documents: d.documents, jobs: d.jobs }; listingCache.current.set(b, next); setListing(next) } }
-  async function act(fn, message) { setError(''); setNotice(''); setBusy(true); try { await fn(); if (message) setNotice(message); await refresh() } catch (e) { setError(e.message) } finally { setBusy(false) } }
+  async function act(fn, message) { setError(''); setNotice(''); setBusy(true); try { await fn(); if (message) setNotice(message); await refresh() } catch (e) { setError(userError(e.message)) } finally { setBusy(false) } }
   async function open(doc) { const b = brandId; await act(async () => { const d = await knowledgeRequest(`/documents/${doc.id}`); if (currentBrand.current !== b || d.document.brandId !== b) return; setSelected(d); setVersionId(d.document.latestVersionId) }) }
   function edit() { setDraft({ ...empty, ...version, chunks: version.chunks.length ? version.chunks.map((c) => ({ ...c })) : undefined }); setDraftDoc({ id: selected.document.id, baseVersionId: selected.document.latestVersionId, brandId }); setSelected(null) }
   async function save(e) {

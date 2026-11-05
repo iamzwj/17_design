@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useState } from 'react'
 import { createFestivalPosterTask, downloadGeneratedImage, generateFestivalPosterImages, getFestivalPosterTask, listFestivalPosterTasks } from './api.js'
 import { Icon } from './icons.jsx'
@@ -39,7 +40,7 @@ function putTask(task) {
 
 function friendlyError(error) {
   const message = String(error?.message || error || '')
-  return /timeout|timed out|aborted/i.test(message) ? 'GRS AI 本次响应超时，请重新生成。' : message || '生成失败，请稍后重试'
+  return /timeout|timed out|aborted/i.test(message) ? 'GRS AI 本次响应超时，请重新生成。' : userError(message) || '生成失败，请稍后重试'
 }
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))

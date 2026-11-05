@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import ToolPageHeader from './ToolPageHeader.jsx'
@@ -36,7 +37,7 @@ export default function PleaseDayAvatarStudio() {
     setFrameOverlay(null)
     loadImage(activeFrame.url).then((image) => {
       if (available) { setFrameOverlay(image); setError('') }
-    }).catch((loadError) => available && setError(loadError.message))
+    }).catch((loadError) => available && setError(userError(loadError.message)))
     return () => { available = false }
   }, [activeFrame.url])
 
@@ -79,7 +80,7 @@ export default function PleaseDayAvatarStudio() {
       setZoom(1)
       setOffset({ x: 0, y: 0 })
       setError('')
-    } catch (loadError) { setError(loadError.message) }
+    } catch (loadError) { setError(userError(loadError.message)) }
   }
 
   function beginDrag(event) {

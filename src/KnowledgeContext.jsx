@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useState } from 'react'
 import { getAuthToken } from './api.js'
 import { getKnowledgeSelection, knowledgeKey, knowledgeRequest } from './knowledgeApi.js'
@@ -18,7 +19,7 @@ export default function KnowledgeContext({ tool }) {
   useEffect(() => {
     if (!selection.brandId || tool !== 'image') return
     let live = true
-    knowledgeRequest(`/generation-assets?brandId=${selection.brandId}`).then((d) => { if (live) { setAssets(d.assets); setColor(d); setLoading(false) } }).catch((e) => { if (live) { setError(e.message); setLoading(false) } })
+    knowledgeRequest(`/generation-assets?brandId=${selection.brandId}`).then((d) => { if (live) { setAssets(d.assets); setColor(d); setLoading(false) } }).catch((e) => { if (live) { setError(userError(e.message)); setLoading(false) } })
     return () => { live = false }
   }, [selection.brandId, tool])
   useEffect(() => {

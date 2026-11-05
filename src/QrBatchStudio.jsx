@@ -1,3 +1,4 @@
+import { userError } from './userErrors.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { fetchBatchImage, fetchBatchSpreadsheet } from './api.js'
@@ -204,7 +205,7 @@ export default function QrBatchStudio() {
       outputDirectoryRef.current = null
       setOutputFolderName('')
       setPreviewUrl(''); setPackages([]); setFailures([]); setError('')
-    } catch (requestError) { setError(requestError.message) }
+    } catch (requestError) { setError(userError(requestError.message)) }
   }
 
   function applySpreadsheet(slotId, { sourceName, rows, columns, embeddedImages = new Map() }) {
@@ -235,7 +236,7 @@ export default function QrBatchStudio() {
       const sourceImages = file.name.toLowerCase().endsWith('.xlsx') ? await embeddedImagesFromWorkbook(buffer, workbook.SheetNames[0], sheet) : new Map()
       const images = applyMergedQrImages(sourceImages, sheet['!merges'])
       applySpreadsheet(slotId, { sourceName: file.name, rows: data, columns: keys, embeddedImages: images })
-    } catch (requestError) { setError(requestError.message || 'Excel 解析失败') }
+    } catch (requestError) { setError(userError(requestError.message) || 'Excel 解析失败') }
   }
 
   async function importOnlineSpreadsheet(slotId) {
@@ -251,7 +252,7 @@ export default function QrBatchStudio() {
       applySpreadsheet(slotId, { sourceName: spreadsheet.title || '在线表格', rows, columns })
     } catch (requestError) {
       setSlots((current) => current.map((item) => item.id === slotId ? { ...item, importing: false } : item))
-      setError(requestError.message || '在线表格读取失败')
+      setError(userError(requestError.message) || '在线表格读取失败')
     }
   }
 
@@ -411,7 +412,7 @@ async function availableFileName(directory, name) {
         }
         await Promise.all(Array.from({ length: Math.min(4, batch.length) }, () => worker()))
       }
-    } catch (requestError) { setError(requestError.message || '批量任务异常终止') }
+    } catch (requestError) { setError(userError(requestError.message) || '批量任务异常终止') }
     finally {
       if (destination) {
         try {

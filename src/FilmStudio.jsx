@@ -1,3 +1,4 @@
+import { userError, localizeErrors } from './userErrors.js'
 import { createPortal } from 'react-dom';
 import { Icon } from './icons.jsx';
 import { CharacterLibrary } from "./FilmCharacters.jsx";
@@ -22,7 +23,7 @@ export async function filmRequest(path = "", body) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const d = await r.json();
+  const d = await r.json().then(localizeErrors);
   if (!r.ok) throw Error(d.error || "读取制作项目失败");
   return d;
 }
@@ -76,7 +77,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     }).catch((error) => {
       if (live) {
         setLoaded(true);
-        setError(error.message);
+        setError(userError(error.message));
       }
     });
     refresh();
@@ -114,7 +115,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
         setForm((current) => ({ ...current, story: "" }));
       }
     } catch (e) {
-      setError(e.message);
+      setError(userError(e.message));
     } finally {
       setBusy(false);
     }
@@ -132,7 +133,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setError(e.message);
+      setError(userError(e.message));
     }
   }
   if (!user)
