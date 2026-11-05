@@ -24,6 +24,7 @@ const DAILY_CREDIT_OVERRIDES = new Map([
   ['yem15@onewo.com', 999],
 ])
 const REGISTRATION_WHITELIST = new Set([
+  'caoyh21@onewo.com', 'chenj529@onewo.com', 'chent05@onewo.com', 'huangpd01@onewo.com', 'shenxx09@onewo.com', 'tangf16@onewo.com', 'wangyc48@onewo.com',
   'zhoumt10@onewo.com', 'chenjl76@onewo.com', 'cheny453@onewo.com',
   'helg03@onewo.com', 'huangjq59@onewo.com', 'ligy70@onewo.com',
   'yem15@onewo.com', 'zhangwj159@onewo.com', 'zhouz76@onewo.com', 'wangnf@onewo.com',
@@ -111,7 +112,7 @@ export function installAuth(app, { dataDir }) {
   }
   function ensureWhitelisted(email) {
     if (!REGISTRATION_WHITELIST.has(email)) {
-      const error = new Error('没有权限，请联系管理人员')
+      const error = new Error('没有权限，请联系管理员zhangwj159')
       error.status = 403
       throw error
     }
