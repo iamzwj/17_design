@@ -548,6 +548,15 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   box-shadow: none;
   border-color: transparent;
 }
+:root .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) {
+  background: #d4e2ff;
+  color: #073da9;
+}
+:root[data-theme='dark'] .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) {
+  background: #344f80;
+  color: #d5e3ff;
+}
+:root .app-shell .module-nav :is(.more-tool-nav > button.active, button.active:not(.module-submenu button)) > svg { color: inherit; }
 :root :is(.send-button, .new-task, .film-studio .film-primary, .skill-page .skill-primary, .kb-page .kb-primary) {
   background: var(--dp-color-accent);
   color: var(--dp-color-on-accent);

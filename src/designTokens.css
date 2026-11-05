@@ -1,5 +1,5 @@
 :root {
-  --dp-color-ground: #fcfcfd;
+  --dp-color-ground: #f0f1f4;
   --dp-color-ink: #16191f;
   --dp-color-ink-secondary: #454c58;
   --dp-color-ground-muted: #f3f4f6;
@@ -38,7 +38,7 @@
   --dp-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23454c58' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme='dark'] {
-  --dp-ground: var(--dp-color-field);
+  --dp-ground: #101217;
   --dp-muted: #282d36;
   --dp-ink: var(--dp-color-on-field);
   --dp-secondary: var(--dp-color-on-field-secondary);
