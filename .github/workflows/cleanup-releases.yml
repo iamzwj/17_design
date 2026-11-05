@@ -1,0 +1,64 @@
+name: Remove inactive richart releases
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
+      - name: Remove historical releases and preserve live references
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ubuntu@49.235.121.231 sudo python3 - <<'PYREMOTE'
+          import pathlib, os, re, shutil, subprocess, json
+          root = pathlib.Path('/opt/richart-clone')
+          releases = root/'releases'
+          assert releases.is_dir() and not releases.is_symlink()
+          candidates = {p.name:p for p in releases.iterdir() if p.is_dir() and not p.is_symlink() and re.fullmatch(r'[0-9a-f]{40}',p.name)}
+          protected = set()
+          def protect(text):
+              for name in re.findall(r'/opt/richart-clone/releases/([0-9a-f]{40})(?:/|\b)',text):
+                  if name in candidates: protected.add(name)
+          def scan():
+              for folder, dirs, files in os.walk(root,followlinks=False):
+                  dirs[:] = [d for d in dirs if d != 'releases']
+                  for n in dirs+files:
+                      p=pathlib.Path(folder)/n
+                      if p.is_symlink(): protect(str(p.resolve()))
+              for p in pathlib.Path('/proc').iterdir():
+                  if not p.name.isdigit(): continue
+                  try:
+                      protect(str((p/'cwd').resolve()))
+                      protect((p/'cmdline').read_bytes().decode(errors='ignore').replace('\0',' '))
+                      protect((p/'maps').read_text(errors='ignore'))
+                  except (OSError,ProcessLookupError): pass
+              for base in ['/etc/nginx/sites-enabled','/etc/systemd/system']:
+                  for folder,dirs,files in os.walk(base):
+                      for n in files:
+                          p=pathlib.Path(folder)/n
+                          try:
+                              if p.stat().st_size<1000000: protect(p.read_text(errors='ignore'))
+                          except OSError: pass
+          scan()
+          if not protected: raise SystemExit('Cannot identify active release; refusing deletion')
+          print('Protected live releases:',sorted(protected),flush=True)
+          print('Candidate release count:',len(candidates),flush=True)
+          before=shutil.disk_usage(root).free
+          removed=[]
+          for name,p in candidates.items():
+              scan()
+              if name in protected: continue
+              if p.parent != releases or p.is_symlink(): raise RuntimeError('Unsafe path')
+              shutil.rmtree(p)
+              removed.append(name)
+          after=shutil.disk_usage(root).free
+          print(json.dumps({'deleted_releases':len(removed),'remaining_releases':sorted(p.name for p in releases.iterdir() if p.is_dir()),'freed_bytes':after-before}),flush=True)
+          subprocess.run(['df','-h',str(root)],check=True)
+          subprocess.run(['systemctl','is-active','nginx'],check=True)
+          PYREMOTE
