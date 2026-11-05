@@ -726,3 +726,39 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   -webkit-text-fill-color: var(--dp-ink) !important;
   caret-color: var(--dp-ink);
 }
+
+/* Authentication uses one surface per field and flat mode tabs. */
+.auth-modal-card .auth-brand {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  margin: 0 36px 20px 0;
+}
+.auth-modal-card .auth-brand .brand-avatar {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 36px;
+  margin: 0;
+}
+.auth-modal-card .auth-brand b { display: block; line-height: 1.2; }
+.auth-modal-card .auth-brand small { margin-top: 4px; }
+:root .auth-modal-card .auth-tabs {
+  margin: 0 0 18px;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--dp-rule);
+  border-radius: 0;
+}
+:root .auth-modal-card .auth-tabs button {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+:root .auth-modal-card .auth-tabs button.active {
+  border-bottom-color: var(--dp-highlight);
+}
+:root .app-shell .auth-modal-card .auth-form input:not([type='checkbox']) {
+  background-color: transparent !important;
+}
