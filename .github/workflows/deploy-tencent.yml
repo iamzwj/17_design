@@ -68,6 +68,15 @@ jobs:
           fi
           echo "Vibbit credential preflight passed (HTTP $status; nonexistent task expected)."
 
+      - name: Reclaim reproducible caches before upload
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$SERVER_USER@$SERVER_HOST" <<'REMOTE'
+            set -euo pipefail
+            rm -rf "$HOME/.npm/_cacache" "$HOME/.npm/_logs"
+            sudo apt-get clean
+            df -h /home/ubuntu/17_design
+          REMOTE
+
       - name: Upload server environment
         run: |
           scp -i ~/.ssh/id_ed25519 .deployment.env "$SERVER_USER@$SERVER_HOST:$SERVER_APP_DIR/.env.next"
