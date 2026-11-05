@@ -153,3 +153,18 @@
 .fw-director-input .fw-director-compose textarea { display: block; width: 100%; min-height: 112px; padding-bottom: 52px; resize: vertical; }
 .film-studio .fw-director-input .fw-director-compose > button { position: absolute; right: 9px; bottom: 9px; white-space: nowrap; }
 .fw-director-input > small { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+
+/* Error semantics stay distinct from blue navigation and task actions. */
+:root { --dp-error-text: #a52c3b; --dp-error-fill: #fff1f2; --dp-error-rule: #e3a4ac; }
+:root[data-theme='dark'] { --dp-error-text: #f2a0a7; --dp-error-fill: #251317; --dp-error-rule: #69333c; }
+:root .film-studio :is(.fw-warning, .film-error),
+:root .film-studio :is(.fw-state.failed, .fw-state.needs-input) {
+  background: color-mix(in srgb, var(--dp-error-fill) var(--dp-surface-opacity), transparent);
+  border: 1px solid var(--dp-error-rule);
+  color: var(--dp-error-text);
+}
+:root .film-studio :is(.fw-activity-row.error p, .fw-activity-row.error header > small, .fw-message.has-error p) {
+  color: var(--dp-error-text);
+}
+:root .film-studio .fw-activity-row.error > div { border-left-color: var(--dp-error-rule); }
+:root .film-studio .fw-activity-row.error > div::before { background: var(--dp-error-text); }
