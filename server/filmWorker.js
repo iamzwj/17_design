@@ -73,7 +73,6 @@ async function generate(p,slot,key,body,file) {
   try {
     if(!t.providerId) {
       if(t.submitting)throw Object.assign(Error('生成提交结果未知，已停止重复提交，请核对供应商任务'),{code:'INPUT'});
-      if((slot[key+'Attempts']||0)>=3)throw Object.assign(Error('已达到3次尝试上限，请调整提示词后重做'),{code:'INPUT'});
       slot[key+'Attempts']=(slot[key+'Attempts']||0)+1;t.submitting=true;slot[key+'Submitting']=true;save(p);
       let response;
       try {response=await api('/v1/api/generate',{...body,replyType:'async'});}catch(e){throw Object.assign(Error('生成提交未确认：'+e.message),{code:'INPUT'});}
