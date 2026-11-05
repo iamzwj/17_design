@@ -675,11 +675,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 
 .video-waterfall-workspace.empty .video-waterfall-results { display: grid; place-items: center; }
 
-/* Subtle theme-colored global texture; never intercept workspace controls. */
-.global-background { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .075; animation: globalBackgroundBreathe 14s ease-in-out infinite; }
+/* Keep the sea behind all workspace content and opaque control surfaces. */
 #root { isolation: isolate; }
-.app-shell, .auth-page { z-index: 1; }
-.global-background { z-index: 2; }
-:root[data-theme='dark'] .global-background { opacity: .09; }
-@keyframes globalBackgroundBreathe { 0%, 100% { opacity: .035; } 50% { opacity: .085; } }
-@media (prefers-reduced-motion: reduce) { .global-background { animation: none; opacity: .05; } }
+.global-background { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .14; animation: globalBackgroundBreathe 14s ease-in-out infinite; }
+@keyframes globalBackgroundBreathe { 0%, 100% { opacity: .10; } 50% { opacity: .18; } }
+@media (prefers-reduced-motion: reduce) { .global-background { animation: none; opacity: .14; } }

@@ -10,5 +10,5 @@ export default function GlobalBackground() {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] })
     return () => observer.disconnect()
   }, [])
-  return <div className="global-background" aria-hidden="true"><MicroSlats color={color} glintColor={color} backgroundColor="transparent" preset="tide" speed={0.12} scale={2.2} slatWidth={3} slatHeight={8} gap={5} glint={0.4} interactive cursorStrength={1.2} cursorSize={100} trail={2.4} lean={0.12} intro={false}/></div>
+  return <div className="global-background" aria-hidden="true"><MicroSlats color={color} glintColor="#ffffff" backgroundColor="transparent" preset="swell" slatWidth={4} slatHeight={9} gap={3} roundness={0.55} interactive cursorStrength={1} cursorSize={40} swirl={0} trail={1.4} lean={0} intro/></div>
 }
