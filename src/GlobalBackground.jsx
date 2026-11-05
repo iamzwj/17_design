@@ -8,8 +8,8 @@ export default function GlobalBackground() {
       const root = document.documentElement
       const dark = root.dataset.theme === 'dark'
       setPalette({
-        color: dark ? '#2452a3' : getComputedStyle(root).getPropertyValue('--dp-highlight').trim() || '#164bb8',
-        glint: dark ? '#739fe8' : '#ffffff',
+        color: dark ? '#30476c' : getComputedStyle(root).getPropertyValue('--dp-highlight').trim() || '#164bb8',
+        glint: dark ? '#6882a8' : '#ffffff',
       })
     }
     update()

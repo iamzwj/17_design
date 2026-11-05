@@ -16,7 +16,7 @@
 .composer-tools :is(.ratio-trigger,.quality-trigger,.skill-trigger,.brand-trigger) > svg:last-child { width: 13px; height: 13px; flex-shrink: 0; margin-left: auto; transform: rotate(90deg); }
 :root[data-theme='dark'] .composer-select-trigger { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.045); color: #dde0e6; }
 :root[data-theme='dark'] .composer-select-trigger:hover { background: rgba(255,255,255,.1); }
-:root[data-theme='dark'] .composer-select-menu { background: color-mix(in srgb, #282d36 var(--dp-surface-opacity), transparent); border-color: #454c58; color: #f3f4f6; box-shadow: 0 12px 30px #0006; }
+:root[data-theme='dark'] .composer-select-menu { background: color-mix(in srgb, var(--dp-panel-solid) var(--dp-surface-opacity), transparent); border-color: var(--dp-rule); color: #f3f4f6; box-shadow: 0 12px 30px #0006; }
 :root[data-theme='dark'] .composer-select-options button:hover, :root[data-theme='dark'] .composer-select-options button:focus-visible, :root[data-theme='dark'] .composer-select-options button[aria-selected='true'] { background: #123568; color: var(--dp-highlight); }
-:root[data-theme='dark'] .composer-select-footer { border-color: #454c58; color: #d0d4dd; }
+:root[data-theme='dark'] .composer-select-footer { border-color: var(--dp-rule); color: #d0d4dd; }
 @media(max-width:520px) { .composer-select-menu { max-width: min(270px,calc(100vw - 40px)); }.composer-tools .tool-group { flex: 1; }.composer-tools { gap: 8px; align-items: flex-end; }.composer-select-trigger { max-width: 175px; } }

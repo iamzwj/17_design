@@ -150,20 +150,20 @@
 :root[data-theme="dark"] .film-studio button,
 :root[data-theme="dark"] .film-layout main > form,
 :root[data-theme="dark"] .film-grid article {
-  background: #282d36;
+  background: var(--dp-panel-solid);
   color: #f3f4f6;
-  border-color: #454c58;
+  border-color: var(--dp-rule);
 }
 :root[data-theme="dark"] .film-studio textarea {
-  background: color-mix(in srgb, #20242c var(--dp-surface-opacity), transparent);
+  background: color-mix(in srgb, var(--dp-muted) var(--dp-surface-opacity), transparent);
   color: #f3f4f6;
-  border-color: #454c58;
+  border-color: var(--dp-rule);
 }
 :root[data-theme="dark"] .film-studio .film-primary {
   background: var(--dp-color-accent);
 }
 :root[data-theme="dark"] .film-placeholder {
-  background: #20242c;
+  background: var(--dp-muted);
 }
 :root[data-theme="dark"] .film-studio .film-error {
   color: #ffadbc;
@@ -247,9 +247,9 @@
 .film-output-waiting > span { color:var(--accent); font-size:40px; }
 .film-output-waiting h3 { font-size:17px; }
 .film-output-waiting p,.film-output-waiting small { font-size: var(--dp-typography-small); line-height:1.8; }
-:root[data-theme="dark"] .film-production { --film-panel:#282d36; --film-surface:#282d36; --film-line:#454c58; --film-text:#d0d4dd; }
-:root[data-theme="dark"] .film-director-mark { color: var(--dp-highlight); background:#363d49; }
-:root[data-theme="dark"] .film-stage-track .complete .film-stage-dot { background:#363d49; color: var(--dp-highlight); border-color:#454c58; }
+:root[data-theme="dark"] .film-production { --film-panel:var(--dp-panel-solid); --film-surface:var(--dp-panel-solid); --film-line:var(--dp-rule); --film-text:#d0d4dd; }
+:root[data-theme="dark"] .film-director-mark { color: var(--dp-highlight); background:var(--dp-muted); }
+:root[data-theme="dark"] .film-stage-track .complete .film-stage-dot { background:var(--dp-muted); color: var(--dp-highlight); border-color:var(--dp-rule); }
 :root[data-theme="dark"] .film-stage-track .working .film-stage-dot,:root[data-theme="dark"] .film-stage-track .current .film-stage-dot { background:#86adff; border-color:#86adff; color:#fff; }
 :root[data-theme="dark"] .film-stage-track .working b,:root[data-theme="dark"] .film-stage-track .current b,:root[data-theme="dark"] .film-work-label b { color: var(--dp-highlight); }
 :root[data-theme="dark"] .film-stage-track .paused .film-stage-dot { color:#ffc28e; border-color:#bb845a; }
@@ -316,7 +316,7 @@
 }
 .film-studio > .film-toolbar h1 { margin: 0; font-size: 18px; }
 .film-toolbar .film-header-actions { max-width: none; align-items: center; }
-:root[data-theme="dark"] .film-studio > .film-toolbar { border-color: #454c58; }
+:root[data-theme="dark"] .film-studio > .film-toolbar { border-color: var(--dp-rule); }
 
 .workspace-title-slot:has(.film-title-actions) {
   display: flex;

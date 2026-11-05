@@ -22,7 +22,7 @@
 .review-section-hint { font-size: var(--dp-typography-interface); line-height: 1.7; color: var(--review-muted); margin: -6px 0 14px; }
 .review-extra, .review-notes > p { font-size: var(--dp-typography-body); line-height: 1.8; margin: 10px 0 0; }
 .review-checked { margin-top: 24px; font-size: var(--dp-typography-interface); color: var(--review-muted); }.review-checked > summary { margin-bottom: 12px; }
-:root[data-theme='dark'] .review-report { --review-ink: #f3f4f6; --review-muted: #d0d4dd; --review-line: #454c58; --review-surface: #282d36; --review-accent: var(--dp-highlight); }
+:root[data-theme='dark'] .review-report { --review-ink: #f3f4f6; --review-muted: #d0d4dd; --review-line: var(--dp-rule); --review-surface: var(--dp-panel-solid); --review-accent: var(--dp-highlight); }
 :root[data-theme='dark'] .review-verdict.is-blocked > strong { color: #ffadb9; }
 @media(max-width:600px) { .review-verdict > strong { font-size: 24px; }.review-finding { padding: 15px; }.review-finding-row { grid-template-columns: 1fr; gap: 2px; }.review-verdict { padding-left: 14px; }.review-section > h3 { font-size: 20px; } }
 
