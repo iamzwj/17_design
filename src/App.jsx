@@ -1,6 +1,7 @@
 import AccentTheme from './AccentTheme.jsx'
 import { userError } from './userErrors.js'
 import ToolPageHeader from './ToolPageHeader.jsx'
+import dgenWordmark from './dgen-wordmark.svg?raw'
 import FilmStudio, { filmRequest } from './FilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
@@ -524,13 +525,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
     {open && <button className="sidebar-scrim" aria-label="关闭菜单" onClick={onClose} />}
     <aside className={`sidebar glass-strong ${open ? 'is-open' : ''}`}>
       <div className="brand">
-        <span className="brand-avatar" role="img" aria-label="D-Gen">
-          <BrandIcon />
-        </span>
-        <div className="brand-copy">
-          <div className="brand-name">D-Gen</div>
-          <div className="brand-caption">蝶发 AI 创作工作台</div>
-        </div>
+        <span className="sidebar-wordmark" role="img" aria-label="D-Gen" dangerouslySetInnerHTML={{ __html: dgenWordmark.replace('<defs><style>.cls-1{fill:#05ffe7;}.cls-2{fill:#fff;}</style></defs>', '').replaceAll('class="cls-1"', 'fill="var(--dp-highlight)"').replaceAll('class="cls-2"', 'fill="var(--dp-ink)"') }}/>
       </div>
       <nav className="module-nav primary-tools">
         {MODULES.map((item) => item.id === 'image' ? <div className="more-tool-nav" key={item.id}>
