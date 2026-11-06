@@ -163,9 +163,8 @@ async function plan(p) {
   p.title = j.title.trim();
   p.assets = j.assets;
   p.shots = j.shots;
-  p.status = p.automatic ? "running" : "review";
+  p.status = "running";
   filmEvent(p, "plan:ready", `导演已安排 ${p.shots.length} 个镜头、${p.assets.length} 份角色与场景素材`);
-  if (!p.automatic) filmEvent(p, "plan:confirm", "等待你确认分镜，再继续生成成片");
   save(p);
 }
 async function revise(p) {
@@ -295,7 +294,7 @@ async function videos(p) {
   await filmPool(p.shots, 10, async (s, i) => {
     if(!s.frame || s.paused || s.stale)return;
     const references=p.referenceWorkflow
-      ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && approvedSetting(asset) && asset.output.file===r.file))
+      ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
       : [];
     const videoRefs=references.slice(0,p.videoModel==='wan-3.0'?9:8);
     await generate(
@@ -610,6 +609,11 @@ function approvedSetting(resource) {
       resource.approvedVersion === resource.revision);
 }
 
+function usableSetting(resource) {
+  return approvedSetting(resource) || Boolean(resource?.output && !resource.stale &&
+    resource.assetReview?.version === resource.revision && resource.assetReview.file === resource.output.file);
+}
+
 async function reviewSetting(p, resource, references) {
   const {revision, output} = resource;
   const id = taskId(resource.id, 'asset-review', revision);
@@ -638,17 +642,12 @@ async function reviewSetting(p, resource, references) {
   if(!p.resources.includes(resource) || resource.revision!==revision || resource.output?.file!==output.file)return;
   resource.assetReview = {...review,file:output.file,version:revision};
   if(review.status==='pass')resource.approvedVersion=revision;
-  event(p,'director',id,resource.name+' · '+(review.status==='pass'?'通过并锁定引用版本':'待处理')+' · '+review.summary,{type:'decision'});
+  event(p,'director',id,resource.name+' · '+(review.status==='pass'?'通过并锁定引用版本':'记录风险')+' · '+review.summary,{type:'decision'});
   save(p);
 }
 
 async function referenceAssets(p) {
-  if(p.characterChoice && !p.referenceWorkflow && (p.awaitingCharacters || !p.characterMode) && p.resources.some(r=>r.type==='face')) {
-    p.awaitingCharacters=true;
-    p.status='review';
-    filmEvent(p,'characters:choose','角色提示词已准备好，请选择是否自定义角色。');
-    return;
-  }
+  if(p.pausedStages?.images)return;
   const strict=p.referenceWorkflow===true;
   const resources=p.resources.filter(r=>settingChecks[r.type]);
   p.stage='assets';
@@ -659,7 +658,7 @@ async function referenceAssets(p) {
     await filmPool(group,10,async r=>{
       if(p.pausedStages?.images || r.paused || r.stale || p.pausedStages?.[r.category])return;
       const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
-      if(dependencies.some(dep=>strict ? !approvedSetting(dep) : !dep?.output || dep.stale))return;
+      if(dependencies.some(dep=>strict ? !usableSetting(dep) : !dep?.output || dep.stale))return;
       const references=r.characterReference?[r.characterReference]:dependencies.map(dep=>dep.output);
       const nano=p.imageModel.startsWith('nano-');
       const landscape=r.type==='environment';
@@ -702,10 +701,10 @@ async function referenceAssets(p) {
   }
   check(p);
   if(p.needsRerun)return;
-  const pending=resources.filter(r=>!approvedSetting(r));
-  if(pending.length)throw Object.assign(Error('设定图等待处理：'+pending.map(r=>r.name).join('、')),{code:'INPUT'});
+  const pending=resources.filter(r=>!usableSetting(r));
+  if(pending.length && !pending.some(r=>r.paused || p.pausedStages?.[r.category]))throw Error('设定图缺少可用成果：'+pending.map(r=>r.name).join('、'));
   const handoffKey='reference-handoff:'+resources.map(r=>r.id+'-'+r.revision).join(',');
-  if(!p.events.some(e=>e.taskId===handoffKey))event(p,'director',handoffKey,'已锁定通过审核的设定图版本，交给分镜与视频制作。',{type:'dispatch'});
+  if(!p.events.some(e=>e.taskId===handoffKey))event(p,'director',handoffKey,'设定图已交给分镜与视频制作，审核意见保留在设定图记录中。',{type:'dispatch'});
 }
 
 async function framesV2(p) {
@@ -714,7 +713,7 @@ async function framesV2(p) {
   await filmPool(p.shots,10,async shot=>{
     if(shot.paused||shot.stale)return;
     const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
-    if(p.referenceWorkflow && refs.some(r=>!approvedSetting(r)))return;
+    if(p.referenceWorkflow && refs.some(r=>!usableSetting(r)))return;
     if(!shot.frame)shot.referenceVersions=refs.map(r=>({id:r.id,version:r.revision,file:r.output.file}));
     await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，${p.settings.style}，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
     if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[referenceImage(p,shot.frame)],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
@@ -722,7 +721,9 @@ async function framesV2(p) {
 }
 async function directorReview(p) {
   const issues=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
-  const assetIssues=(p.referenceWorkflow?[]:p.resources||[]).filter(r=>r.assetReview?.status==='review'&&!r.assetReview.directorAccepted);
+  const unresolvedSettings=(p.resources||[]).filter(r=>r.output&&!r.stale&&r.assetReview&&r.assetReview.status!=='pass');
+  const assetIssues=p.referenceWorkflow?[]:unresolvedSettings;
+  p.reviewWarning=issues.length+unresolvedSettings.length+Number(p.continuityReview?.status==='manual');
   if(!issues.length&&!assetIssues.length)return;
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {
@@ -731,16 +732,16 @@ async function directorReview(p) {
     if(!['accept','repair','manual'].includes(decision.decision))throw Error('导演审核决策无效');
     finishTask(p,t,decision);event(p,'director',id,decision.reason||'已完成导演审核',{type:'decision'});
     if(decision.decision==='repair') {
+      let repaired=false;
       if(!Array.isArray(decision.repairs)||!decision.repairs.length)throw Error('未给出可执行修复计划');
       for(const fix of decision.repairs) {
-        const shot=issues.find(s=>s.id===fix.id)||assetIssues.find(r=>r.id===fix.id);if(!shot||shot.locked||(shot.repairAttempts||0)>=1||!['frame','video','image'].includes(fix.action)||typeof fix.prompt!=='string')throw Object.assign(Error('导演修复达到上限或涉及锁定成果，需人工处理'),{code:'INPUT'});
-        if(fix.action==='video'){applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'regenerate',body:{id:shot.id,videoOnly:true}});shot.prompt=fix.prompt;}else applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'edit',body:{id:shot.id,patch:{prompt:fix.prompt}}});shot.repairAttempts=(shot.repairAttempts||0)+1;
+        const shot=issues.find(s=>s.id===fix.id)||assetIssues.find(r=>r.id===fix.id);if(!shot||shot.locked||(shot.repairAttempts||0)>=1||!['frame','video','image'].includes(fix.action)||typeof fix.prompt!=='string')continue;
+        if(fix.action==='video'){applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'regenerate',body:{id:shot.id,videoOnly:true}});shot.prompt=fix.prompt;}else applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'edit',body:{id:shot.id,patch:{prompt:fix.prompt}}});shot.repairAttempts=(shot.repairAttempts||0)+1;repaired=true;
       }
-      p.status='queued';
-    }else if(decision.decision==='manual')throw Object.assign(Error('导演建议人工处理：'+decision.reason),{code:'INPUT'});
-    else {for(const shot of issues)shot.review.directorAccepted=true;for(const r of assetIssues)r.assetReview.directorAccepted=true;p.reviewWarning=issues.length+assetIssues.length;}
+      if(repaired)p.status='queued';
+    }
     save(p);
-  }catch(e){finishTask(p,t,null,e);save(p);throw e;}
+  }catch(e){finishTask(p,t,null,e);save(p);}
 }
 async function recoverDetached(p) {
   for(const t of p.tasks.filter(t=>t.providerId && ['running','failed'].includes(t.status))) {

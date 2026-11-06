@@ -191,22 +191,17 @@ test("film project survives worker restart, renders MP4, and remakes only select
       duration: 15,
       automatic: false,
     };
+    holdResults = true;
     const created = await api("", input);
     id = created.data.project.id;
     const legacy=film.read(id);legacy.schemaVersion=1;film.write(legacy);
     assert.equal(created.status, 202);
     assert.equal((await api("", input)).data.project.id, id);
     assert.equal((await api("/" + id, undefined, "bob")).status, 404);
-    await until("review");
-    assert.equal(imageCalls, 0);
-    assert.ok((await api("/" + id)).data.project.events.some(e => e.key === "plan:confirm"));
-    await stop();
-    start();
-    holdResults = true;
-    await api("/" + id + "/resume", {});
+    assert.equal(created.data.project.automatic, true);
     for (let i=0;i<100;i++) {
       const inFlight=(await api("/" + id)).data.project;
-      if (inFlight.assets[0].imageTask) break;
+      if (inFlight.assets[0]?.imageTask) break;
       await new Promise(r=>setTimeout(r,50));
     }
     assert.equal(imageCalls,1);
@@ -267,7 +262,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.equal(videoCalls, 5);
     assert.equal(imageCalls, 5);
     const edited = await api("/" + id + "/assets/" + done.assets[0].id, { prompt: "更新角色衣着" });
-    assert.equal(edited.data.project.status, "review");
+    assert.equal(edited.data.project.status, "queued");
     assert.equal(edited.data.project.assets[0].image, null);
     assert.ok(edited.data.project.shots.filter(s => s.assetIds.includes(done.assets[0].id)).every(s => !s.frame && !s.video));
     assert.equal(videoCalls, 5);

@@ -107,7 +107,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       attempts: 0,
       shots: [],
       assets: [],
-      automatic: b.automatic !== false,
+      automatic: true,
       referenceWorkflow: true,
     };
     filmEvent(p, "created", "已接收故事，等待 AI 导演开始统筹制作");
@@ -284,8 +284,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
   app.post("/api/films/:id/resume", requireAuth, (req, res) => {
     const p = owned(req, res);
     if (!p) return;
-    if (p.awaitingCharacters) return res.status(409).json({ error: "请先完成角色形象选择" });
-    if (!["failed", "review", "cancelled", "succeeded"].includes(p.status))
+    if (!["failed", "review", "needs-input", "cancelled", "succeeded"].includes(p.status))
       return res.status(409).json({ error: "项目正在制作中" });
     if (req.body.shots) {
       if (
@@ -380,7 +379,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
         videoSubmitting: false,
         review: null,
       });
-    p.status = "review";
+    p.status = "queued";
     p.stage = "assets";
     p.output = null;
     p.error = null;

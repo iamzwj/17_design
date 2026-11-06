@@ -24,7 +24,8 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     const target=reviewTargets[reviewCursor.current % reviewTargets.length];
     if (!target) { setStage('storyboard'); setSelected(''); setPanel('editor'); setNotice('当前没有可定位的审核详情，请在分镜中查看。'); return; }
     reviewCursor.current += 1;
-    setStage(target.stage); setSelected(target.id); setPanel('editor');
+    setStage(target.stage); setSelected(target.id === 'continuity' ? '' : target.id); setPanel('editor');
+    if(target.id === 'continuity')setNotice(target.review.reason);
     if(target.stage!=='storyboard')requestAnimationFrame(()=>requestAnimationFrame(()=>document.getElementById('film-asset-'+target.id)?.scrollIntoView({behavior:'smooth',block:'center'})));
   }
   async function dismissReview() {
@@ -49,7 +50,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
 
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
     {settings&&<ProjectSettings project={p} send={send}/>}
-    {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图需要你查看，确认图片或更换角色形象后继续制作。':userError(p.error)||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
+    {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图存在审核意见，可查看详情。':userError(p.error)||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
     {p.reviewWarning>0&&!reviewDismissed&&<div className="fw-warning fw-review-warning" role="status">有 {p.reviewWarning} 项检查建议人工核对，请在分镜或设定图中查看依据；不会将不确定项标为确定通过。 <button type="button" className="fw-review-view" onClick={viewReview}>查看</button><button type="button" disabled={dismissBusy} onClick={dismissReview}>忽略</button></div>}
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     {p.lastImpact&&<details className="fw-impact"><summary>最近修改影响了 {p.lastImpact.shots.length} 个镜头</summary><p>{p.lastImpact.sourceId}：v{p.lastImpact.fromVersion} → v{p.lastImpact.toVersion}；相关镜头 {p.lastImpact.shots.join('、')||'无'}。未关联的素材保留。</p></details>}

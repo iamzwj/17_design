@@ -47,7 +47,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
             ratio: "16:9",
             imageModel: "gpt-image-2.5",
             videoModel: "minimax-h3",
-            automatic: true,
           }
         );
       } catch {
@@ -57,7 +56,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
           ratio: "16:9",
           imageModel: "gpt-image-2.5",
           videoModel: "minimax-h3",
-          automatic: true,
         };
       }
     }),
@@ -226,14 +224,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 />
               </div>
               <div className="film-create-footer">
-              <label className="film-storyboard-only">
-                <input
-                  type="checkbox"
-                  checked={!form.automatic}
-                  onChange={(e) => field("automatic", !e.target.checked)}
-                />{" "}
-                先生成分镜
-              </label>
               <p className="film-caption">
                 按模型实际用量计费。
               </p>
@@ -241,7 +231,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 className="film-primary"
                 disabled={busy || !form.story.trim()}
               >
-                {busy ? "正在创建…" : form.automatic ? "一键生成成片" : "生成分镜"}
+                {busy ? "正在创建…" : "一键生成成片"}
               </button>
               </div>
             </form>
