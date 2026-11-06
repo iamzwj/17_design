@@ -1,0 +1,3 @@
+:root { --theme-selected-surface: #123568; --theme-nav-surface: #174a9a; --theme-blue-rgb: 7 76 224; --theme-blue: #074ce0; --theme-blue-light: #86adff; }
+:root[data-accent='green'] { --theme-selected-surface: #124530; --theme-nav-surface: #17613c; --theme-blue-rgb: 22 119 71; --theme-blue: #167747; --theme-blue-light: #5bd590; --dp-color-accent: #167747; --dp-highlight: #167747; --dp-action-hover: #105c36; --dp-selected: #daf1e2; }
+:root[data-theme='dark'][data-accent='green'] { --dp-highlight: #5bd590; --dp-selected: #143e2b; --dp-action-hover: #86e7ad; }
