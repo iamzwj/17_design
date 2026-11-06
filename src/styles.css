@@ -34,7 +34,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 
 .sidebar { position: fixed; z-index: 50; left: 18px; top: 18px; bottom: 18px; width: 246px; border-radius: 27px; padding: 20px 13px 14px; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 22px 16px 16px; margin-left: 2px; }
-.sidebar-wordmark { display: block; width: 87px; max-width: 100%; line-height: 0; }
+.sidebar-wordmark { display: block; width: 87px; max-width: 100%; line-height: 0; transform: translateY(-4px); }
 .sidebar-wordmark svg { display: block; width: 100%; height: auto; }
 .brand-avatar { position: relative; width: 60px; height: 44px; flex: 0 0 60px; display: block; margin-right: 3px; filter: none; }
 .brand-icon-static { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent url('/dgen-butterfly-ceramic.png') center / contain no-repeat; }
