@@ -102,3 +102,8 @@
   outline: 2px solid var(--dp-highlight);
   outline-offset: -2px;
 }
+
+:root[data-accent] .sidebar-bottom .account > span {
+  background: var(--dp-selected);
+  color: var(--dp-ink);
+}
