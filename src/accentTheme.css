@@ -1,3 +1,91 @@
 :root { --theme-selected-surface: #123568; --theme-nav-surface: #174a9a; --theme-blue-rgb: 7 76 224; --theme-blue: #074ce0; --theme-blue-light: #86adff; }
 :root[data-accent='green'] { --theme-selected-surface: #124530; --theme-nav-surface: #17613c; --theme-blue-rgb: 22 119 71; --theme-blue: #167747; --theme-blue-light: #5bd590; --dp-color-accent: #167747; --dp-highlight: #167747; --dp-action-hover: #105c36; --dp-selected: #daf1e2; }
 :root[data-theme='dark'][data-accent='green'] { --dp-highlight: #5bd590; --dp-selected: #143e2b; --dp-action-hover: #86e7ad; }
+
+:root[data-accent='yellow'] {
+  --theme-selected-surface: #34303b;
+  --theme-nav-surface: #4c3b12;
+  --theme-blue-rgb: 119 85 0;
+  --theme-blue: #775500;
+  --theme-blue-light: #ffd66b;
+  --dp-color-accent: #775500;
+  --dp-highlight: #775500;
+  --dp-action-hover: #604300;
+  --dp-selected: #fff2c5;
+}
+:root[data-theme='dark'][data-accent='yellow'] {
+  --dp-highlight: #ffd66b;
+  --dp-selected: #34303b;
+  --dp-action-hover: #ffe59b;
+}
+:root[data-accent='orange'] {
+  --theme-selected-surface: #382d3a;
+  --theme-nav-surface: #613514;
+  --theme-blue-rgb: 154 62 0;
+  --theme-blue: #9a3e00;
+  --theme-blue-light: #ffae70;
+  --dp-color-accent: #9a3e00;
+  --dp-highlight: #9a3e00;
+  --dp-action-hover: #793100;
+  --dp-selected: #ffeadb;
+}
+:root[data-theme='dark'][data-accent='orange'] {
+  --dp-highlight: #ffae70;
+  --dp-selected: #382d3a;
+  --dp-action-hover: #ffcaa1;
+}
+:root[data-accent='pink'] {
+  --theme-selected-surface: #3b2c40;
+  --theme-nav-surface: #6b2650;
+  --theme-blue-rgb: 164 36 103;
+  --theme-blue: #a42467;
+  --theme-blue-light: #ff9bc9;
+  --dp-color-accent: #a42467;
+  --dp-highlight: #a42467;
+  --dp-action-hover: #821b50;
+  --dp-selected: #fce5f1;
+}
+:root[data-theme='dark'][data-accent='pink'] {
+  --dp-highlight: #ff9bc9;
+  --dp-selected: #3b2c40;
+  --dp-action-hover: #ffbedc;
+}
+
+.accent-theme-row .theme-menu-label {
+  display: flex;
+  white-space: nowrap;
+}
+.accent-theme-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.accent-theme-options > button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.accent-theme-options > button::before {
+  content: '';
+  width: min(20px, calc(100% - 8px));
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--accent-swatch);
+}
+.accent-theme-options > button:hover {
+  background: rgb(var(--theme-blue-rgb) / .1);
+}
+.accent-theme-options > button[aria-pressed='true']::before {
+  outline: 2px solid var(--dp-ink);
+  outline-offset: 2px;
+}
+.accent-theme-options > button:focus-visible {
+  outline: 2px solid var(--dp-highlight);
+  outline-offset: -2px;
+}
