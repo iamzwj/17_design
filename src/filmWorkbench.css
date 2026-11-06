@@ -270,3 +270,9 @@
 .fw-activity-row header>b{margin-right:auto}
 .fw-error-resolved{display:inline-flex;align-items:center;flex:none;padding:2px 7px;border:1px solid #c4c0e2;border-radius:5px;background:#efedf8;color:#51417f;font-size:var(--dp-typography-label);line-height:1.5;white-space:nowrap}
 :root[data-theme=dark] .fw-error-resolved{border-color:#625779;background:#302a3e;color:#ddd0ff}
+/* Give completed checks and step numbers the same centered marker box. */
+@media(min-width:601px){
+ .film-studio .fw-stage-nav>button{grid-template-columns:24px minmax(0,1fr)}
+ .film-workbench .fw-stage-nav>button>.fw-step-marker{display:flex;align-items:center;justify-content:center;align-self:center;grid-row:1 / span 2;width:24px;height:28px;padding:0;font-size:20px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+ .fw-step-marker>svg{display:block;width:24px;height:24px;flex:none}
+}
