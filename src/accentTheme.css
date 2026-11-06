@@ -1,8 +1,13 @@
 :root { --theme-selected-surface: #123568; --theme-nav-surface: #174a9a; --theme-blue-rgb: 7 76 224; --theme-blue: #074ce0; --theme-blue-light: #86adff; }
 :root[data-accent='green'] { --theme-selected-surface: #124530; --theme-nav-surface: #17613c; --theme-blue-rgb: 22 119 71; --theme-blue: #167747; --theme-blue-light: #5bd590; --dp-color-accent: #167747; --dp-highlight: #167747; --dp-action-hover: #105c36; --dp-selected: #daf1e2; }
-:root[data-theme='dark'][data-accent='green'] { --dp-highlight: #5bd590; --dp-selected: #143e2b; --dp-action-hover: #86e7ad; }
+:root[data-theme='dark'] {
+  --accent-background: #30476c;
+  --accent-glint: #6882a8;
+}
+:root[data-theme='dark'][data-accent='green'] { --accent-background: #305a45; --accent-glint: #68947a; --dp-highlight: #5bd590; --dp-selected: #143e2b; --dp-action-hover: #86e7ad; }
 
 :root[data-accent='yellow'] {
+  --accent-glint: #fff0ba;
   --theme-selected-surface: color-mix(in srgb, #17181d 76%, var(--theme-blue-light));
   --theme-nav-surface: #4c3b12;
   --theme-blue-rgb: 119 85 0;
@@ -14,11 +19,14 @@
   --dp-selected: #fff2c5;
 }
 :root[data-theme='dark'][data-accent='yellow'] {
+  --accent-background: #66532c;
+  --accent-glint: #c6a65f;
   --dp-highlight: #ffd66b;
   --dp-selected: var(--theme-selected-surface);
   --dp-action-hover: #ffe59b;
 }
 :root[data-accent='orange'] {
+  --accent-glint: #ffdfc5;
   --theme-selected-surface: color-mix(in srgb, #17181d 76%, var(--theme-blue-light));
   --theme-nav-surface: #613514;
   --theme-blue-rgb: 154 62 0;
@@ -30,11 +38,14 @@
   --dp-selected: #ffeadb;
 }
 :root[data-theme='dark'][data-accent='orange'] {
+  --accent-background: #67452f;
+  --accent-glint: #cf9064;
   --dp-highlight: #ffae70;
   --dp-selected: var(--theme-selected-surface);
   --dp-action-hover: #ffcaa1;
 }
 :root[data-accent='pink'] {
+  --accent-glint: #ffd7ea;
   --theme-selected-surface: color-mix(in srgb, #17181d 76%, var(--theme-blue-light));
   --theme-nav-surface: #6b2650;
   --theme-blue-rgb: 164 36 103;
@@ -46,6 +57,8 @@
   --dp-selected: #fce5f1;
 }
 :root[data-theme='dark'][data-accent='pink'] {
+  --accent-background: #623850;
+  --accent-glint: #cc82ad;
   --dp-highlight: #ff9bc9;
   --dp-selected: var(--theme-selected-surface);
   --dp-action-hover: #ffbedc;

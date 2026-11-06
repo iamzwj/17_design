@@ -7,10 +7,10 @@ export default function GlobalBackground() {
     const update = () => {
       const root = document.documentElement
       const dark = root.dataset.theme === 'dark'
-      const green = root.dataset.accent === 'green'
+      const styles = getComputedStyle(root)
       setPalette({
-        color: dark ? (green ? '#305a45' : '#30476c') : getComputedStyle(root).getPropertyValue('--dp-highlight').trim() || '#164bb8',
-        glint: dark ? (green ? '#68947a' : '#6882a8') : '#ffffff',
+        color: styles.getPropertyValue(dark ? '--accent-background' : '--dp-highlight').trim() || '#164bb8',
+        glint: styles.getPropertyValue('--accent-glint').trim() || '#ffffff',
       })
     }
     update()
