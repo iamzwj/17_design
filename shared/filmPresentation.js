@@ -9,3 +9,11 @@ export function legacyResourceCategory(r){
 }
 export function historyMessage(e){const text=String(e.message||'');if(!e.agent)return text.replace(/^正在制作镜头\s*(s?\d+)\s*的?(首帧|视频)?/,'开始生成镜头 $1 $2').replace(/^正在/,'开始');return text;}
 export function historyDate(value){return new Date(value).toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'});}
+// A retry being started is not evidence that the original failure is resolved.
+export function filmErrorResolved(e, project) {
+ if(e.type!=='error' || !e.taskId || e.commandId || String(e.message||'').startsWith('操作未应用'))return false;
+ const at=Number(new Date(e.at));
+ if(!Number.isFinite(at))return false;
+ return (project.events||[]).some(next=>next.taskId===e.taskId && next.type==='result' && Number(new Date(next.at))>at) ||
+  (project.tasks||[]).some(t=>t.id===e.taskId && t.status==='succeeded' && Number(new Date(t.completedAt))>at);
+}

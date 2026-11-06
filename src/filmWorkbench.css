@@ -265,3 +265,8 @@
   outline: 2px solid var(--fw-review-primary);
   outline-offset: 2px;
 }
+/* Preserve the failure record; mark only confirmed successful recovery. */
+.fw-activity-row header{flex-wrap:wrap}
+.fw-activity-row header>b{margin-right:auto}
+.fw-error-resolved{display:inline-flex;align-items:center;flex:none;padding:2px 7px;border:1px solid #c4c0e2;border-radius:5px;background:#efedf8;color:#51417f;font-size:var(--dp-typography-label);line-height:1.5;white-space:nowrap}
+:root[data-theme=dark] .fw-error-resolved{border-color:#625779;background:#302a3e;color:#ddd0ff}
