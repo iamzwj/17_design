@@ -3,6 +3,7 @@ import {prepareFilmAudio,renderFilmTimeline,probe} from './filmEditing.js';
 import { readFilmProject, drainFilmCommands, pendingCommands, beginTask, finishTask, event, taskId, clone, applyCommand } from './filmState.js';
 import { createFilmAgents } from './filmAgents.js';
 import { filmPool } from './filmPool.js';
+import { selectFilmProject } from './filmScheduler.js';
 import { filmEvent } from '../shared/filmProgress.js';
 import { filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
@@ -806,10 +807,12 @@ const graph = new StateGraph(State)
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))
   .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','reference_assets').addEdge('reference_assets','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();
+let lastScheduledId;
 while(true) {
   try {
     const projects=fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x)).flatMap(id=>{try{return [read(id)];}catch{return [];}});
-    const p=projects.find(p=>pendingCommands(root,p).length || (['queued','running','pausing'].includes(p.status) && (!p.nextRunAt||p.nextRunAt<=Date.now())));
+    const p=selectFilmProject(projects,{lastId:lastScheduledId,hasCommands:p=>pendingCommands(root,p).length>0});
+    if(p)lastScheduledId=p.id;
     if(p) {
       drainFilmCommands(root,p);save(p);
       if(p.schedulingPaused){await recoverDetached(p);p.status='paused';save(p);await sleep(1500);continue;}
