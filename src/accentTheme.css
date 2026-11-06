@@ -107,3 +107,9 @@
   background: var(--dp-selected);
   color: var(--dp-ink);
 }
+
+.sidebar-bottom .account b small {
+  color: var(--dp-secondary);
+  font-size: calc(var(--dp-typography-label) - 1px);
+  font-weight: 400;
+}
