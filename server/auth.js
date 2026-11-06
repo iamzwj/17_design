@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomInt } from 'node:crypto'
 import tls from 'node:tls'
 
 const EMAIL_PATTERN = /^[^\s@]+@onewo\.com$/i
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,64}$/
 const CODE_TTL = 10 * 60 * 1000
 const SHORT_SESSION_TTL = 12 * 60 * 60 * 1000
 const REMEMBER_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
@@ -36,16 +35,6 @@ function currentCreditDay() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
 function tokenHash(value) { return createHash('sha256').update(value).digest('hex') }
-function passwordHash(password, salt = randomBytes(16).toString('hex')) {
-  return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`
-}
-function passwordMatches(password, stored) {
-  const [salt, expectedHex] = String(stored || '').split(':')
-  if (!salt || !expectedHex) return false
-  const actual = scryptSync(password, salt, 64)
-  const expected = Buffer.from(expectedHex, 'hex')
-  return expected.length === actual.length && timingSafeEqual(expected, actual)
-}
 function bearer(req) {
   const match = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)
   return match?.[1] || ''
@@ -185,7 +174,7 @@ export function installAuth(app, { dataDir }) {
       if (value) socket.write(`${value}\r\n`)
       const response = await read()
       if (!expected.some((code) => response.startsWith(String(code)))) {
-        console.error('registration-smtp-rejected', { stage, code: response.slice(0, 3) })
+        console.error('login-smtp-rejected', { stage, code: response.slice(0, 3) })
         const error = new Error(stage === '账号验证'
           ? '验证码邮件服务暂不可用，请联系管理员zhangwj159检查发信账号的 SMTP 授权'
           : '验证码邮件发送失败，请联系管理员zhangwj159处理')
@@ -202,8 +191,8 @@ export function installAuth(app, { dataDir }) {
       await command(`MAIL FROM:<${username}>`, [250])
       await command(`RCPT TO:<${email}>`, [250, 251])
       await command('DATA', [354])
-      const subject = `=?UTF-8?B?${Buffer.from('D-Gen 注册验证码').toString('base64')}?=`
-      const html = `<div style="font-family:sans-serif;color:#1a2e1f"><h2>欢迎使用 D-Gen</h2><p>你的注册验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件。</p></div>`
+      const subject = `=?UTF-8?B?${Buffer.from('D-Gen 登录验证码').toString('base64')}?=`
+      const html = `<div style="font-family:sans-serif;color:#1a2e1f"><h2>欢迎使用 D-Gen</h2><p>你的登录验证码是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>验证码 10 分钟内有效。如非本人操作，请忽略此邮件。</p></div>`
       socket.write(`From: D-Gen <${username}>\r\nTo: <${email}>\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${html.replace(/\r?\n\./g, '\r\n..')}\r\n.\r\n`)
       const delivered = await read()
       if (!delivered.startsWith('250')) throw new Error('邮件服务器未接受验证码邮件')
@@ -213,31 +202,30 @@ export function installAuth(app, { dataDir }) {
   }
 
   const pendingCodeEmails = new Set()
-  app.post('/api/auth/register/code', async (req, res, next) => {
+  app.post('/api/auth/login/code', async (req, res, next) => {
     try {
       cleanup()
       const email = normalizeEmail(req.body.email)
       if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
-      try { ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
-      if (store.users.some((item) => item.email === email)) return res.status(409).json({ error: '该邮箱已注册，请直接登录' })
+      try { if (!store.users.some(user => user.email === email)) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
       const recent = store.codes.find((item) => item.email === email && item.sentAt > Date.now() - 60_000)
       if (recent) return res.status(429).json({ error: `验证码已发送，请 ${Math.max(1, Math.ceil((recent.sentAt + 60_000 - Date.now()) / 1000))} 秒后重试` })
       if (pendingCodeEmails.has(email)) return res.status(429).json({ error: '验证码正在发送，请稍候' })
-      const code = String(Math.floor(100000 + Math.random() * 900000))
+      const code = String(randomInt(100000, 1000000))
       pendingCodeEmails.add(email)
       try {
-        const sent = await sendCode(email, code)
+        if (!await sendCode(email, code)) return res.status(503).json({ error: '验证码邮件服务暂不可用，请联系管理员zhangwj159' })
         store.codes = store.codes.filter((item) => item.email !== email)
-        store.codes.push({ email, codeHash: tokenHash(code), attempts: 0, sentAt: Date.now(), expiresAt: Date.now() + CODE_TTL })
+        store.codes.push({ email, codeHash: tokenHash(code), purpose: 'login', attempts: 0, sentAt: Date.now(), expiresAt: Date.now() + CODE_TTL })
         save()
-        res.json({ ok: true, ...(sent ? {} : { devCode: code }) })
+        res.json({ ok: true })
       } finally { pendingCodeEmails.delete(email) }
     } catch (error) { next(error) }
   })
 
   function verifyCode(email, code) {
     cleanup()
-    const record = store.codes.find((item) => item.email === email)
+    const record = store.codes.find((item) => item.email === email && item.purpose === 'login')
     if (!record || record.expiresAt <= Date.now()) return { error: '验证码已过期，请重新获取' }
     if (record.attempts >= 5) return { error: '验证码错误次数过多，请重新获取', status: 429 }
     if (record.codeHash !== tokenHash(code)) {
@@ -248,38 +236,21 @@ export function installAuth(app, { dataDir }) {
     return { record }
   }
 
-  app.post('/api/auth/register/verify', (req, res) => {
-    const email = normalizeEmail(req.body.email)
-    if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
-    try { ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
-    const result = verifyCode(email, String(req.body.code || '').trim())
-    if (result.error) return res.status(result.status || 400).json({ error: result.error })
-    res.json({ ok: true })
-  })
-
-  app.post('/api/auth/register', (req, res) => {
-    cleanup()
-    const email = normalizeEmail(req.body.email)
-    const code = String(req.body.code || '').trim()
-    const password = String(req.body.password || '')
-    if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
-    try { ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
-    if (!PASSWORD_PATTERN.test(password)) return res.status(400).json({ error: '密码须为 8–64 位，且同时包含字母和数字' })
-    if (store.users.some((item) => item.email === email)) return res.status(409).json({ error: '该邮箱已注册，请直接登录' })
-    const verification = verifyCode(email, code)
-    if (verification.error) return res.status(verification.status || 400).json({ error: verification.error })
-    const creditLimit = dailyCreditLimit(email)
-    const user = { id: randomBytes(16).toString('hex'), email, passwordHash: passwordHash(password), credits: creditLimit, creditLimit, creditsUpdatedOn: currentCreditDay(), createdAt: new Date().toISOString() }
-    store.users.push(user)
-    store.codes = store.codes.filter((item) => item.email !== email)
-    save()
-    res.status(201).json(issueSession(user, Boolean(req.body.remember)))
-  })
-
   app.post('/api/auth/login', (req, res) => {
     const email = normalizeEmail(req.body.email)
-    const user = store.users.find((item) => item.email === email)
-    if (!user || !passwordMatches(String(req.body.password || ''), user.passwordHash)) return res.status(401).json({ error: '邮箱或密码不正确' })
+    const code = String(req.body.code || '').trim()
+    if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
+    let user = store.users.find(item => item.email === email)
+    try { if (!user) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
+    if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: '请输入 6 位验证码' })
+    const verification = verifyCode(email, code)
+    if (verification.error) return res.status(verification.status || 400).json({ error: verification.error })
+    if (!user) {
+      const creditLimit = dailyCreditLimit(email)
+      user = { id: randomBytes(16).toString('hex'), email, credits: creditLimit, creditLimit, creditsUpdatedOn: currentCreditDay(), createdAt: new Date().toISOString() }
+      store.users.push(user)
+    }
+    store.codes = store.codes.filter(item => item !== verification.record)
     res.json(issueSession(user, Boolean(req.body.remember)))
   })
 
@@ -287,20 +258,6 @@ export function installAuth(app, { dataDir }) {
     const auth = sessionFor(req)
     if (!auth) return res.status(401).json({ error: '登录已过期，请重新登录' })
     res.json({ user: publicUser(auth.user), expiresAt: auth.session.expiresAt })
-  })
-
-  app.post('/api/auth/password', (req, res) => {
-    const auth = sessionFor(req)
-    if (!auth) return res.status(401).json({ error: '登录已过期，请重新登录' })
-    const currentPassword = String(req.body.currentPassword || '')
-    const newPassword = String(req.body.newPassword || '')
-    if (!passwordMatches(currentPassword, auth.user.passwordHash)) return res.status(400).json({ error: '当前密码不正确' })
-    if (!PASSWORD_PATTERN.test(newPassword)) return res.status(400).json({ error: '新密码须为 8–64 位，且同时包含字母和数字' })
-    if (currentPassword === newPassword) return res.status(400).json({ error: '新密码不能与当前密码相同' })
-    auth.user.passwordHash = passwordHash(newPassword)
-    store.sessions = store.sessions.filter((item) => item.userId !== auth.user.id || item.tokenHash === auth.session.tokenHash)
-    save()
-    res.json({ ok: true })
   })
 
   app.post('/api/auth/logout', (req, res) => {

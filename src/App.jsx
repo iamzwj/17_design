@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
-import { cancelWaterfallTask, changeAccountPassword, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, registerAccount, requestRegisterCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import QrBatchStudio from './QrBatchStudio.jsx'
@@ -499,7 +499,7 @@ function BrandIcon({ alt = '' }) {
   return <span className="brand-icon-static" role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}/>
 }
 
-function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onChangePassword, onLogout, onLogin }) {
+function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
@@ -579,7 +579,6 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
         {user && accountExpanded && <div className="account-dropdown" onMouseEnter={keepAccountMenuOpen}>
           <div className="account-menu-email"><Icon name="mail" size={15}/><span>{user.email}</span></div>
           <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 50}</b></div>
-          <button onClick={() => { onChangePassword(); setAccountExpanded(false); onClose() }}><Icon name="lock" size={16}/><span>修改密码</span><Icon name="chevron" size={14}/></button>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
           {THEME_SELECTION_ENABLED && <div className="theme-menu-row">
@@ -598,95 +597,58 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
 }
 
 const EMAIL_LOCAL_PATTERN = /^[^\s@]+$/
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,64}$/
-
 function AuthScreen({ onAuthenticated, onClose }) {
-  const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   function updateEmailLocal(value) {
-    const local = String(value || '').trim().toLowerCase().replace(/@onewo\.com$/i, '').replace(/@.*$/, '')
-    setEmail(local)
+    setEmail(value.trim().toLowerCase().replace(/@onewo\.com$/i, ''))
+    setCode('')
+    setError('')
+    setNotice('')
   }
 
-  function switchMode(next) {
-    setMode(next); setCode(''); setPassword(''); setConfirmPassword(''); setError(''); setNotice('')
-  }
-
-  async function submit(event) {
-    event.preventDefault(); setError(''); setNotice('')
-    const emailLocal = email.trim().toLowerCase()
-    if (!EMAIL_LOCAL_PATTERN.test(emailLocal)) { setError('请输入企业邮箱账号'); return }
-    const normalizedEmail = `${emailLocal}@onewo.com`
-    setLoading(true)
-    try {
-      if (mode === 'login') {
-        const result = await loginAccount({ email: normalizedEmail, password, remember })
-        saveAuthToken(result.token, remember); onAuthenticated(result.user)
-      } else {
-        if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
-        if (!PASSWORD_PATTERN.test(password)) throw new Error('密码须为 8–64 位，且同时包含字母和数字')
-        if (password !== confirmPassword) throw new Error('两次输入的密码不一致')
-        const result = await registerAccount({ email: normalizedEmail, code, password, remember })
-        saveAuthToken(result.token, remember); onAuthenticated(result.user)
-      }
-    } catch (requestError) { setError(userError(requestError.message)) }
-    finally { setLoading(false) }
-  }
-
-  async function sendCode() {
-    setError(''); setNotice('')
+  async function run(action) {
+    if (loading) return
+    setError('')
+    setNotice('')
     if (!EMAIL_LOCAL_PATTERN.test(email)) { setError('请输入企业邮箱账号'); return }
     setLoading(true)
-    try {
-      const result = await requestRegisterCode(`${email}@onewo.com`)
-      setNotice(result.devCode ? `本地开发验证码：${result.devCode}` : '验证码已发送')
-    } catch (requestError) { setError(userError(requestError.message)) }
-    finally { setLoading(false) }
-  }
-
-  const isRegister = mode === 'register'
-  return <div className="modal-scrim auth-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong">
-    <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
-  <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
-    <div className="auth-tabs"><button type="button" className={!isRegister ? 'active' : ''} disabled={loading} onClick={() => switchMode('login')}>登录</button><button type="button" className={isRegister ? 'active' : ''} disabled={loading} onClick={() => switchMode('register')}>注册</button></div>
-
-    <form className="auth-form" onSubmit={submit}>
-      <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/><b>@onewo.com</b></div></label>
-
-      {mode === 'login' && <label><span>密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" disabled={loading}/></div></label>}
-      {isRegister && <label><span>邮箱验证码</span><div><Icon name="shield" size={17}/><input className="code-input" inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/><button type="button" className="auth-send-code" onClick={sendCode} disabled={loading}>发送验证码</button></div></label>}
-      {isRegister && <><label><span>设置密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8–64 位字母与数字" disabled={loading}/></div></label><label><span>确认密码</span><div><Icon name="lock" size={17}/><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="再次输入密码" disabled={loading}/></div></label><small className="password-hint">密码必须同时包含字母和数字，不支持空格及特殊符号</small></>}
-      <label className="remember-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}/><span>记住登录状态，30 天内免登录</span></label>
-      {notice && <div className="auth-notice">{notice}</div>}{error && <div className="auth-error">{error}</div>}
-      <button className="auth-submit" disabled={loading}>{loading ? '请稍候…' : mode === 'login' ? '登录' : '完成注册'}</button>
-    </form>
-  </section></div>
-}
-
-function ChangePasswordModal({ onClose }) {
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  async function submit(event) {
-    event.preventDefault(); setError('')
-    if (!PASSWORD_PATTERN.test(newPassword)) { setError('新密码须为 8–64 位，且同时包含字母和数字'); return }
-    if (newPassword !== confirmPassword) { setError('两次输入的新密码不一致'); return }
-    setLoading(true)
-    try { await changeAccountPassword({ currentPassword, newPassword }); window.alert('密码修改成功'); onClose() }
+    try { await action(email + '@onewo.com') }
     catch (requestError) { setError(userError(requestError.message)) }
     finally { setLoading(false) }
   }
-  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="password-modal glass-strong"><button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button><span className="modal-icon"><Icon name="lock" size={22}/></span><h2>修改密码</h2><p>新密码必须同时包含字母和数字</p><form className="auth-form" onSubmit={submit}><label><span>当前密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}/></div></label><label><span>新密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="8–64 位字母与数字"/></div></label><label><span>确认新密码</span><div><Icon name="lock" size={16}/><input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}/></div></label>{error && <div className="auth-error">{error}</div>}<button className="auth-submit" disabled={loading}>{loading ? '保存中…' : '保存新密码'}</button></form></section></div>
+
+  async function submit(event) {
+    event.preventDefault()
+    await run(async normalizedEmail => {
+      if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
+      const result = await loginAccount({ email: normalizedEmail, code, remember })
+      saveAuthToken(result.token, remember)
+      onAuthenticated(result.user)
+    })
+  }
+
+  return <div className="modal-scrim auth-modal-scrim" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}><section className="auth-card auth-modal-card glass-strong" role="dialog" aria-modal="true" aria-label="邮箱验证码登录">
+    <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
+  <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
+    <form className="auth-form" onSubmit={submit}>
+      <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/><b>@onewo.com</b></div></label>
+      <label><span>邮箱验证码</span><div><Icon name="shield" size={17}/><input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/></div></label>
+      <button type="button" className="auth-code-button" disabled={loading} onClick={() => run(async normalizedEmail => {
+        await requestLoginCode(normalizedEmail)
+        setNotice('验证码已发送，请查收邮件')
+      })}>发送验证码</button>
+      <label className="remember-check"><input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)}/><span>记住登录状态，30 天内免登录</span></label>
+      {notice && <div className="auth-notice" role="status">{notice}</div>}
+      {error && <div className="auth-error" role="alert">{error}</div>}
+      <button className="auth-submit" disabled={loading}>{loading ? '请稍候…' : '登录'}</button>
+    </form>
+  </section></div>
 }
 
 function ArchiveWorkspace({ archived, onRestore, onDelete, onDeleteAll }) {
@@ -1724,7 +1686,6 @@ export default function App() {
   const [authState, setAuthState] = useState(() => getAuthToken() ? 'checking' : 'guest')
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -1970,5 +1931,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onChangePassword={() => setPasswordModalOpen(true)} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{passwordModalOpen && <ChangePasswordModal onClose={() => setPasswordModalOpen(false)}/>} {loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }

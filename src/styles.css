@@ -761,7 +761,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   border-bottom-color: var(--dp-highlight);
 }
 
-.auth-modal-card { height: min(610px, calc(100dvh - 36px)); }
+.auth-modal-card { max-height: calc(100dvh - 36px); }
 .auth-send-code {
   flex: none;
   padding: 4px 0 4px 10px;
@@ -773,3 +773,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   cursor: pointer;
 }
 .auth-send-code:disabled { opacity: .6; }
+
+.auth-code-button { justify-self: end; padding: 7px 12px; border: 1px solid var(--dp-rule); border-radius: 8px; background: var(--dp-panel); color: var(--dp-highlight); cursor: pointer; }
+.auth-code-button:disabled { opacity: .55; cursor: wait; }

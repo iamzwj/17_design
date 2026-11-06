@@ -86,11 +86,8 @@ async function post(path, body, signal) {
   return data
 }
 
-export const requestRegisterCode = (email) => post('/api/auth/register/code', { email })
-export const verifyRegisterCode = (email, code) => post('/api/auth/register/verify', { email, code })
-export const registerAccount = (payload) => post('/api/auth/register', payload)
+export const requestLoginCode = (email) => post('/api/auth/login/code', { email })
 export const loginAccount = (payload) => post('/api/auth/login', payload)
-export const changeAccountPassword = (payload) => post('/api/auth/password', payload)
 export const logoutAccount = () => post('/api/auth/logout', {})
 export const recordPleaseDayAvatarDownload = () => post('/api/please-day/avatar-downloads', {})
 
