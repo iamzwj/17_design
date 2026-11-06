@@ -526,7 +526,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
     <aside className={`sidebar glass-strong ${open ? 'is-open' : ''}`}>
       <div className="brand">
         <span className="sidebar-wordmark" role="img" aria-label="D-Gen" dangerouslySetInnerHTML={{ __html: dgenWordmark.replace('<defs><style>.cls-1{fill:#05ffe7;}.cls-2{fill:#fff;}</style></defs>', '').replaceAll('class="cls-1"', 'fill="var(--dp-highlight)"').replaceAll('class="cls-2"', 'fill="var(--dp-ink)"') }}/>
-        <span className="sidebar-brand-caption">蝶发AI工作台</span>
+        <span className="sidebar-brand-caption" aria-label="蝶发AI工作台">{[...'蝶发AI工作台'].map((character, index) => <span key={index} aria-hidden="true">{character}</span>)}</span>
       </div>
       <nav className="module-nav primary-tools">
         {MODULES.map((item) => item.id === 'image' ? <div className="more-tool-nav" key={item.id}>
