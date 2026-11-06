@@ -27,6 +27,7 @@
 .fw-script-body.fw-original-story{font-size: var(--dp-typography-body);line-height:1.9}
 :root[data-theme='dark'] .fw-script-body { color: #c8c8c8; font-weight: 400; }
 .fw-script-label { color: var(--dp-highlight); font-weight: 600; }
+:root[data-theme='dark'] .fw-script-label { color: #fff; }
 
 
 .fw-stage-library { display: grid; gap: 7px; }
