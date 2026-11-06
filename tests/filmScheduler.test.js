@@ -1,22 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectFilmProject } from '../server/filmScheduler.js';
-const pick = (projects, options = {}) => selectFilmProject(projects, { hasCommands: () => false, now: 100, ...options });
-test('a paused project with unfinished jobs cannot starve a new script', () => {
-  const paused = { id: 'old', status: 'pausing', schedulingPaused: true, activeJobs: [{ id: 'image' }] };
-  const queued = { id: 'new', status: 'queued' };
-  assert.equal(pick([paused, queued]), queued);
-  assert.equal(pick([paused]), undefined);
+import { createFilmDispatcher } from '../server/filmScheduler.js';
+const tick = () => new Promise(r => setImmediate(r));
+test('a waiting project never blocks another project or gets duplicate execution', async () => {
+  let finish;
+  const started = [], errors = [];
+  const dispatch = createFilmDispatcher(async p => {
+    started.push(p.id);
+    if (p.id === 'old') await new Promise(r => { finish = r; });
+  }, e => errors.push(e));
+  const old = { id: 'old', status: 'running' };
+  dispatch([old], () => false);
+  await tick();
+  dispatch([old, { id: 'new', status: 'queued' }], () => false);
+  await tick();
+  assert.deepEqual(started, ['old', 'new']);
+  finish(); await tick();
+  assert.deepEqual(errors, []);
 });
-test('resume commands remain actionable while scheduling is paused', () => {
-  const paused = { id: 'old', status: 'paused', schedulingPaused: true };
-  assert.equal(pick([paused], { hasCommands: () => true }), paused);
+test('paused recovery, resume commands and a new script all run independently', async () => {
+  const started = [];
+  const dispatch = createFilmDispatcher(p => { started.push(p.id); }, assert.fail);
+  dispatch([
+    { id: 'recover', status: 'pausing', schedulingPaused: true, tasks: [{ providerId: 'x', status: 'running' }] },
+    { id: 'resume', status: 'paused', schedulingPaused: true },
+    { id: 'new', status: 'queued' },
+    { id: 'paused', status: 'paused', schedulingPaused: true },
+    { id: 'later', status: 'queued', nextRunAt: 101 },
+  ], p => p.id === 'resume', 100);
+  await tick();
+  assert.deepEqual(started, ['recover', 'resume', 'new']);
 });
-test('round robin permits later projects to run after an earlier project yields', () => {
-  const projects = [{ id: 'a', status: 'queued' }, { id: 'b', status: 'running' }];
-  assert.equal(pick(projects, { lastId: 'a' }).id, 'b');
-  assert.equal(pick(projects, { lastId: 'b' }).id, 'a');
-});
-test('respects retry deadlines and paused flags even with stale running status', () => {
-  assert.equal(pick([{ id: 'a', status: 'queued', nextRunAt: 101 }, { id: 'b', status: 'running', schedulingPaused: true }]), undefined);
+test('a rejected project releases its execution guard and cannot stop others', async () => {
+  const errors = [], started = [];
+  const dispatch = createFilmDispatcher(p => { started.push(p.id); if(p.id === 'bad')throw Error('failed'); }, e => errors.push(e.message));
+  const projects = [{ id: 'bad', status: 'queued' }, { id: 'good', status: 'queued' }];
+  dispatch(projects, () => false); await tick();
+  dispatch(projects, () => false); await tick();
+  assert.deepEqual(started, ['bad', 'good', 'bad', 'good']);
+  assert.deepEqual(errors, ['failed', 'failed']);
 });

@@ -3,7 +3,7 @@ import {prepareFilmAudio,renderFilmTimeline,probe} from './filmEditing.js';
 import { readFilmProject, drainFilmCommands, pendingCommands, beginTask, finishTask, event, taskId, clone, applyCommand } from './filmState.js';
 import { createFilmAgents } from './filmAgents.js';
 import { filmPool } from './filmPool.js';
-import { selectFilmProject } from './filmScheduler.js';
+import { createFilmDispatcher } from './filmScheduler.js';
 import { filmEvent } from '../shared/filmProgress.js';
 import { filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
@@ -807,17 +807,18 @@ const graph = new StateGraph(State)
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))
   .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','reference_assets').addEdge('reference_assets','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();
-let lastScheduledId;
+// Each project owns one asynchronous execution. Waiting for a provider in one
+// project must not block another project, or start a second writer for itself.
+const dispatch = createFilmDispatcher(async p => {
+  drainFilmCommands(root,p);save(p);
+  if(p.schedulingPaused){await recoverDetached(p);p.status='paused';save(p);return;}
+  if(!['queued','running'].includes(p.status)){await recoverDetached(p);return;}
+  await graph.invoke({id:p.id});
+}, error => console.error('Film project:',error.message));
 while(true) {
   try {
     const projects=fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x)).flatMap(id=>{try{return [read(id)];}catch{return [];}});
-    const p=selectFilmProject(projects,{lastId:lastScheduledId,hasCommands:p=>pendingCommands(root,p).length>0});
-    if(p)lastScheduledId=p.id;
-    if(p) {
-      drainFilmCommands(root,p);save(p);
-      if(p.schedulingPaused){await recoverDetached(p);p.status='paused';save(p);await sleep(1500);continue;}
-      if(!['queued','running'].includes(p.status)) {await recoverDetached(p);await sleep(500);continue;}
-      await graph.invoke({id:p.id});
-    }else {for(const project of projects)await recoverDetached(project);await sleep(1500);}
+    dispatch(projects,p=>pendingCommands(root,p).length>0);
+    await sleep(1500);
   }catch(e){console.error('Film worker:',e.message);await sleep(3000);}
 }

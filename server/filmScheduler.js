@@ -1,9 +1,14 @@
-// Paused projects may still have provider jobs to recover, but must never
-// occupy the execution queue ahead of a newly submitted project.
-export function selectFilmProject(projects, { lastId, hasCommands, now = Date.now() }) {
-  const start = projects.findIndex(p => p.id === lastId) + 1;
-  const ordered = [...projects.slice(start), ...projects.slice(0, start)];
-  return ordered.find(p => hasCommands(p)) || ordered.find(p =>
-    !p.schedulingPaused && ['queued', 'running'].includes(p.status) &&
-    (!p.nextRunAt || p.nextRunAt <= now));
+export function createFilmDispatcher(run, onError) {
+  const active = new Set();
+  return (projects, hasCommands, now = Date.now()) => {
+    for (const p of projects) {
+      if (active.has(p.id)) continue;
+      const runnable = !p.schedulingPaused && ['queued', 'running'].includes(p.status) &&
+        (!p.nextRunAt || p.nextRunAt <= now);
+      const recovering = p.tasks?.some(t => t.providerId && ['running', 'failed'].includes(t.status));
+      if (!runnable && !recovering && !hasCommands(p)) continue;
+      active.add(p.id);
+      Promise.resolve().then(() => run(p)).catch(onError).finally(() => active.delete(p.id));
+    }
+  };
 }
