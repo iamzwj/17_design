@@ -8,14 +8,21 @@ import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 
-test('direct and persistent Banana generation use native parameters; removed models reject new tasks', async () => {
+test('direct and persistent generation use model-specific parameters and preserve GIF frames', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dgen-image-model-'))
   const token = randomUUID(), calls = []
   const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: 'white' } }).png().toBuffer()
+  const gif = Buffer.from('47494638396101000100800000000000ffffff' +
+    '21f90400640000002c0000000001000100000202440100' +
+    '21f90400640000002c00000000010001000002024c01003b', 'hex')
+  assert.equal((await sharp(gif).metadata()).pages, 2)
   const upstream = http.createServer(async (req, res) => {
     if (req.url === '/image.png') { res.setHeader('Content-Type', 'image/png'); res.end(png); return }
+    if (req.url === '/image.gif') { res.setHeader('Content-Type', 'image/gif'); res.end(gif); return }
     let raw = ''; for await (const c of req) raw += c
-    calls.push(JSON.parse(raw)); res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ id: randomUUID(), status: 'succeeded', results: [{ url: `http://127.0.0.1:${upstream.address().port}/image.png` }] }))
+    const input = JSON.parse(raw)
+    const extension = input.model === 'gpt-image-2.6' ? 'gif' : 'png'
+    calls.push(input); res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ id: randomUUID(), status: 'succeeded', results: [{ url: `http://127.0.0.1:${upstream.address().port}/image.${extension}` }] }))
   })
   upstream.listen(0, '127.0.0.1'); await new Promise((r) => upstream.once('listening', r))
   const probe = http.createServer(); probe.listen(0, '127.0.0.1'); await new Promise((r) => probe.once('listening', r)); const port = probe.address().port; await new Promise((r) => probe.close(r))
@@ -40,6 +47,26 @@ test('direct and persistent Banana generation use native parameters; removed mod
     assert.equal(customTask.data.task.generationSize, '2048x1024')
     await until(async () => (await call(`/api/waterfall/tasks/${customTask.data.task.id}`)).data.task.status === 'succeeded')
     assert.equal(calls.at(-1).aspectRatio, '2048x1024')
+    const gifInput = { ...input, model: 'gpt-image-2.6', resolution: '4k', quality: 'medium' }
+    const directGif = await call('/api/image', gifInput)
+    assert.equal(directGif.status, 200)
+    assert.equal(directGif.data.resolution, '1k')
+    assert.equal(calls.at(-1).replyType, 'json')
+    const gifTask = await call('/api/waterfall/tasks', gifInput)
+    assert.equal(gifTask.status, 202)
+    const gifSlot = await until(async () => {
+      const task = (await call(`/api/waterfall/tasks/${gifTask.data.task.id}`)).data.task
+      assert.notEqual(task.status, 'failed', JSON.stringify(task.slots))
+      return task.status === 'succeeded' && task.slots[0]
+    })
+    assert.equal(calls.at(-1).replyType, 'async')
+    assert.equal(calls.at(-1).model, 'gpt-image-2.6')
+    assert.equal(calls.at(-1).aspectRatio, '720x1280')
+    assert.equal(calls.at(-1).quality, 'medium')
+    for (const url of [directGif.data.urls[0], gifSlot.url]) {
+      assert.match(url, /\.gif$/)
+      assert.deepEqual(fs.readFileSync(path.join(dir, 'waterfall-assets', path.basename(url))), gif)
+    }
     const beforeInvalid = calls.length
     for (const path of ['/api/image', '/api/waterfall/tasks']) {
       for (const size of ['4096x2048', '3840x3840', '1024x256', '1025x1024', '480x480', '999999999999999999x1024']) {

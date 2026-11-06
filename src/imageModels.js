@@ -57,6 +57,7 @@ export const IMAGE_MODEL_OPTIONS = [
   { value: STANDARD_IMAGE_MODEL, label: 'GPT Image 2' },
   { value: VIP_IMAGE_MODEL, label: 'GPT Image 2 VIP' },
   { value: 'gpt-image-2.5', label: 'GPT Image 2.5' },
+  { value: 'gpt-image-2.6', label: 'GPT Image 2.6' },
   { value: BANANA_IMAGE_MODEL, label: 'nano-banana-2.1' },
   ...[...MAIZI_IMAGE_MODELS].map((value) => ({ value, label: value })),
 ]

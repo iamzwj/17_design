@@ -74,7 +74,7 @@ const vipImageSizes = {
     '3:1': '3840x1280', '1:3': '1280x3840',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', BANANA_IMAGE_MODEL, ...MAIZI_IMAGE_MODELS])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.6', BANANA_IMAGE_MODEL, ...MAIZI_IMAGE_MODELS])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
@@ -761,16 +761,22 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`保存生成图片失败（HTTP ${response.status}）`)
   const contentType = response.headers.get('content-type') || 'image/png'
-  const upstreamExtension = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png'
-  let imageBuffer = await sharp(Buffer.from(await response.arrayBuffer()), { failOn: 'none' }).rotate().toBuffer()
+  const upstreamExtension = imageExtension(contentType)
+  let imageBuffer = Buffer.from(await response.arrayBuffer())
   let metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
+  // The still-image transforms below would flatten a multi-frame GIF.
+  const animatedGif = metadata.format === 'gif' && metadata.pages > 1
+  if (!animatedGif) {
+    imageBuffer = await sharp(imageBuffer, { failOn: 'none' }).rotate().toBuffer()
+    metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
+  }
   const targetRatio = aspectRatioValue(expectedRatio)
   const returnedRatio = metadata.width && metadata.height ? metadata.width / metadata.height : null
 
   // Some upstream variants silently substitute an unsupported canvas (for
   // example returning 1:3 for a requested 9:21).  Persist the image at the
   // requested ratio instead of leaving the UI and downloaded file disagreeing.
-  if (targetRatio && returnedRatio && Math.abs(Math.log(returnedRatio / targetRatio)) > 0.005) {
+  if (!animatedGif && targetRatio && returnedRatio && Math.abs(Math.log(returnedRatio / targetRatio)) > 0.005) {
     const width = metadata.width
     const height = Math.max(1, Math.round(width / targetRatio))
     imageBuffer = await sharp(imageBuffer, { failOn: 'none' })
@@ -780,13 +786,13 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
     metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
   }
 
-  if (removeBackground) {
+  if (removeBackground && !animatedGif) {
     imageBuffer = await removeChromaBackground(imageBuffer, backgroundColor)
     metadata = await sharp(imageBuffer, { failOn: 'none' }).metadata()
   }
 
   let logoApplied = false, brandWarning = null
-  if (knowledgeTraceId && !removeBackground && knowledge.hasLogoOverlay(knowledgeTraceId)) {
+  if (!animatedGif && knowledgeTraceId && !removeBackground && knowledge.hasLogoOverlay(knowledgeTraceId)) {
     await fs.promises.writeFile(path.join(waterfallAssetsDir, `${taskId}-${slotIndex}.before-logo.png`), await sharp(imageBuffer).png().toBuffer())
     updateWaterfallTask(taskId, (current) => ({ ...current, slots: current.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'brand-logo', lastEvent: '检查已有Logo并合成正式原图' } : slot) }))
     try {
@@ -794,7 +800,7 @@ async function persistWaterfallImage(sourceUrl, taskId, slotIndex, expectedRatio
       if (composed) { imageBuffer = composed; logoApplied = true; metadata = await sharp(imageBuffer).metadata() }
     } catch (error) { brandWarning = `Logo未合成：${String(error.message).slice(0, 240)}` }
   }
-  const extension = removeBackground ? 'png' : imageExtensionForFormat(metadata.format, upstreamExtension)
+  const extension = removeBackground && !animatedGif ? 'png' : imageExtensionForFormat(metadata.format, upstreamExtension)
   const fileName = `${taskId}-${slotIndex}.${extension}`
   await fs.promises.writeFile(path.join(waterfallAssetsDir, fileName), imageBuffer)
   let thumbnailUrl = null
