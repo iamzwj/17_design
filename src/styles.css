@@ -690,7 +690,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 
 /* Shared fill for text-entry controls, including module-specific dark overrides. */
-:root .app-shell :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']), select):not(.auth-form input) {
+:root .app-shell :is(textarea, input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']), select):not(.auth-form input, .composer textarea) {
   background-color: var(--dp-panel) !important;
 }
 
