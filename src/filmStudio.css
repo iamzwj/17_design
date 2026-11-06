@@ -426,7 +426,7 @@
   .fw-inspector {
     max-height: none;
     height: auto;
-    overflow: visible;
+    overflow: clip;
   }
 }
 @media (max-width: 950px) {
