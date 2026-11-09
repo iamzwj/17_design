@@ -2,7 +2,6 @@ import { userError, localizeErrors } from './userErrors.js'
 import { createPortal } from 'react-dom';
 import { Icon } from './icons.jsx';
 import { CharacterLibrary } from "./FilmCharacters.jsx";
-import {knowledgeRequest} from './knowledgeApi.js';
 import { filmTaskName } from '../shared/filmProgress.js';
 import FilmWorkbench from './FilmWorkbench.jsx';
 import { useEffect, useState } from "react";
@@ -30,7 +29,6 @@ export async function filmRequest(path = "", body) {
 const request = filmRequest;
 export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew }) {
   const [characterLibrary, setCharacterLibrary] = useState(false);
-  const [references,setReferences]=useState({brands:[],skills:[]});
   const [loaded, setLoaded] = useState(false);
   const [project, setProject] = useState(null);
   const [id, setId] = useState(projectId || ""),
@@ -98,7 +96,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [id]);
 
-  useEffect(()=>{if(!user)return;let live=true;Promise.allSettled([knowledgeRequest('/brands'),fetch(base()+'/api/skills?target=video',{headers:{Authorization:`Bearer ${getAuthToken()}`}}).then(r=>r.json())]).then(results=>{if(live)setReferences({brands:results[0].status==='fulfilled'?results[0].value.brands||[]:[],skills:results[1].status==='fulfilled'?results[1].value.skills||[]:[]});});return()=>{live=false;};},[user]);
   const field = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   async function action(path, body) {
     const token = getAuthToken();
@@ -165,7 +162,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                action("", { ...form, requestId: crypto.randomUUID() });
+                const { brandId, skillId, ...filmSettings } = form;
+                void brandId; void skillId;
+                action("", { ...filmSettings, requestId: crypto.randomUUID() });
               }}
             >
               <header className="film-create-heading">
@@ -184,7 +183,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
               <label className="film-style-field">视频风格<input value={form.style||"电影写实"} maxLength={200} onChange={e=>field("style",e.target.value)} placeholder="如电影写实、温暖动画、纪实摄影"/></label>
-              <div className="film-options film-context-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
               <div className="film-options">
                 <ComposerSelect
                   label="成片时长"
