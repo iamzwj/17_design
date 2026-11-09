@@ -57,7 +57,7 @@ async function api(endpoint, body) {
   return d.data || d;
 }
 // Headless validation without a public file host may reuse the provider's own
-// generated asset URL. Production defaults to private 30-minute signed links.
+// generated asset URL. Production uses private signed links covering provider queues.
 function referenceImage(p,output) {
   return process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url?output.url:filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
 }
@@ -103,7 +103,16 @@ async function generate(p,slot,key,body,file) {
       }
       t.providerStatus=result.status;t.updatedAt=Date.now();
       if((slot.revision||1)===version){slot[key+'Status']=result.status;slot[key+'CheckedAt']=Date.now();}save(p);
-      if(result.status==='failed'){t.providerId=null;if((slot.revision||1)===version)slot[key+'Task']=null;throw Error(result.error||'模型生成失败');}
+      if (result.status === 'failed') {
+        t.failedProviderId = t.providerId;
+        t.providerId = null;
+        t.submitting = false;
+        if ((slot.revision || 1) === version) {
+          slot[key + 'Task'] = null;
+          slot[key + 'Submitting'] = false;
+        }
+        throw Error(result.error || '模型生成失败');
+      }
       if(result.status==='succeeded') {
         const url=result.results?.[0]?.url;if(!url)throw Error('生成结果缺少文件');
         const response=await fetch(url,{signal:AbortSignal.timeout(120000)});if(!response.ok)throw Error('下载生成文件失败');
@@ -774,6 +783,17 @@ async function recoverFailure(p,error) {
   if(t.providerId && (t.automaticRetries||0)<2) {
     t.automaticRetries=(t.automaticRetries||0)+1;p.status='queued';p.nextRunAt=Date.now()+10000;
     event(p,'director',t.id,'保留原生成请求，稍后自动继续查询；不会再次提交计费任务',{type:'recovery'});save(p);return true;
+  }
+  if (t.providerStatus === 'failed' && /server_timeout/i.test(error.message) && (t.providerTimeoutRetries || 0) < 1) {
+    t.providerTimeoutRetries = (t.providerTimeoutRetries || 0) + 1;
+    t.submitting = false;
+    const resource = [...p.resources, ...p.assets, ...p.shots].find(item => item.id === t.resourceId);
+    if (resource) resource[t.kind + 'Submitting'] = false;
+    p.status = 'queued';
+    p.nextRunAt = Date.now() + 10000;
+    event(p, 'director', t.id, '供应商已确认超时失败，刷新参考图链接后自动重试一次', { type: 'recovery' });
+    save(p);
+    return true;
   }
   const r=[...p.resources,...p.shots].find(r=>r.id===t.resourceId);
   if(!r || r.locked || (r.failureRepairs||0)>=1 || t.providerStatus!=='failed')return false;

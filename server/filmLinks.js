@@ -15,10 +15,12 @@ export function filmLinkKey(root) {
     }
   }
 }
+export const FILM_REFERENCE_TTL_SECONDS = 2 * 60 * 60;
+
 const digest = (key, id, file, expires) =>
   createHmac("sha256", key).update(`${id}/${file}/${expires}`).digest("hex");
 export function filmAssetLink(root, id, file, base, now = Date.now()) {
-  const expires = Math.floor(now / 1000) + 1800;
+  const expires = Math.floor(now / 1000) + FILM_REFERENCE_TTL_SECONDS;
   return `${base}/api/film-assets/${id}/${file}?expires=${expires}&signature=${digest(filmLinkKey(root), id, file, expires)}`;
 }
 export function validFilmLink(
@@ -35,7 +37,7 @@ export function validFilmLink(
     !/^(asset|frame)-[a-zA-Z0-9_-]+\.png$/.test(file) ||
     !/^\d+$/.test(String(expires)) ||
     Number(expires) < time ||
-    Number(expires) > time + 1800 ||
+    Number(expires) > time + FILM_REFERENCE_TTL_SECONDS ||
     !/^[a-f0-9]{64}$/.test(signature || "")
   )
     return false;
