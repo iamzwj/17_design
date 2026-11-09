@@ -107,6 +107,7 @@ const STORAGE_KEY = 'diefa-conversations-v1'
 const THEME_KEY = 'diefa-display-mode-v1'
 const THEME_SELECTION_ENABLED = document.documentElement.dataset.themeSelection === 'enabled'
 const IMAGE_MODE_KEY = 'diefa-image-mode-v1'
+const LOCAL_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const WATERFALL_CACHE_PREFIX = 'diefa-waterfall-cache-v1:'
 const WATERFALL_HISTORY_PAGE_SIZE = 8
 const GENERATED_IMAGE_DRAG_TYPE = 'application/x-diefa-generated-image'
@@ -180,7 +181,13 @@ function failedWaterfallTask(task, error) {
 
 function loadWaterfallCache(storageKey) {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    const entry = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    if (!entry) return []
+    if (!Array.isArray(entry) && !(Date.now() - entry.savedAt < LOCAL_CACHE_TTL_MS)) {
+      localStorage.removeItem(storageKey)
+      return []
+    }
+    const saved = Array.isArray(entry) ? entry : entry.tasks
     // Optimistic tasks exist only while their POST request is in flight.  Never
     // restore them after a reload: the server response/history is the source of
     // truth, and restoring them can otherwise create an orphaned loading card.
@@ -925,7 +932,13 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
 
   useEffect(() => {
     tasksRef.current = tasks
-    try { localStorage.setItem(storageKey, JSON.stringify(compactWaterfallCache(tasks))) } catch { /* Keep in-memory history if local storage is full. */ }
+    try {
+      const next = compactWaterfallCache(tasks)
+      const previous = JSON.parse(localStorage.getItem(storageKey) || 'null')
+      if (JSON.stringify(previous?.tasks) !== JSON.stringify(next)) {
+        localStorage.setItem(storageKey, JSON.stringify({ savedAt: Date.now(), tasks: next }))
+      }
+    } catch { /* Keep in-memory history if local storage is unavailable. */ }
   }, [storageKey, tasks])
 
   useEffect(() => {
