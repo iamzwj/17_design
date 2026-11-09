@@ -238,7 +238,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                   </details>
                 ))}
               </section>
-              <div className="film-options film-context-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
               <div className="film-options">
                 <ComposerSelect
                   label="成片时长"
