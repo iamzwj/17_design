@@ -82,9 +82,25 @@ async function generate(p,slot,key,body,file) {
       if(slot.revision===version || (!slot.revision&&version===1)){slot[key+'Task']=response.id;slot[key+'Submitting']=false;}
       save(p);
     }
+    let queryFailures = 0;
     for(let i=0;i<180;i++) {
       check(p,true);
-      const result=await api('/v1/api/result?id='+encodeURIComponent(t.providerId));
+      let result;
+      try {
+        result = await api('/v1/api/result?id=' + encodeURIComponent(t.providerId));
+        queryFailures = 0;
+        t.queryError = null;
+      } catch (error) {
+        queryFailures++;
+        t.queryError = error.message;
+        t.updatedAt = Date.now();
+        save(p);
+        if (queryFailures >= 5) {
+          throw Error('连续5次查询生成结果失败，已保留供应商任务编号，恢复后继续查询：' + error.message);
+        }
+        await sleep(8000);
+        continue;
+      }
       t.providerStatus=result.status;t.updatedAt=Date.now();
       if((slot.revision||1)===version){slot[key+'Status']=result.status;slot[key+'CheckedAt']=Date.now();}save(p);
       if(result.status==='failed'){t.providerId=null;if((slot.revision||1)===version)slot[key+'Task']=null;throw Error(result.error||'模型生成失败');}
@@ -236,7 +252,7 @@ async function images(p) {
   if (p.status === "review") return;
   p.stage = "assets";
   save(p);
-  await filmPool(p.assets, 10, async (a, i) => {
+  await filmPool(p.assets, 5, async (a, i) => {
     await generate(
       p,
       a,
@@ -255,7 +271,7 @@ async function images(p) {
   });
   p.stage = "frames";
   save(p);
-  await filmPool(p.shots, 10, async (s, i) => {
+  await filmPool(p.shots, 5, async (s, i) => {
     await generate(
       p,
       s,
@@ -655,7 +671,7 @@ async function referenceAssets(p) {
   const inventoryKey='reference-inventory:'+p.scriptRevision;
   if(strict && !p.events.some(e=>e.taskId===inventoryKey))event(p,'director',inventoryKey,`识别了 ${p.characters.length} 名角色、${p.scenes.length} 个场景，安排制作 ${resources.length} 张设定图`);
   for(const group of [resources.filter(r=>r.type!=='wardrobe'),resources.filter(r=>r.type==='wardrobe')]) {
-    await filmPool(group,10,async r=>{
+    await filmPool(group,5,async r=>{
       if(p.pausedStages?.images || r.paused || r.stale || p.pausedStages?.[r.category])return;
       const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
       if(dependencies.some(dep=>strict ? !usableSetting(dep) : !dep?.output || dep.stale))return;
@@ -710,7 +726,7 @@ async function referenceAssets(p) {
 async function framesV2(p) {
   p.stage='images';save(p);if(p.pausedStages?.images)return;
   const link=r=>referenceImage(p,r.output);
-  await filmPool(p.shots,10,async shot=>{
+  await filmPool(p.shots,5,async shot=>{
     if(shot.paused||shot.stale)return;
     const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
     if(p.referenceWorkflow && refs.some(r=>!usableSetting(r)))return;
