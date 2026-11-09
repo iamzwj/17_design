@@ -276,3 +276,12 @@
  .film-workbench .fw-stage-nav>button>.fw-step-marker{display:flex;align-items:center;justify-content:center;align-self:center;grid-row:1 / span 2;width:24px;height:28px;padding:0;font-size:20px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
  .fw-step-marker>svg{display:block;width:24px;height:24px;flex:none}
 }
+
+@media (max-width: 600px) {
+  .film-studio .fw-stage-nav button .fw-storyboard-counts {
+    display: block;
+    font-size: 10px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+}
