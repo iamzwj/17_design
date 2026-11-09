@@ -12,6 +12,8 @@ const KINDS = { document: '品牌资料', rule: '强制规则', logo: 'Logo', pa
 const STATUS = { queued: '等待处理', processing: '解析 / 向量化中', ready: '待发布', failed: '处理失败' }
 const empty = { title: '', content: '', category: '', keywords: '', kind: 'document', ipType: '' }
 function initial() { try { return JSON.parse(localStorage.getItem(knowledgeKey('workspace'))) || {} } catch { return {} } }
+function readCache(name) { try { const entry = JSON.parse(localStorage.getItem(knowledgeKey(`cache:${name}`))); return entry && Date.now() - entry.time < 86400000 ? entry.data : null } catch { return null } }
+function writeCache(name, data) { try { localStorage.setItem(knowledgeKey(`cache:${name}`), JSON.stringify({ time: Date.now(), data })) } catch { /* Storage limits must not interrupt server updates. */ } }
 const imageVersion = (v) => ['.png', '.jpg', '.jpeg', '.webp'].includes(v?.ext)
 function AssetImage({ documentId, version, onError }) {
   const [url, setUrl] = useState('')
@@ -30,15 +32,15 @@ export default function KnowledgeStudio({ user, onLogin }) {
   const [saved] = useState(initial)
   const [linkMaterials, setLinkMaterials] = useState(false)
   const initialMaterial = useRef(new URLSearchParams(window.location.search).get('material'))
-  const [bootstrap, setBootstrap] = useState(null), [brandId, setBrandId] = useState(saved.brandId || ''), [tab, setTab] = useState(saved.tab || 'documents')
+  const [bootstrap, setBootstrap] = useState(() => readCache('bootstrap')), [brandId, setBrandId] = useState(saved.brandId || ''), [tab, setTab] = useState(saved.tab || 'documents')
   const [listing, setListing] = useState(null), [selected, setSelected] = useState(null), [versionId, setVersionId] = useState(saved.versionId || '')
   const [draft, setDraft] = useState(saved.draft || null), [draftDoc, setDraftDoc] = useState(saved.draftDoc || null), [query, setQuery] = useState(saved.query || ''), [mode, setMode] = useState(saved.mode || 'hybrid'), [results, setResults] = useState(saved.results || null)
-  const [traces, setTraces] = useState([]), [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true)
+  const [traces, setTraces] = useState([]), [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(() => !readCache('bootstrap'))
   const [searchBusy, setSearchBusy] = useState(false)
   const [brandName, setBrandName] = useState(''), [filter, setFilter] = useState('all'), [confirmAction, setConfirmAction] = useState(null)
   const uploadRef = useRef(null), currentBrand = useRef(brandId)
   const listingCache = useRef(new Map())
-  const visibleListing = listing?.brandId === brandId ? listing : listingCache.current.get(brandId)
+  const visibleListing = listing?.brandId === brandId ? listing : listingCache.current.get(brandId) || readCache(`listing:${brandId}`)
   const documents = visibleListing?.documents || [], jobs = visibleListing?.jobs || []
   const documentsLoading = !visibleListing
   currentBrand.current = brandId
@@ -97,7 +99,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
     timer = setTimeout(load, 2500)
     return () => { live = false; controller.abort(); clearTimeout(timer) }
   }, [selectedId, selectedProcessing])
-  async function loadBootstrap(signal) { const d = await knowledgeRequest('/bootstrap', undefined, 'GET', { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) }); if (signal?.aborted) return; setBootstrap(d); setBrandId((value) => { const linked = new URLSearchParams(window.location.search).get('brand'); return d.brands.some((b) => b.id === linked) ? linked : d.brands.some((b) => b.id === value) ? value : d.brands[0]?.id || '' }) }
+  async function loadBootstrap(signal) { const d = await knowledgeRequest('/bootstrap', undefined, 'GET', { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000) }); if (signal?.aborted) return; writeCache('bootstrap', d); setBootstrap(d); setBrandId((value) => { const linked = new URLSearchParams(window.location.search).get('brand'); return d.brands.some((b) => b.id === linked) ? linked : d.brands.some((b) => b.id === value) ? value : d.brands[0]?.id || '' }) }
   useEffect(() => { if (!user) return; const controller = new AbortController(); loadBootstrap(controller.signal).catch((e) => { if (!controller.signal.aborted) setError(e.name === 'TimeoutError' ? '品牌空间加载超时，请重试。' : e.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) }); return () => controller.abort() }, [user])
   useEffect(() => {
     if (restoringDocument) return
@@ -121,7 +123,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
         const data = await knowledgeRequest(`/documents?brandId=${brandId}`, undefined, 'GET', { signal: controller.signal })
         if (live && currentBrand.current === brandId) {
           const next = { brandId, documents: data.documents, jobs: data.jobs }
-          listingCache.current.set(brandId, next); setListing(next)
+          writeCache(`listing:${brandId}`, next); listingCache.current.set(brandId, next); setListing(next)
         }
       } catch (e) { if (live && currentBrand.current === brandId) setError(userError(e.message)) }
       finally { if (live) timer = setTimeout(load, 3000) }
@@ -130,7 +132,7 @@ export default function KnowledgeStudio({ user, onLogin }) {
     return () => { live = false; controller.abort(); clearTimeout(timer) }
   }, [brandId, user])
   useEffect(() => { if (!brandId || tab !== 'traces') return; let live = true; knowledgeRequest(`/traces?brandId=${brandId}`).then((d) => { if (live && currentBrand.current === brandId) setTraces(d.traces) }).catch((e) => { if (live && currentBrand.current === brandId) setError(userError(e.message)) }); return () => { live = false } }, [brandId, tab])
-  async function refresh() { if (!currentBrand.current) return; const b = currentBrand.current; const d = await knowledgeRequest(`/documents?brandId=${b}`); if (b === currentBrand.current) { const next = { brandId: b, documents: d.documents, jobs: d.jobs }; listingCache.current.set(b, next); setListing(next) } }
+  async function refresh() { if (!currentBrand.current) return; const b = currentBrand.current; const d = await knowledgeRequest(`/documents?brandId=${b}`); if (b === currentBrand.current) { const next = { brandId: b, documents: d.documents, jobs: d.jobs }; writeCache(`listing:${b}`, next); listingCache.current.set(b, next); setListing(next) } }
   async function act(fn, message) { setError(''); setNotice(''); setBusy(true); try { await fn(); if (message) setNotice(message); await refresh() } catch (e) { setError(userError(e.message)) } finally { setBusy(false) } }
   async function open(doc) { const b = brandId; await act(async () => { const d = await knowledgeRequest(`/documents/${doc.id}`); if (currentBrand.current !== b || d.document.brandId !== b) return; setSelected(d); setVersionId(d.document.latestVersionId) }) }
   function edit() { setDraft({ ...empty, ...version, chunks: version.chunks.length ? version.chunks.map((c) => ({ ...c })) : undefined }); setDraftDoc({ id: selected.document.id, baseVersionId: selected.document.latestVersionId, brandId }); setSelected(null) }
