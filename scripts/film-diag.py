@@ -34,3 +34,24 @@ for t in reversed(p.get('tasks',[])):
     with urllib.request.urlopen(fresh,timeout=15) as r:print('FRESH_REFERENCE',host,r.status,r.headers.get('Content-Type'),len(r.read()))
    except Exception as e:print('FRESH_ERROR',host,str(e))
  break
+# Isolated real-provider smoke test with the saved request and fresh references.
+body=dict(t['requestBody']);fresh_urls=[]
+for url in body.get('images',[]):
+ parts=urllib.parse.urlparse(url).path.split('/');pid,file=parts[-2:];exp=str(int(time.time())+1800);sig=hmac.new((root/'.link-key').read_text().encode(),f'{pid}/{file}/{exp}'.encode(),hashlib.sha256).hexdigest();fresh_urls.append(f'https://app.17design.fun/api/film-assets/{pid}/{file}?expires={exp}&signature={sig}')
+body['images']=fresh_urls;body['replyType']='async'
+base=cfg.get('GRSAI_BASE_URL','https://grsaiapi.com').rstrip('/')
+def call(endpoint,body=None):
+ req=urllib.request.Request(base+endpoint,data=json.dumps(body).encode() if body else None,headers={'Authorization':'Bearer '+cfg['GRSAI_API_KEY'],'Content-Type':'application/json'})
+ with urllib.request.urlopen(req,timeout=180) as r:
+  d=json.load(r);return d.get('data',d)
+r=call('/v1/api/generate',body);print('LIVE_SUBMIT',r.get('id'),r.get('status'),flush=True)
+if r.get('id'):
+ for i in range(180):
+  time.sleep(8)
+  try:r=call('/v1/api/result?id='+r['id'])
+  except Exception as e:print('LIVE_QUERY_ERROR',type(e).__name__,flush=True);continue
+  print('LIVE_STATUS',r.get('id'),r.get('status'),r.get('error'),flush=True)
+  if r.get('status') in ['succeeded','failed']:
+   if r.get('results'):
+    with urllib.request.urlopen(r['results'][0]['url'],timeout=30) as image:print('LIVE_IMAGE',image.status,image.headers.get('Content-Type'),len(image.read()),flush=True)
+   break
