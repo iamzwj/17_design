@@ -1,5 +1,6 @@
 import { filmVideoResolution, filmVideoResolutions } from '../shared/filmVideoModels.js';
 import { VIBBIT_FLARE_MODEL } from '../shared/vibbitImageModels.js';
+import { filmNarrativePreset } from '../shared/filmNarrativePresets.js';
 import { filmReviewFingerprint } from '../shared/filmReviewWarnings.js';
 import { IP_ASSETS } from "../shared/materialCatalog.js";
 import { fileURLToPath } from "node:url";
@@ -90,9 +91,13 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       return res
         .status(409)
         .json({ error: "已有两个项目在制作，请稍后再创建" });
+    const narrative = filmNarrativePreset(b.narrativeStyleId);
+    if (b.narrativeStyleId && !narrative) {
+      return res.status(400).json({ error: "不支持的叙事风格" });
+    }
     const context=await prepareContext(req.user,b);
     const p = {
-      context,
+      context: narrative ? { ...context, narrative } : context,
       schemaVersion: 2,
       id: requestId,
       userId: req.user.id,

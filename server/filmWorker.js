@@ -82,25 +82,30 @@ async function generate(p,slot,key,body,file) {
   const version=slot.revision||1, snapshot=clone(slot), id=taskId(slot.id,key,version);
   let t=p.tasks.find(t=>t.id===id);
   if(!t)t=beginTask(p,id,p.stage,key==='video'?'visual':'visual',{name:slot.name || `镜头 ${slot.id} ${key}`,version,model:body.model},slot.resourceIds||slot.dependencies||[]);
-  t.kind=key;t.resourceId=slot.id;t.version=version;t.requestBody=body;t.fileBase=file;t.resourceSnapshot ||= snapshot;t.status='running';
+  t.kind=key;t.resourceId=slot.id;t.version=version;t.fileBase=file;t.resourceSnapshot ||= snapshot;t.status='running';
   t.providerId ||= slot[key+'Task'];t.submitting ||= slot[key+'Submitting'];
   const job={id,stage:p.stage,message:`正在制作${slot.name||('镜头 '+slot.id)}${key==='video'?'视频':key==='frame'?'首帧':''}`,startedAt:t.startedAt||Date.now(),resourceId:slot.id,version};
   p.activeJobs ||= [];p.activeJobs.push(job);slot[key+'Error']=null;save(p);
   try {
     if(!t.providerId) {
       if(t.submitting)throw Object.assign(Error('生成提交结果未知，已停止重复提交，请核对供应商任务'),{code:'INPUT'});
+      const style = p.settings?.style?.trim() || '电影写实';
+      t.requestBody = {
+        ...body,
+        prompt: `${body.prompt}\n全片视觉风格：${style}。按此风格表现材质、色彩和光影；参考图用于保持人物身份、服装和空间布局，画面表现以全片视觉风格为准。`,
+      };
       slot[key+'Attempts']=(slot[key+'Attempts']||0)+1;t.submitting=true;slot[key+'Submitting']=true;save(p);
       let response;
       try {
         if (key === 'video' && SEEDANCE_MODELS.some((model) => model.value === body.model)) {
           t.videoProvider = 'vibbit';
-          response = await submitSeedanceShot(body);
+          response = await submitSeedanceShot(t.requestBody);
         } else if (key !== 'video' && VIBBIT_IMAGE_MODELS.has(body.model)) {
           t.imageProvider = 'vibbit';
           const size = filmVibbitSizes[body.aspectRatio] || filmVibbitSizes['1024x1024'];
-          response = await submitVibbitImage({ ...body, size });
+          response = await submitVibbitImage({ ...t.requestBody, size });
         } else {
-          response = await api('/v1/api/generate', { ...body, replyType: 'async' });
+          response = await api('/v1/api/generate', { ...t.requestBody, replyType: 'async' });
         }
       } catch (error) {
         throw Object.assign(Error('生成提交未确认：' + error.message), { code: 'INPUT' });
@@ -720,7 +725,7 @@ async function referenceAssets(p) {
         if(!r.output) {
           await generate(p,r,'image',{
             model:p.imageModel,
-            prompt:[p.settings.style,references.length?'以参考图为准，保持明确要求保留的身份与特征。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
+            prompt:[references.length?'以参考图为准，保持明确要求保留的身份与特征。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
             images:references.map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
@@ -768,7 +773,7 @@ async function framesV2(p) {
     const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
     if(p.referenceWorkflow && refs.some(r=>!usableSetting(r)))return;
     if(!shot.frame)shot.referenceVersions=refs.map(r=>({id:r.id,version:r.revision,file:r.output.file}));
-    await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，${p.settings.style}，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
+    await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
     if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[referenceImage(p,shot.frame)],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
   });
 }

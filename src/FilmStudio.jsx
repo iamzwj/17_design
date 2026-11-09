@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
 import "./filmStudio.css";
+import { filmNarrativePresets, filmNarrativeStages } from "../shared/filmNarrativePresets.js";
 const base = () =>
   String(
       import.meta.env.VITE_API_BASE_URL ||
@@ -29,6 +30,14 @@ export async function filmRequest(path = "", body) {
   return d;
 }
 const request = filmRequest;
+const filmStylePresets = [
+  { label: "院线电影写实", image: "cinematic", prompt: "真人电影摄影。保留自然肤质和真实衣料，柔和侧光、低饱和冷暖对比与细微胶片颗粒。各镜头色调统一，背景适度虚化。" },
+  { label: "日系二维动画", image: "anime", prompt: "手绘二维动画。清晰轮廓、两层赛璐璐阴影与水彩背景。固定线宽、角色比例和色板，动作有清晰的关键姿势。" },
+  { label: "三维卡通动画", image: "cartoon", prompt: "三维卡通动画。角色轮廓圆润、比例适度夸张，采用哑光材质和柔和漫反射光。固定脸型、服装配色与材质，表情清楚有弹性。" },
+  { label: "黏土定格", image: "clay", prompt: "手工黏土定格动画。角色和道具保留轻微指纹与捏塑痕迹，实体微缩布景，柔和棚灯，动作呈逐格定格节奏。" },
+  { label: "黑白黑色电影", image: "noir", prompt: "高反差黑白电影摄影。使用硬侧光、深黑背景、窗格投影和细微胶片颗粒。高光克制，各镜头明暗层次统一。" },
+];
+
 export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew }) {
   const [characterLibrary, setCharacterLibrary] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -185,7 +194,51 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 onChange={(e) => field("story", e.target.value)}
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
-              <label className="film-style-field">视频风格<input value={form.style||"电影写实"} maxLength={200} onChange={e=>field("style",e.target.value)} placeholder="如电影写实、温暖动画、纪实摄影"/></label>
+              <div className="film-style-field">
+                <label htmlFor="film-style">视频风格</label>
+                <div className="film-options film-style-presets" role="group" aria-label="视频风格预设">
+                  {filmStylePresets.map(({ label, prompt, image }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={form.style === prompt ? "active" : undefined}
+                      aria-pressed={form.style === prompt}
+                      onClick={() => field("style", prompt)}
+                    >
+                      <img src={`/film-presets/${image}.webp`} alt="" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  id="film-style"
+                  value={form.style ?? "电影写实"}
+                  maxLength={200}
+                  onChange={(e) => field("style", e.target.value)}
+                  placeholder="描述角色、场景和成片统一采用的画面风格"
+                  rows={2}
+                />
+              </div>
+              <section className="film-narrative-field" aria-labelledby="film-narrative-label">
+                <label id="film-narrative-label">叙事风格</label>
+                <div className="film-options film-style-presets" role="group" aria-label="叙事风格预设">
+                  {filmNarrativePresets.map((preset) => (
+                    <button key={preset.id} type="button"
+                      aria-pressed={form.narrativeStyleId === preset.id}
+                      onClick={() => field("narrativeStyleId", form.narrativeStyleId === preset.id ? "" : preset.id)}>
+                      <img src={`/film-presets/${preset.id}.webp`} alt="" />
+                      <span>{preset.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {filmNarrativePresets.filter(preset => preset.id === form.narrativeStyleId).map(preset => (
+                  <details key={preset.id} className="film-narrative-detail">
+                    <summary>{preset.summary} · 查看内置规则</summary>
+                    {Object.entries(preset.rules).map(([stage, rule]) => <p key={stage}><b>{filmNarrativeStages[stage]}</b> {rule}</p>)}
+                  </details>
+                ))}
+              </section>
+              <div className="film-options film-context-options"><ComposerSelect label="品牌规范" value={form.brandId||''} options={[{value:'',label:'不关联品牌'},...references.brands.map(b=>({value:b.id,label:b.name}))]} onChange={v=>field('brandId',v)}/><ComposerSelect label="创作Skill" value={form.skillId||''} options={[{value:'',label:'不使用 Skill'},...references.skills.map(s=>({value:s.id,label:s.title}))]} onChange={v=>field('skillId',v)}/></div>
               <div className="film-options">
                 <ComposerSelect
                   label="成片时长"
