@@ -44,28 +44,20 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
   const [project, setProject] = useState(null);
   const [id, setId] = useState(projectId || ""),
     [form, setForm] = useState(() => {
+      const defaults = {
+        story: "",
+        duration: 30,
+        ratio: "16:9",
+        imageModel: "gpt-image-2.5",
+        videoModel: "minimax-h3",
+        style: filmStylePresets[0].prompt,
+        narrativeStyleId: filmNarrativePresets[0].id,
+      };
       try {
-        return (
-          JSON.parse(
-            localStorage.getItem(
-              "dgen-film-draft-" + getAuthToken().slice(-12),
-            ),
-          ) || {
-            story: "",
-            duration: 30,
-            ratio: "16:9",
-            imageModel: "gpt-image-2.5",
-            videoModel: "minimax-h3",
-          }
-        );
+        const saved = JSON.parse(localStorage.getItem("dgen-film-draft-" + getAuthToken().slice(-12)));
+        return { ...defaults, ...saved };
       } catch {
-        return {
-          story: "",
-          duration: 30,
-          ratio: "16:9",
-          imageModel: "gpt-image-2.5",
-          videoModel: "minimax-h3",
-        };
+        return defaults;
       }
     }),
     [error, setError] = useState(""),
@@ -152,7 +144,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       </section>
     );
   return (
-    <section className="film-studio">
+    <section className={id ? "film-studio" : "film-studio film-studio-create"}>
       {document.querySelector(".workspace-title-slot") && createPortal(
         <div className="film-title-actions">
           <button type="button" className="film-library-button" onClick={() => setCharacterLibrary(true)}>
@@ -196,7 +188,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               />
               <div className="film-style-field">
                 <label htmlFor="film-style">视频风格</label>
-                <div className="film-options film-style-presets" role="group" aria-label="视频风格预设">
+                <div className="film-style-presets" role="group" aria-label="视频风格预设">
                   {filmStylePresets.map(({ label, prompt, image }) => (
                     <button
                       key={label}
@@ -221,7 +213,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               </div>
               <section className="film-narrative-field" aria-labelledby="film-narrative-label">
                 <label id="film-narrative-label">叙事风格</label>
-                <div className="film-options film-style-presets" role="group" aria-label="叙事风格预设">
+                <div className="film-style-presets" role="group" aria-label="叙事风格预设">
                   {filmNarrativePresets.map((preset) => (
                     <button key={preset.id} type="button"
                       aria-pressed={form.narrativeStyleId === preset.id}
