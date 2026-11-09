@@ -1,4 +1,8 @@
+import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
+import { submitSeedanceShot, pollSeedanceShot } from './vibbitVideos.js';
 import sharp from 'sharp';
+import { VIBBIT_IMAGE_MODELS } from '../shared/vibbitImageModels.js';
+import { submitVibbitImage, pollVibbitImage } from './vibbitImages.js';
 import {prepareFilmAudio,renderFilmTimeline,probe} from './filmEditing.js';
 import { readFilmProject, drainFilmCommands, pendingCommands, beginTask, finishTask, event, taskId, clone, applyCommand } from './filmState.js';
 import { createFilmAgents } from './filmAgents.js';
@@ -61,6 +65,17 @@ async function api(endpoint, body) {
 function referenceImage(p,output) {
   return process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url?output.url:filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
 }
+const filmVibbitSizes = {
+  '1024x1024': '2048x2048',
+  '1536x1024': '2304x1536',
+  '1024x1536': '1536x2304',
+};
+function pollFilmGeneration(task) {
+  if (task.videoProvider === 'vibbit') return pollSeedanceShot(task.providerId);
+  return task.imageProvider === 'vibbit'
+    ? pollVibbitImage(task.providerId)
+    : api('/v1/api/result?id=' + encodeURIComponent(task.providerId));
+}
 async function generate(p,slot,key,body,file) {
   if(slot[key] || slot.paused || slot.stale)return;
   check(p);if(slot.locked)throw Object.assign(Error('锁定资产缺少有效产物，需要人工处理'),{code:'INPUT'});
@@ -76,7 +91,20 @@ async function generate(p,slot,key,body,file) {
       if(t.submitting)throw Object.assign(Error('生成提交结果未知，已停止重复提交，请核对供应商任务'),{code:'INPUT'});
       slot[key+'Attempts']=(slot[key+'Attempts']||0)+1;t.submitting=true;slot[key+'Submitting']=true;save(p);
       let response;
-      try {response=await api('/v1/api/generate',{...body,replyType:'async'});}catch(e){throw Object.assign(Error('生成提交未确认：'+e.message),{code:'INPUT'});}
+      try {
+        if (key === 'video' && SEEDANCE_MODELS.some((model) => model.value === body.model)) {
+          t.videoProvider = 'vibbit';
+          response = await submitSeedanceShot(body);
+        } else if (key !== 'video' && VIBBIT_IMAGE_MODELS.has(body.model)) {
+          t.imageProvider = 'vibbit';
+          const size = filmVibbitSizes[body.aspectRatio] || filmVibbitSizes['1024x1024'];
+          response = await submitVibbitImage({ ...body, size });
+        } else {
+          response = await api('/v1/api/generate', { ...body, replyType: 'async' });
+        }
+      } catch (error) {
+        throw Object.assign(Error('生成提交未确认：' + error.message), { code: 'INPUT' });
+      }
       if(!response.id)throw Object.assign(Error('生成服务未返回任务编号，禁止重复扣费提交'),{code:'INPUT'});
       t.providerId=response.id;t.submitting=false;
       if(slot.revision===version || (!slot.revision&&version===1)){slot[key+'Task']=response.id;slot[key+'Submitting']=false;}
@@ -87,7 +115,7 @@ async function generate(p,slot,key,body,file) {
       check(p,true);
       let result;
       try {
-        result = await api('/v1/api/result?id=' + encodeURIComponent(t.providerId));
+        result = await pollFilmGeneration(t);
         queryFailures = 0;
         t.queryError = null;
       } catch (error) {
@@ -315,6 +343,7 @@ async function images(p) {
 async function videos(p) {
   if (p.status === "review" || p.pausedStages?.videos) return;
   p.stage = "videos";
+  const resolution = filmVideoResolution(p.videoModel, p.videoResolution);
   save(p);
   await filmPool(p.shots, 10, async (s, i) => {
     if(!s.frame || s.paused || s.stale)return;
@@ -346,7 +375,7 @@ async function videos(p) {
               ? "landscape"
               : "portrait"
             : p.ratio,
-        resolution: "480p",
+        resolution,
         duration: Math.max(p.videoModel==='wan-3.0'?2:1,Math.ceil(s.duration)),
       },
       `shot-${i}.mp4`,
@@ -452,9 +481,8 @@ async function render(p) {
   check(p);
   p.stage = "render";
   activity(p, `render:${Date.now()}`, "导演正在汇总镜头，合成音轨、字幕与最终短片");
-  const dir = path.join(root, p.id),
-    w = p.ratio === "16:9" ? 1280 : 720,
-    h = p.ratio === "16:9" ? 720 : 1280;
+  const dir = path.join(root, p.id);
+  const [w, h] = filmOutputDimensions(p);
   for (let i = 0; i < p.shots.length; i++) {
     check(p);
     const s = p.shots[i],
@@ -772,7 +800,7 @@ async function recoverDetached(p) {
   for(const t of p.tasks.filter(t=>t.providerId && ['running','failed'].includes(t.status))) {
     const current=[...(p.schemaVersion===2?p.resources:p.assets),...p.shots].find(r=>r.id===t.resourceId);
     if(!current || (current.revision===t.version && !p.schedulingPaused))continue;
-    try{const d=await api('/v1/api/result?id='+encodeURIComponent(t.providerId));if(d.status==='failed'){t.status='failed';t.providerId=null;save(p);}else if(d.status==='succeeded'){
+    try{const d=await pollFilmGeneration(t);if(d.status==='failed'){t.status='failed';t.providerId=null;save(p);}else if(d.status==='succeeded'){
       const r=await fetch(d.results[0].url,{signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('旧版本结果下载失败');const file=t.fileBase.replace(/\.(png|mp4)$/,`-archived-${String(t.providerId).replace(/[^a-zA-Z0-9_-]/g,'')}.$1`);fs.writeFileSync(path.join(root,p.id,file),Buffer.from(await r.arrayBuffer()));t.output={file};t.status=current.revision===t.version?'succeeded':'superseded';if(current.revision===t.version){current[t.kind]={file};if(t.kind==='image')current.output={file};p.activeJobs=(p.activeJobs||[]).filter(j=>j.id!==t.id);}current.history ||= [];current.history.push({version:t.version,at:Date.now(),value:{...t.resourceSnapshot,[t.kind]:{file},...(t.kind==='image'?{output:{file}}:{})}});save(p);
     }}catch(e){t.recoveryError=e.message;save(p);}
   }

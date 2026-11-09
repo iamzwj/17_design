@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createMaiziImageClient, normalizeMaiziImageResult } from '../server/maiziImages.js'
-import { imageQualityForModel, imageQualityOptions, supportsImageResolution, supportsImageRatio } from '../src/imageModels.js'
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status })
 
 test('Maizi preserves every partial result and v2 URL/base64 entry', () => {
@@ -9,11 +8,6 @@ test('Maizi preserves every partial result and v2 URL/base64 entry', () => {
   const wrapped = normalizeMaiziImageResult({ created: 1, data: [{ task_id: 'wrapped-task', status: 'pending' }] }); assert.equal(wrapped.id, 'wrapped-task'); assert.equal(wrapped.status, 'pending'); assert.equal(wrapped.results.length, 0)
   assert.equal(task.results.length, 2); assert.equal(task.batch_status, 'partial'); assert.equal(task.failed_count, 1)
   assert.deepEqual(normalizeMaiziImageResult({ data: [{ url: 'https://example.com/1.png' }, { b64_json: 'YWJj' }] }).results.map((x) => x.url), ['https://example.com/1.png', 'data:image/png;base64,YWJj'])
-})
-test('model contract fixes low quality and offers native 1K/2K/4K and supported ratios', () => {
-  for (const model of ['gpt-image-2.5-flare-t', 'gpt-image-2.5-sunburst-t']) {
-    assert.equal(imageQualityForModel(model, 'high'), 'low'); assert.deepEqual(imageQualityOptions(model).map((x) => x.value), ['low']); assert.equal(supportsImageResolution(model), true); assert.equal(supportsImageRatio(model, '4k', '9:21'), false)
-  }
 })
 test('adapter routes async jobs, polling, edits and v2 without exposing inline sources publicly', async () => {
   const calls = []

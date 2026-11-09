@@ -1,7 +1,10 @@
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
 import { installExternalSkills } from './externalSkills.js'
-import { MAIZI_IMAGE_MODELS, isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
+import { isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
+import { VIBBIT_IMAGE_MODELS, canonicalImageModel } from '../shared/vibbitImageModels.js'
+import { vibbitApi, submitVibbitImage, pollVibbitImage } from './vibbitImages.js'
+import { setTimeout as delay } from 'node:timers/promises'
 import { BANANA_IMAGE_MODEL, BANANA_RATIOS, imageModelInput } from './imageModelInput.js'
 import express from 'express'
 import { installKnowledge } from './knowledge/index.js'
@@ -74,7 +77,7 @@ const vipImageSizes = {
     '3:1': '3840x1280', '1:3': '1280x3840',
   },
 }
-const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.6', BANANA_IMAGE_MODEL, ...MAIZI_IMAGE_MODELS])
+const imageModels = new Set(['gpt-image-2', 'gpt-image-2-vip', 'gpt-image-2.5', 'gpt-image-2.6', BANANA_IMAGE_MODEL, ...VIBBIT_IMAGE_MODELS])
 const imageResolutions = new Set(['1k', '2k', '4k'])
 const supportedImageRatios = new Set(Object.keys(standardImageSizes))
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
@@ -117,7 +120,7 @@ const festivalAssetFiles = {
 
 function supportsImageRatio(model, resolution, ratio) {
   if (parseCustomImageSize(ratio)) return !validateCustomImageSize(model, ratio)
-  if (model === BANANA_IMAGE_MODEL || isMaiziImageModel(model)) return BANANA_RATIOS.has(ratio)
+  if (model === BANANA_IMAGE_MODEL) return BANANA_RATIOS.has(ratio)
   if (!extremeImageRatios.has(ratio)) return supportedImageRatios.has(ratio)
   return ['gpt-image-2-vip', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) && ['2k', '4k'].includes(String(resolution).toLowerCase())
 }
@@ -131,17 +134,16 @@ function imagePromptWithCurrentDate(prompt) {
 }
 
 function upstreamImageModel(model) {
-  return ['image-2.5', 'image-2.5-flare', 'image-2.5-sunburst'].includes(model) ? `gpt-${model}` : model
+  return canonicalImageModel(model)
 }
 
 function imageModelSettings(model, resolution, quality) {
   const selectedModel = upstreamImageModel(String(model || 'gpt-image-2.5'))
   if (!imageModels.has(selectedModel)) throw Object.assign(new Error('不支持的生图模型'), { status: 400 })
-  const selectedQuality = isMaiziImageModel(selectedModel) ? 'low' : String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
-  if (!imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
-  const supportsExtendedQuality = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)
-  if (!supportsExtendedQuality && ['xhigh', 'max'].includes(selectedQuality)) throw Object.assign(new Error('此模型仅支持 low、medium 或 high 质量'), { status: 400 })
-  if (!isMaiziImageModel(selectedModel) && ![BANANA_IMAGE_MODEL, 'gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
+  const selectedQuality = VIBBIT_IMAGE_MODELS.has(selectedModel) ? 'auto' : String(quality || DEFAULT_IMAGE_QUALITY).toLowerCase()
+  if (!VIBBIT_IMAGE_MODELS.has(selectedModel) && !imageQualities.has(selectedQuality)) throw Object.assign(new Error('出图质量仅支持 low、medium、high、xhigh 或 max'), { status: 400 })
+  if (['xhigh', 'max'].includes(selectedQuality)) throw Object.assign(new Error('此模型仅支持 low、medium 或 high 质量'), { status: 400 })
+  if (!VIBBIT_IMAGE_MODELS.has(selectedModel) && ![BANANA_IMAGE_MODEL, 'gpt-image-2-vip'].includes(selectedModel)) return { model: selectedModel, resolution: '1k', quality: selectedQuality }
   const selectedResolution = String(resolution || '2k').toLowerCase()
   if (!imageResolutions.has(selectedResolution)) throw Object.assign(new Error('清晰度仅支持 1K、2K 或 4K'), { status: 400 })
   return { model: selectedModel, resolution: selectedResolution, quality: selectedQuality }
@@ -150,8 +152,6 @@ function imageModelSettings(model, resolution, quality) {
 function imageCreditCost(model, count = 1) {
   const creditsPerImage = {
     'gpt-image-2-vip': 4,
-    'gpt-image-2.5-flare': 4,
-    'gpt-image-2.5-sunburst': 5,
   }[model] || 1
   return creditsPerImage * Math.max(1, Number(count) || 1)
 }
@@ -162,7 +162,6 @@ function generationSize(model, resolution, ratio) {
     if (error) throw Object.assign(new Error(error), { status: 400 })
     return ratio
   }
-  if (isMaiziImageModel(model)) return String(resolution).toUpperCase()
   const sizes = ['gpt-image-2-vip', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(upstreamImageModel(model)) ? vipImageSizes[resolution] : standardImageSizes
   return sizes[ratio] || sizes['1:1']
 }
@@ -568,27 +567,6 @@ function getApiKey() {
   return key
 }
 
-function vibbitBaseUrl() {
-  return (process.env.VIBBIT_OPENAPI_BASE_URL || 'https://openapi.vibbit.cn/openapi/v1').replace(/\/$/, '')
-}
-
-function vibbitApiKey() {
-  const key = String(process.env.VIBBIT_OPENAPI_KEY || '').trim()
-  if (!key) throw Object.assign(new Error('服务端尚未配置 VIBBIT_OPENAPI_KEY'), { status: 500 })
-  return key
-}
-
-async function vibbitApi(pathname, options = {}) {
-  const response = await fetch(`${vibbitBaseUrl()}${pathname}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${vibbitApiKey()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
-    signal: AbortSignal.timeout(50_000),
-  })
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok || body.code !== 200) throw Object.assign(new Error(body.message || `视频服务返回 HTTP ${response.status}`), { status: response.status >= 400 ? response.status : 502 })
-  return body.data || {}
-}
-
 function publicVideoUrl(assetPath) {
   const base = String(process.env.VIBBIT_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '')
   if (!base) throw Object.assign(new Error('服务端尚未配置 VIBBIT_PUBLIC_BASE_URL'), { status: 500 })
@@ -671,8 +649,61 @@ async function requestUpstreamResult(id, signal) {
 function maiziImages() {
   return createMaiziImageClient({ baseUrl: process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai', apiKey: process.env.MAIZI_API_KEY })
 }
-function imageResult(id, model, signal) {
+function imageResult(id, model, signal, provider) {
+  if (provider === 'vibbit' || (!provider && VIBBIT_IMAGE_MODELS.has(model) && /^task-\d+$/.test(id))) return pollVibbitImage(id, signal)
   return isMaiziImageModel(model) ? maiziImages().poll(id, signal) : requestUpstreamResult(id, signal)
+}
+
+const vibbitReferenceLifetime = 15 * 60 * 1000
+const vibbitReferenceDir = path.join(waterfallDataDir, 'vibbit-image-references')
+fs.mkdirSync(vibbitReferenceDir, { recursive: true })
+for (const name of fs.readdirSync(vibbitReferenceDir)) {
+  const file = path.join(vibbitReferenceDir, name)
+  const remaining = fs.statSync(file).mtimeMs + vibbitReferenceLifetime - Date.now()
+  setTimeout(() => { void fs.promises.unlink(file).catch(() => {}) }, Math.max(0, remaining)).unref()
+}
+app.get('/api/vibbit-image-reference/:name', async (req, res) => {
+  if (!/^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(req.params.name)) return res.sendStatus(404)
+  const file = path.join(vibbitReferenceDir, req.params.name)
+  const stat = await fs.promises.stat(file).catch(() => null)
+  if (!stat || Date.now() - stat.mtimeMs >= vibbitReferenceLifetime) return res.sendStatus(404)
+  res.sendFile(file, { cacheControl: false, headers: { 'Cache-Control': 'private, no-store' } })
+})
+
+async function vibbitImageReference(source) {
+  if (/^https?:\/\//i.test(source)) return source
+  const url = publicVideoUrl('/api/vibbit-image-reference/')
+  const { mimeType, buffer } = await imageSourceToData(source)
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mimeType)) throw new Error('Vibbit 参考图需为 PNG、JPG、WebP 或 GIF')
+  if (!buffer.length || buffer.length > 30 * 1024 * 1024) throw new Error('单张参考图必须小于 30MB')
+  const name = `${randomUUID()}.${imageExtension(mimeType)}`
+  const file = path.join(vibbitReferenceDir, name)
+  await fs.promises.writeFile(file, buffer)
+  setTimeout(() => { void fs.promises.unlink(file).catch(() => {}) }, vibbitReferenceLifetime).unref()
+  return url + name
+}
+
+async function generateImage(config, { signal, sync = false } = {}) {
+  const model = upstreamImageModel(config.model)
+  const prompt = imagePromptWithCurrentDate(config.prompt).slice(0, 30_000)
+  if (VIBBIT_IMAGE_MODELS.has(model)) {
+    const images = await Promise.all(config.images.map(vibbitImageReference))
+    let result = await submitVibbitImage({ model, prompt, size: config.size, images }, signal)
+    if (sync) {
+      const deadline = Date.now() + 300_000
+      while (result.status === 'pending') {
+        if (Date.now() >= deadline) throw new Error('Vibbit 等待超时，任务可能仍在生成')
+        await delay(5_000, undefined, { signal })
+        result = await pollVibbitImage(result.id, signal)
+      }
+    }
+    return result
+  }
+  return requestUpstream('/v1/api/generate', {
+    model, prompt, images: config.images,
+    ...imageModelInput({ ...config, model }),
+    replyType: sync ? 'json' : 'async',
+  }, signal, sync ? undefined : 45_000)
 }
 
 const pendingUpstreamStatuses = new Set(['running', 'pending', 'queued', 'processing', 'in_progress'])
@@ -897,34 +928,32 @@ async function runWaterfallSlot(taskId, slotIndex, config) {
     const savedSlot = waterfallTasks.find((task) => task.id === taskId)?.slots?.[slotIndex]
     let result
     let id = savedSlot?.upstreamId
+    let provider = savedSlot?.imageProvider
     let attempt = Math.max(1, Number(savedSlot?.attempt) || 1)
     while (true) {
       if (id) {
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, phase: 'polling', lastEvent: '正在向生图服务查询结果' } : slot) }))
-        result = await imageResult(id, config.model, controller.signal)
+        result = await imageResult(id, config.model, controller.signal, provider)
       } else {
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, phase: attempt > 1 ? 'retrying' : 'submitting', submissionStartedAt: new Date().toISOString(), lastEvent: attempt > 1 ? '上游短暂失败，正在自动重试' : '正在提交到生图服务' } : slot) }))
-        result = isMaiziImageModel(config.model) ? await maiziImages().generate({ ...config, n: 1 }, { signal: controller.signal }) : await requestUpstream('/v1/api/generate', {
-          model: upstreamImageModel(config.model),
-          prompt: imagePromptWithCurrentDate(config.prompt).slice(0, 30_000),
-          images: config.images,
-          ...imageModelInput({ model: config.model, resolution: config.resolution, ratio: config.ratio, size: config.aspectRatio, quality: config.quality }),
-          replyType: 'async',
-        }, controller.signal, 45_000)
+        const model = upstreamImageModel(config.model)
+        provider = VIBBIT_IMAGE_MODELS.has(model) ? 'vibbit' : 'grsai'
+        const size = provider === 'vibbit' ? generationSize(model, config.resolution, config.ratio) : config.aspectRatio
+        result = await generateImage({ ...config, size }, { signal: controller.signal })
         id = upstreamId(result)
         if (!id) throw new Error(upstreamError(result) || '上游未返回任务编号')
-        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: id, phase: 'polling', submittedAt: new Date().toISOString(), lastEvent: `已提交生图服务（任务 ${id}）` } : slot) }))
+        updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: id, imageProvider: provider, phase: 'polling', submittedAt: new Date().toISOString(), lastEvent: `已提交生图服务（任务 ${id}）` } : slot) }))
       }
 
       while (!upstreamStatus(result) || pendingUpstreamStatuses.has(upstreamStatus(result))) {
         await waitForPoll(5_000, controller.signal)
-        result = await imageResult(id, config.model, controller.signal)
+        result = await imageResult(id, config.model, controller.signal, provider)
       }
       const status = upstreamStatus(result)
       const sourceUrl = upstreamResultUrl(result)
       const message = upstreamError(result)
       const genericFailure = !message || /^(generate failed|generation failed|failed)$/i.test(message.trim())
-      if (config.retryTransientFailure && !isMaiziImageModel(config.model) && attempt < 2 && !succeededUpstreamStatuses.has(status) && genericFailure) {
+      if (config.retryTransientFailure && provider !== 'vibbit' && !isMaiziImageModel(config.model) && !VIBBIT_IMAGE_MODELS.has(upstreamImageModel(config.model)) && attempt < 2 && !succeededUpstreamStatuses.has(status) && genericFailure) {
         attempt += 1
         id = null
         updateWaterfallTask(taskId, (task) => ({ ...task, slots: task.slots.map((slot, index) => index === slotIndex ? { ...slot, attempt, upstreamId: null, phase: 'retrying', lastEvent: '上游短暂失败，准备自动重试' } : slot) }))
@@ -1692,13 +1721,10 @@ app.post('/api/image', requireAuth, imageSkillMiddleware, knowledgeMiddleware('i
     chargedUser = spendCredits(req.user.id, creditCost)
     const upstreamImages = await Promise.all(images.map(waterfallReferenceForUpstream))
     const resolvedAspectRatio = supportsImageRatio(settings.model, settings.resolution, aspectRatio) ? aspectRatio : DEFAULT_IMAGE_ASPECT_RATIO
-    const data = isMaiziImageModel(settings.model) ? await maiziImages().generate({ model: settings.model, prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000), images: upstreamImages, ratio: resolvedAspectRatio, resolution: settings.resolution, n: 1 }, { sync: true }) : await requestUpstream('/v1/api/generate', {
-      model: upstreamImageModel(settings.model),
-      prompt: imagePromptWithCurrentDate(prompt).slice(0, 30_000),
-      images: upstreamImages,
-      ...imageModelInput({ model: settings.model, resolution: settings.resolution, ratio: resolvedAspectRatio, size: generationSize(settings.model, settings.resolution, resolvedAspectRatio), quality: settings.quality }),
-      replyType: 'json',
-    })
+    const data = await generateImage({
+      ...settings, prompt, images: upstreamImages, ratio: resolvedAspectRatio,
+      size: generationSize(settings.model, settings.resolution, resolvedAspectRatio),
+    }, { sync: true })
     const urls = upstreamResultUrls(data)
     const status = upstreamStatus(data)
     if (!succeededUpstreamStatuses.has(status) || urls.length === 0) {

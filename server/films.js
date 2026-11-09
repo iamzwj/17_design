@@ -1,3 +1,5 @@
+import { filmVideoResolution, filmVideoResolutions } from '../shared/filmVideoModels.js';
+import { VIBBIT_FLARE_MODEL } from '../shared/vibbitImageModels.js';
 import { filmReviewFingerprint } from '../shared/filmReviewWarnings.js';
 import { IP_ASSETS } from "../shared/materialCatalog.js";
 import { fileURLToPath } from "node:url";
@@ -60,8 +62,9 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     if (!String(b.story || "").trim() || String(b.story).length > 12000)
       return res.status(400).json({ error: "请填写故事，最多12000字" });
     if (
-      !["gpt-image-2.5", "nano-banana-2.1"].includes(b.imageModel) ||
-      !["minimax-h3", "wan-3.0"].includes(b.videoModel) ||
+      !["gpt-image-2.5", "nano-banana-2.1", VIBBIT_FLARE_MODEL].includes(b.imageModel) ||
+      !filmVideoResolutions(b.videoModel).length ||
+      (b.videoResolution != null && !filmVideoResolutions(b.videoModel).includes(b.videoResolution)) ||
       !["16:9", "9:16"].includes(b.ratio) ||
       ![15, 30, 60, 90, 120].includes(Number(b.duration))
     )
@@ -101,6 +104,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       duration: Number(b.duration),
       imageModel: b.imageModel,
       videoModel: b.videoModel,
+      ...(b.videoResolution ? { videoResolution: filmVideoResolution(b.videoModel, b.videoResolution) } : {}),
       status: "queued",
       stage: "plan",
       createdAt: Date.now(),

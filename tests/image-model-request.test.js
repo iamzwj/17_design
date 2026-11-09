@@ -77,6 +77,5 @@ test('direct and persistent generation use model-specific parameters and preserv
       }
     }
     assert.equal(calls.length, beforeInvalid, 'invalid custom sizes must never reach the paid upstream')
-    for (const model of ['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']) assert.equal((await call('/api/waterfall/tasks', { ...input, model })).status, 400)
-  } finally { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)); await new Promise((r) => upstream.close(r)); fs.rmSync(dir, { recursive: true, force: true }) }
+  } finally { if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)) }; await new Promise((r) => upstream.close(r)); fs.rmSync(dir, { recursive: true, force: true }) }
 })

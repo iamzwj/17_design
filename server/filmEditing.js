@@ -1,3 +1,4 @@
+import { filmOutputDimensions } from '../shared/filmVideoModels.js';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';import path from 'node:path';import {execFile} from 'node:child_process';import {promisify} from 'node:util';
 import {beginTask,finishTask,event,taskId} from './filmState.js';
@@ -36,7 +37,7 @@ export async function renderFilmTimeline(p,{root,save,check}) {
   if(invalid.length)throw Object.assign(Error(`等待 ${invalid.map(s=>s.id).join('、')} 完成或人工处理；其他成果已保留`),{code:'INPUT'});
   check(p);p.stage='editing';const id=taskId('timeline-'+createHash('sha256').update(JSON.stringify({shots:p.shots.map(s=>[s.id,s.revision,s.video?.file]),timeline:p.timeline,settings:p.settings})).digest('hex').slice(0,12),'editor',p.timeline.revision||1),t=beginTask(p,id,'editing','editor',{name:'自动剪辑与成片导出',timeline:p.timeline},p.shots.map(s=>taskId(s.id,'audio',s.revision)));save(p);
   const dir=path.join(root,p.id),renderId=Date.now(),work=path.join(dir,`render-${renderId}`);fs.mkdirSync(work,{recursive:true});
-  const w=p.ratio==='16:9'?1280:720,h=p.ratio==='16:9'?720:1280;
+  const [w, h] = filmOutputDimensions(p);
   const clips=p.timeline.clips.length?p.timeline.clips:p.shots.map(s=>({shotId:s.id,trimIn:0,duration:s.duration}));
   p.timeline.clips=clips;
   const signature=()=>JSON.stringify({shots:p.shots.map(s=>[s.id,s.revision,s.video?.file]),clips:p.timeline.clips,tracks:p.timeline.tracks,revision:p.timeline.revision,settings:p.settings});

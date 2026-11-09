@@ -1,3 +1,5 @@
+import { FILM_VIDEO_MODELS, filmVideoResolution, filmVideoResolutions } from '../shared/filmVideoModels.js';
+import { VIBBIT_FLARE_MODEL } from '../shared/vibbitImageModels.js';
 import { userError, localizeErrors } from './userErrors.js'
 import { createPortal } from 'react-dom';
 import { Icon } from './icons.jsx';
@@ -61,6 +63,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     [busy, setBusy] = useState(false),
     [lastSynced, setLastSynced] = useState(0);
   const p = project?.id === id ? project : null;
+  const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
   useEffect(() => {
     if (!user || !id) return;
     let live = true;
@@ -164,7 +167,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 e.preventDefault();
                 const { brandId, skillId, ...filmSettings } = form;
                 void brandId; void skillId;
-                action("", { ...filmSettings, requestId: crypto.randomUUID() });
+                action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
               }}
             >
               <header className="film-create-heading">
@@ -207,6 +210,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                   value={form.imageModel}
                   options={[
                     { value: "gpt-image-2.5", label: "GPT Image 2.5" },
+                    { value: VIBBIT_FLARE_MODEL, label: "GPT Image 2.5 Flare (2K)" },
                     { value: "nano-banana-2.1", label: "Nano Banana 2.1" },
                   ]}
                   onChange={(v) => field("imageModel", v)}
@@ -214,11 +218,18 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 <ComposerSelect
                   label="视频模型"
                   value={form.videoModel}
-                  options={[
-                    { value: "minimax-h3", label: "MiniMax H3" },
-                    { value: "wan-3.0", label: "Wan 3.0" },
-                  ]}
-                  onChange={(v) => field("videoModel", v)}
+                  options={FILM_VIDEO_MODELS}
+                  onChange={(videoModel) => setForm((current) => ({
+                    ...current,
+                    videoModel,
+                    videoResolution: filmVideoResolution(videoModel, current.videoResolution),
+                  }))}
+                />
+                <ComposerSelect
+                  label="视频分辨率"
+                  value={videoResolution}
+                  options={filmVideoResolutions(form.videoModel).map((value) => ({ value, label: value === '4k' ? '4K' : value }))}
+                  onChange={(value) => field("videoResolution", value)}
                 />
               </div>
               <div className="film-create-footer">

@@ -1,3 +1,4 @@
+import { canonicalImageModel } from '../shared/vibbitImageModels.js'
 import AccentTheme from './AccentTheme.jsx'
 import { userError } from './userErrors.js'
 import ToolPageHeader from './ToolPageHeader.jsx'
@@ -1138,7 +1139,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
   }
 
   function generateAgain(task) {
-    if (task.model && !IMAGE_MODEL_OPTIONS.some((item) => item.value === task.model)) { editTask(task); setError('原模型已移除，请选择可用模型后重新生成'); return }
+    if (task.model && !IMAGE_MODEL_OPTIONS.some((item) => item.value === canonicalImageModel(task.model))) { editTask(task); setError('原模型已移除，请选择可用模型后重新生成'); return }
     if (!getAuthToken()) { onRequireLogin(); return }
     const retrySources = sessionReferenceImages.current.get(task.id) || task.referenceImages || []
     const request = {
@@ -1148,7 +1149,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
       images: retrySources.map(waterfallReferenceForRequest),
       aspectRatio: task.resolvedAspectRatio || task.aspectRatio || DEFAULT_IMAGE_ASPECT_RATIO,
       count: task.count || 2,
-      model: task.model || DEFAULT_IMAGE_MODEL,
+      model: availableImageModel(task.model),
       resolution: imageResolutionForModel(task.model || DEFAULT_IMAGE_MODEL, task.resolution || DEFAULT_IMAGE_RESOLUTION),
       quality: imageQualityForModel(task.model || DEFAULT_IMAGE_MODEL, task.quality || DEFAULT_IMAGE_QUALITY),
     }
