@@ -93,6 +93,7 @@ const MODULE_COPY = {
     title: '有什么可以帮你的吗？',
     subtitle: '告诉我你的想法、任务或问题，我会帮你梳理并完成它。',
     placeholder: '告诉我你想做什么…',
+    systemPrompt: '用清晰的中文回答。先直接给出核心结论，用 **粗体** 标出最重要的事实或数字。内容较多时使用简短小标题和列表分组；简单问题保持简洁。不要为了格式补充未经证实的信息。',
   },
   compliance: {
     eyebrow: 'COMPLIANCE REVIEW',

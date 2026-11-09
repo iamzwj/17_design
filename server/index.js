@@ -1296,7 +1296,7 @@ function webSourcesPrompt(sources, available = true) {
   const dateContext = `当前中国标准时间日期为${shanghaiDate()}。凡是回答、图表或图片中出现“今天”、日期、星期或未来日期，必须以此日期和本次联网资料的时间为准，绝不能使用静态示例、旧日期或自行猜测的日期。`
   if (!available) return `${dateContext}\n\n当前未配置通用联网搜索，无法获取实时网页资料。若用户询问时效性信息，请明确说明目前不能完成实时检索，不要猜测或编造。`
   if (!sources.length) return `${dateContext}\n\n已执行联网检索，但没有找到足够可靠的结果。请明确说“联网检索未找到可靠结果”，不要说自己没有联网搜索工具，也不要编造实时信息。`
-  return `${dateContext}\n\n已完成联网检索。以下是本次检索到的实时资料，必须优先基于这些资料作答；不要声称自己无法联网搜索或没有实时搜索工具。若资料之间有差异，请说明差异。不要捏造来源中没有的信息。不要输出 URL、来源编号或 Markdown 符号（例如 **、#、-）。使用可直接复制的简洁中文自然段；如有多个要点，以“要点名：内容”的短句呈现。\n\n${sources.map((source, index) => `[${index + 1}] ${source.title}\n${source.url}\n${source.content}`).join('\n\n')}`
+  return `${dateContext}\n\n已完成联网检索。以下是本次检索到的实时资料，必须优先基于这些资料作答；不要声称自己无法联网搜索或没有实时搜索工具。若资料之间有差异，请说明差异。不要捏造来源中没有的信息。不要输出 URL 或来源编号。先直接回答问题，用 **粗体** 标出最关键的事实或数字；有多个要点时使用简短列表，内容复杂时用简短标题分组。不要为了排版增加无依据的信息。\n\n${sources.map((source, index) => `[${index + 1}] ${source.title}\n${source.url}\n${source.content}`).join('\n\n')}`
 }
 
 function completionText(data) {

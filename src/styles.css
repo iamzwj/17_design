@@ -782,3 +782,11 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   cursor: pointer;
 }
 .auth-send-code:disabled { opacity: .6; }
+
+/* General answers: give conclusions and structured points a clear hierarchy. */
+.text-answer .answer-plain { gap: 12px; color: var(--dp-ink); }
+.text-answer .answer-plain p { font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+.text-answer .answer-plain h3 { margin: 12px 0 0; font-size: 18px; font-weight: 700; }
+.text-answer .answer-plain strong { color: var(--dp-ink); font-weight: 750; }
+.text-answer .answer-plain .answer-bullet { align-items: flex-start; }
+.text-answer .answer-plain .answer-bullet i { flex: none; }
