@@ -19,3 +19,18 @@ for f in sorted(Path('/home/ubuntu/17_design/data/films').glob('*/project.json')
     with urllib.request.urlopen(req,timeout=20) as r:
      d=json.load(r);d=d.get('data',d);print('PROVIDER',json.dumps({k:d.get(k) for k in ['status','error','message']},ensure_ascii=False))
    except Exception as e:print('QUERY_ERROR',type(e).__name__)
+import time,hmac,hashlib,urllib.parse
+root=Path('/home/ubuntu/17_design/data/films')
+p=json.loads(files[0].read_text()) if False else json.loads(sorted(root.glob('*/project.json'),key=lambda f:f.stat().st_mtime,reverse=True)[0].read_text())
+for t in reversed(p.get('tasks',[])):
+ urls=t.get('requestBody',{}).get('images',[])
+ if not urls:continue
+ for url in urls[:1]:
+  parts=urllib.parse.urlparse(url).path.split('/');pid,file=parts[-2:];exp=str(int(time.time())+1800);sig=hmac.new((root/'.link-key').read_text().encode(),f'{pid}/{file}/{exp}'.encode(),hashlib.sha256).hexdigest()
+  print('LOCAL_REFERENCE_EXISTS',(root/pid/file).exists())
+  for host in ['17design.fun','app.17design.fun']:
+   fresh=f'https://{host}/api/film-assets/{pid}/{file}?expires={exp}&signature={sig}'
+   try:
+    with urllib.request.urlopen(fresh,timeout=15) as r:print('FRESH_REFERENCE',host,r.status,r.headers.get('Content-Type'),len(r.read()))
+   except Exception as e:print('FRESH_ERROR',host,str(e))
+ break
