@@ -450,15 +450,11 @@
   font-weight: 700;
 }
 
-.film-studio #film-style {
-  min-height: 80px;
-}
-
 .film-studio .film-style-presets {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(100px, 132px);
-  gap: 8px;
+  grid-auto-columns: minmax(92px, 104px);
+  gap: 6px;
   overflow-x: auto;
   padding: 3px;
 }
@@ -474,8 +470,10 @@
   object-fit: cover;
   margin-bottom: 5px;
 }
-.film-studio .film-style-presets span { display: block; padding: 0 8px; }
-.film-narrative-field { margin-top: 18px; }
-.film-narrative-detail { color: var(--dp-secondary); line-height: 1.6; font-size: 13px; }
-.film-narrative-detail summary { cursor: pointer; }
-.film-narrative-detail p { margin: 7px 0; }
+.film-studio .film-style-presets span { display: block; padding: 0 5px; font-size: 12px; }
+
+.film-create-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
 import "./filmStudio.css";
-import { filmNarrativePresets, filmNarrativeStages } from "../shared/filmNarrativePresets.js";
+import { filmNarrativePresets } from "../shared/filmNarrativePresets.js";
 const base = () =>
   String(
       import.meta.env.VITE_API_BASE_URL ||
@@ -55,7 +55,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       };
       try {
         const saved = JSON.parse(localStorage.getItem("dgen-film-draft-" + getAuthToken().slice(-12)));
-        return { ...defaults, ...saved };
+        const style = filmStylePresets.find((preset) => preset.prompt === saved?.style)?.prompt;
+        return { ...defaults, ...saved, style: style ?? defaults.style };
       } catch {
         return defaults;
       }
@@ -187,8 +188,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
               <div className="film-style-field">
-                <label htmlFor="film-style">视频风格</label>
-                <div className="film-style-presets" role="group" aria-label="视频风格预设">
+                <label id="film-style-label">视频风格</label>
+                <div className="film-style-presets" role="group" aria-labelledby="film-style-label">
                   {filmStylePresets.map(({ label, prompt, image }) => (
                     <button
                       key={label}
@@ -202,14 +203,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                     </button>
                   ))}
                 </div>
-                <textarea
-                  id="film-style"
-                  value={form.style ?? "电影写实"}
-                  maxLength={200}
-                  onChange={(e) => field("style", e.target.value)}
-                  placeholder="描述角色、场景和成片统一采用的画面风格"
-                  rows={2}
-                />
               </div>
               <section className="film-narrative-field" aria-labelledby="film-narrative-label">
                 <label id="film-narrative-label">叙事风格</label>
@@ -223,14 +216,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                     </button>
                   ))}
                 </div>
-                {filmNarrativePresets.filter(preset => preset.id === form.narrativeStyleId).map(preset => (
-                  <details key={preset.id} className="film-narrative-detail">
-                    <summary>{preset.summary} · 查看内置规则</summary>
-                    {Object.entries(preset.rules).map(([stage, rule]) => <p key={stage}><b>{filmNarrativeStages[stage]}</b> {rule}</p>)}
-                  </details>
-                ))}
               </section>
-              <div className="film-options">
+              <div className="film-create-settings">
                 <ComposerSelect
                   label="成片时长"
                   value={form.duration}
