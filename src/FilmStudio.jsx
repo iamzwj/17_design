@@ -75,7 +75,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     [busy, setBusy] = useState(false),
     [lastSynced, setLastSynced] = useState(0),
     [analysis, setAnalysis] = useState(null),
-    [analyzing, setAnalyzing] = useState(false);
+    [analyzing, setAnalyzing] = useState(false),
+    [analysisProgress, setAnalysisProgress] = useState(0);
   const p = project?.id === id ? project : null;
   const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
   useEffect(() => {
@@ -149,6 +150,12 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     }
     let current = true;
     setAnalyzing(true);
+    setAnalysisProgress(0);
+    const startedAt = Date.now();
+    const progressTimer = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      setAnalysisProgress(Math.min(90, Math.floor(90 * (1 - Math.exp(-elapsed / 35)))));
+    }, 500);
     const timer = setTimeout(async () => {
       try {
         const result = await request('/analyze', { story });
@@ -160,10 +167,11 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       } catch (error) {
         if (current) setError(userError(error.message));
       } finally {
+        clearInterval(progressTimer);
         if (current) setAnalyzing(false);
       }
     }, 800);
-    return () => { current = false; clearTimeout(timer); };
+    return () => { current = false; clearTimeout(timer); clearInterval(progressTimer); };
   }, [form.story, user, id]);
 
   async function createFilm() {
@@ -238,7 +246,10 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
               <div className="film-duration-analysis">
-                {analyzing && <p role="status">正在分析故事时长…</p>}
+                {analyzing && <div className="film-analysis-progress" role="status">
+                  <p>正在分析故事时长… <span>预估 {analysisProgress}%</span></p>
+                  <progress max="100" value={analysisProgress} aria-label="故事时长分析预估进度"/>
+                </div>}
                 {analysis && analysis.story === form.story.trim() && <>
                   <div className="film-duration-choices" role="group" aria-label="推荐时长">
                     {analysis.options.map(option => <button key={option.pace} type="button" aria-pressed={form.duration === option.duration} onClick={() => field('duration', option.duration)}>
