@@ -66,7 +66,11 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       try {
         const saved = JSON.parse(localStorage.getItem("dgen-film-draft-" + getAuthToken().slice(-12)));
         const style = typeof saved?.style === "string" ? saved.style : defaults.style;
-        return { ...defaults, ...saved, style: style ?? defaults.style };
+        // Older drafts saved the previous default even without a user selection.
+        const imageModel = saved?.imageModel === "gpt-image-2.5" && saved.imageModelExplicit !== true
+          ? defaults.imageModel
+          : saved?.imageModel ?? defaults.imageModel;
+        return { ...defaults, ...saved, imageModel, style };
       } catch {
         return defaults;
       }
@@ -176,8 +180,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
 
   async function createFilm() {
     if (!form.story.trim() || busy || analyzing) return;
-    const { brandId, skillId, ...filmSettings } = form;
-    void brandId; void skillId;
+    const { brandId, skillId, imageModelExplicit, ...filmSettings } = form;
+    void brandId; void skillId; void imageModelExplicit;
     await action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
   }
   async function download() {
@@ -331,7 +335,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                       { value: VIBBIT_FLARE_MODEL, label: "GPT Image 2.5 Flare (2K)" },
                       { value: "nano-banana-2.1", label: "Nano Banana 2.1" },
                     ]}
-                    onChange={(v) => field("imageModel", v)}
+                    onChange={(imageModel) => setForm((current) => ({ ...current, imageModel, imageModelExplicit: true }))}
                   />
                 </div>
                 <div className="film-setting">
