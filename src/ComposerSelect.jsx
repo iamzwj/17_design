@@ -13,12 +13,21 @@ export default function ComposerSelect({ label, value, options, onChange, disabl
       const element = menu.current
       if (!element) return
       if (portal && trigger.current) {
-        const anchor=trigger.current.getBoundingClientRect();
-        const width=Math.min(Math.max(anchor.width,190),window.innerWidth-16);
-        const maxHeight=Math.min(330,window.innerHeight-24);
-        const height=Math.min(element.scrollHeight,maxHeight);
-        const below=window.innerHeight-anchor.bottom-8;
-        Object.assign(element.style,{position:'fixed',width:width+'px',maxHeight:maxHeight+'px',left:Math.max(8,Math.min(anchor.left,window.innerWidth-width-8))+'px',right:'auto',bottom:'auto',top:Math.max(8,below>=height?anchor.bottom+6:anchor.top-height-6)+'px',transform:'none'});
+        const anchor = trigger.current.getBoundingClientRect()
+        const width = Math.min(Math.max(anchor.width, 190), window.innerWidth - 16)
+        Object.assign(element.style, {
+          position: 'fixed',
+          width: width + 'px',
+          maxHeight: Math.min(330, window.innerHeight - 24) + 'px',
+          left: Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8)) + 'px',
+          right: 'auto',
+          bottom: 'auto',
+          transform: 'none',
+        })
+        const height = element.getBoundingClientRect().height
+        const below = window.innerHeight - anchor.bottom - 8
+        const preferredTop = below >= height ? anchor.bottom + 6 : anchor.top - height - 6
+        element.style.top = Math.max(8, Math.min(preferredTop, window.innerHeight - height - 8)) + 'px'
         return;
       }
       element.style.transform = ''

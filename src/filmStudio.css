@@ -475,10 +475,57 @@
 .film-create-settings {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px 8px;
+  align-items: end;
 }
 
 .film-duration-analysis { margin: 12px 0 20px; }
 .film-duration-analysis p { margin: 8px 0 0; line-height: 1.6; }
 .film-studio .film-style-plain { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 10; margin-bottom: 8px; background: var(--dp-panel); color: var(--dp-secondary); }
-.film-create-settings input[type="number"] { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--dp-ink); background: var(--dp-panel); border: 1px solid var(--dp-border); border-radius: 8px; padding: 9px; }
+
+.film-setting {
+  display: grid;
+  gap: 5px;
+  max-width: 100%;
+}
+
+:root .film-layout.is-create .film-setting :is(label, .film-setting-label) {
+  font-size: var(--dp-typography-metadata);
+  color: var(--dp-secondary);
+}
+
+.film-setting-duration { width: 94px; }
+
+.film-duration-control { position: relative; }
+
+.film-duration-control input {
+  appearance: textfield;
+  width: 100%;
+  height: 40px;
+  padding: 6px 30px 6px 12px;
+  border: 1px solid var(--dp-rule);
+  border-radius: 9px;
+  background: var(--dp-panel);
+  color: var(--dp-ink);
+}
+
+.film-duration-control input::-webkit-inner-spin-button,
+.film-duration-control input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.film-duration-control input:hover { border-color: var(--dp-link); }
+
+.film-duration-control > span {
+  position: absolute;
+  inset: 0 12px 0 auto;
+  display: grid;
+  align-items: center;
+  color: var(--dp-secondary);
+  font-size: var(--dp-typography-metadata);
+  pointer-events: none;
+}
+
+/* Portaled menus are sized to their trigger by ComposerSelect. */
+.composer-select-menu.film-floating-menu { min-width: 0; }

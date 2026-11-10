@@ -255,44 +255,74 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 </div>
               </section>
               <div className="film-create-settings">
-                <label>成片时长（秒）
-                  <input type="number" min="15" max="600" step="1" value={form.duration} onChange={(e) => field("duration", Number(e.target.value))} required />
-                </label>
-                <ComposerSelect
-                  label="画面比例"
-                  value={form.ratio}
-                  options={[
-                    { value: "16:9", label: "16:9 横屏" },
-                    { value: "9:16", label: "9:16 竖屏" },
-                  ]}
-                  onChange={(v) => field("ratio", v)}
-                />
-                <ComposerSelect
-                  label="图片模型"
-                  value={form.imageModel}
-                  options={[
-                    { value: "gpt-image-2.5", label: "GPT Image 2.5" },
-                    { value: VIBBIT_FLARE_MODEL, label: "GPT Image 2.5 Flare (2K)" },
-                    { value: "nano-banana-2.1", label: "Nano Banana 2.1" },
-                  ]}
-                  onChange={(v) => field("imageModel", v)}
-                />
-                <ComposerSelect
-                  label="视频模型"
-                  value={form.videoModel}
-                  options={FILM_VIDEO_MODELS}
-                  onChange={(videoModel) => setForm((current) => ({
-                    ...current,
-                    videoModel,
-                    videoResolution: filmVideoResolution(videoModel, current.videoResolution),
-                  }))}
-                />
-                <ComposerSelect
-                  label="视频分辨率"
-                  value={videoResolution}
-                  options={filmVideoResolutions(form.videoModel).map((value) => ({ value, label: value === '4k' ? '4K' : value }))}
-                  onChange={(value) => field("videoResolution", value)}
-                />
+                <div className="film-setting film-setting-duration">
+                  <label htmlFor="film-duration">成片时长</label>
+                  <div className="film-duration-control">
+                    <input
+                      id="film-duration"
+                      type="number"
+                      min="15"
+                      max="600"
+                      step="1"
+                      value={form.duration}
+                      aria-describedby="film-duration-unit"
+                      onChange={(e) => field("duration", e.target.value === "" ? "" : e.target.valueAsNumber)}
+                      required
+                    />
+                    <span id="film-duration-unit">秒</span>
+                  </div>
+                </div>
+                <div className="film-setting">
+                  <span className="film-setting-label" aria-hidden="true">画面比例</span>
+                  <ComposerSelect
+                    portal
+                    label="画面比例"
+                    value={form.ratio}
+                    options={[
+                      { value: "16:9", label: "16:9 横屏" },
+                      { value: "9:16", label: "9:16 竖屏" },
+                    ]}
+                    onChange={(v) => field("ratio", v)}
+                  />
+                </div>
+                <div className="film-setting">
+                  <span className="film-setting-label" aria-hidden="true">图片模型</span>
+                  <ComposerSelect
+                    portal
+                    label="图片模型"
+                    value={form.imageModel}
+                    options={[
+                      { value: "gpt-image-2.5", label: "GPT Image 2.5" },
+                      { value: VIBBIT_FLARE_MODEL, label: "GPT Image 2.5 Flare (2K)" },
+                      { value: "nano-banana-2.1", label: "Nano Banana 2.1" },
+                    ]}
+                    onChange={(v) => field("imageModel", v)}
+                  />
+                </div>
+                <div className="film-setting">
+                  <span className="film-setting-label" aria-hidden="true">视频模型</span>
+                  <ComposerSelect
+                    portal
+                    label="视频模型"
+                    value={form.videoModel}
+                    options={FILM_VIDEO_MODELS}
+                    onChange={(videoModel) => setForm((current) => ({
+                      ...current,
+                      videoModel,
+                      videoResolution: filmVideoResolution(videoModel, current.videoResolution),
+                    }))}
+                  />
+                </div>
+                <div className="film-setting">
+                  <span className="film-setting-label" aria-hidden="true">视频分辨率</span>
+                  <ComposerSelect
+                    portal
+                    label="视频分辨率"
+                    value={videoResolution}
+                    options={filmVideoResolutions(form.videoModel).map((value) => ({ value, label: value === '4k' ? '4K' : value }))}
+                    onChange={(value) => field("videoResolution", value)}
+                  />
+                </div>
               </div>
               <div className="film-create-footer">
               <p className="film-caption">
