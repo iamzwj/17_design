@@ -77,10 +77,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     }),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [lastSynced, setLastSynced] = useState(0),
-    [analysis, setAnalysis] = useState(null),
-    [analyzing, setAnalyzing] = useState(false),
-    [analysisProgress, setAnalysisProgress] = useState(0);
+    [lastSynced, setLastSynced] = useState(0);
   const p = project?.id === id ? project : null;
   const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
   useEffect(() => {
@@ -146,42 +143,10 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       setBusy(false);
     }
   }
-  useEffect(() => {
-    const story = form.story.trim();
-    if (!user || id || !story) {
-      setAnalyzing(false);
-      return;
-    }
-    let current = true;
-    setAnalyzing(true);
-    setAnalysisProgress(0);
-    const startedAt = Date.now();
-    const progressTimer = setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      setAnalysisProgress(Math.min(90, Math.floor(90 * (1 - Math.exp(-elapsed / 35)))));
-    }, 500);
-    const timer = setTimeout(async () => {
-      try {
-        const result = await request('/analyze', { story });
-        if (!current) return;
-        if (!Array.isArray(result.options) || result.options.length !== 3) throw new Error('时长分析结果不完整，请重新输入故事重试');
-        setError('');
-        setAnalysis({ ...result, story });
-        setForm(previous => previous.story.trim() === story ? { ...previous, duration: result.duration } : previous);
-      } catch (error) {
-        if (current) setError(userError(error.message));
-      } finally {
-        clearInterval(progressTimer);
-        if (current) setAnalyzing(false);
-      }
-    }, 800);
-    return () => { current = false; clearTimeout(timer); clearInterval(progressTimer); };
-  }, [form.story, user, id]);
-
   async function createFilm() {
-    if (!form.story.trim() || busy || analyzing) return;
-    const { brandId, skillId, imageModelExplicit, ...filmSettings } = form;
-    void brandId; void skillId; void imageModelExplicit;
+    if (!form.story.trim() || busy) return;
+    const { brandId, skillId, imageModelExplicit, duration, ...filmSettings } = form;
+    void brandId; void skillId; void imageModelExplicit; void duration;
     await action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
   }
   async function download() {
@@ -249,19 +214,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 onChange={(e) => field("story", e.target.value)}
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
-              <div className="film-duration-analysis">
-                {analyzing && <div className="film-analysis-progress" role="status">
-                  <p>正在分析故事时长… <span>{analysisProgress}%</span></p>
-                  <progress max="100" value={analysisProgress} aria-label="故事时长分析预估进度"/>
-                </div>}
-                {analysis && analysis.story === form.story.trim() && <>
-                  <div className="film-duration-choices" role="group" aria-label="推荐时长">
-                    {analysis.options.map(option => <button key={option.pace} type="button" aria-pressed={form.duration === option.duration} onClick={() => field('duration', option.duration)}>
-                      <span>{({ compact: '剧情紧凑', normal: '正常节奏', slow: '缓慢叙事' })[option.pace]}</span><strong>约 {option.duration} 秒</strong>
-                    </button>)}
-                  </div>
-                </>}
-              </div>
               <div className="film-style-field">
                 <label id="film-style-label">视频风格</label>
                 <div className="film-style-presets" role="group" aria-labelledby="film-style-label">
@@ -294,23 +246,6 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 </div>
               </section>
               <div className="film-create-settings">
-                <div className="film-setting film-setting-duration">
-                  <label htmlFor="film-duration">成片时长</label>
-                  <div className="film-duration-control">
-                    <input
-                      id="film-duration"
-                      type="number"
-                      min="15"
-                      max="600"
-                      step="1"
-                      value={form.duration}
-                      aria-describedby="film-duration-unit"
-                      onChange={(e) => field("duration", e.target.value === "" ? "" : e.target.valueAsNumber)}
-                      required
-                    />
-                    <span id="film-duration-unit">秒</span>
-                  </div>
-                </div>
                 <div className="film-setting">
                   <span className="film-setting-label" aria-hidden="true">画面比例</span>
                   <ComposerSelect
@@ -369,9 +304,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               </p>
               <button
                 className="film-primary"
-                disabled={busy || analyzing || !form.story.trim()}
+                disabled={busy || !form.story.trim()}
               >
-                {analyzing ? "正在分析故事…" : busy ? "正在创建…" : "一键生成成片"}
+                {busy ? "正在创建…" : "一键生成成片"}
               </button>
               </div>
             </form>

@@ -90,7 +90,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       !filmVideoResolutions(b.videoModel).length ||
       (b.videoResolution != null && !filmVideoResolutions(b.videoModel).includes(b.videoResolution)) ||
       !["16:9", "9:16"].includes(b.ratio) ||
-      (!Number.isInteger(Number(b.duration)) || Number(b.duration) < 15 || Number(b.duration) > 600)
+      (b.duration != null && (!Number.isInteger(Number(b.duration)) || Number(b.duration) < 15 || Number(b.duration) > 600))
     )
       return res.status(400).json({ error: "制作参数无效" });
     const requestId = /^[a-f0-9-]{36}$/.test(b.requestId || "")
@@ -129,7 +129,8 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       settings: { style: String(b.style ?? "电影写实").slice(0,200), transition:"cut", sourceVolume:1, subtitles:true },
       resources: [], tasks: [], appliedCommands: [],
       ratio: b.ratio,
-      duration: Number(b.duration),
+      duration: b.duration == null ? null : Number(b.duration),
+      autoDuration: b.duration == null,
       imageModel: b.imageModel,
       videoModel: b.videoModel,
       ...(b.videoResolution ? { videoResolution: filmVideoResolution(b.videoModel, b.videoResolution) } : {}),
