@@ -31,7 +31,7 @@ export async function filmRequest(path = "", body) {
 }
 const request = filmRequest;
 const filmStylePresets = [
-  { label: "常规", image: "regular-visual", prompt: "" },
+  { label: "常规", image: "regular-visual-v2", prompt: "" },
   { label: "院线电影写实", image: "cinematic", prompt: "真人电影摄影。保留自然肤质和真实衣料，柔和侧光、低饱和冷暖对比与细微胶片颗粒。各镜头色调统一，背景适度虚化。" },
   { label: "日系二维动画", image: "anime", prompt: "手绘二维动画。清晰轮廓、两层赛璐璐阴影与水彩背景。固定线宽、角色比例和色板，动作有清晰的关键姿势。" },
   { label: "三维卡通动画", image: "cartoon", prompt: "三维卡通动画。角色轮廓圆润、比例适度夸张，采用哑光材质和柔和漫反射光。固定脸型、服装配色与材质，表情清楚有弹性。" },
@@ -267,7 +267,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               <section className="film-narrative-field" aria-labelledby="film-narrative-label">
                 <label id="film-narrative-label">叙事风格</label>
                 <div className="film-style-presets" role="group" aria-label="叙事风格预设">
-                  <button type="button" aria-pressed={!form.narrativeStyleId} onClick={() => field("narrativeStyleId", "")}><img src="/film-presets/regular-narrative.webp" alt="" /><span>常规</span></button>
+                  <button type="button" aria-pressed={!form.narrativeStyleId} onClick={() => field("narrativeStyleId", "")}><img src="/film-presets/regular-narrative-v2.webp" alt="" /><span>常规</span></button>
                   {filmNarrativePresets.map((preset) => (
                     <button key={preset.id} type="button"
                       aria-pressed={form.narrativeStyleId === preset.id}
