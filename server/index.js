@@ -2066,14 +2066,19 @@ installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async 
   for (const model of ['gemini-3.1-pro', 'gpt-5.6-terra']) {
     try {
       const result = await requestUpstream('/v1/chat/completions', { model, response_format: { type: 'json_object' }, messages: [
-        { role: 'system', content: '估算将完整故事改编为短片所需时长。保留关键事件、完整对白与必要停顿，依据对白和动作节奏估算，不强行压缩。只返回JSON：{duration:秒数,reason:简短说明}。范围15到600秒；超出范围时说明需要分集。' },
+        { role: 'system', content: '独立估算同一故事改编成短片的三个叙事节奏。先识别关键事件、对白和必须展示的动作，再分别按紧凑、正常、缓慢的镜头组织计算时长。紧凑可用蒙太奇合并重复动作但保留关键情节和对白，正常保留动作衔接和自然停顿，缓慢增加人物反应、环境及情绪留白。逐项考虑对白、动作、转场和情绪停顿的具体秒数，禁止按固定比例换算。三个版本都忠于原文，时长有区分，控制在15至600秒，超出时注明需分集。只返回JSON：{options:[{pace:"compact",duration:整数秒,reason:"对应节奏的计算依据"},{pace:"normal",duration:整数秒,reason:"对应节奏的计算依据"},{pace:"slow",duration:整数秒,reason:"对应节奏的计算依据"}]}。' },
         { role: 'user', content: story },
       ] }, undefined, 90000);
       const content = result.choices?.[0]?.message?.content;
       const parsed = JSON.parse(String(content).replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''));
-      const duration = Math.round(Number(parsed.duration));
-      if (!Number.isFinite(duration) || duration < 15 || duration > 600 || typeof parsed.reason !== 'string') throw Error('时长分析结果无效');
-      return { duration, reason: parsed.reason.slice(0, 300) };
+      const options = ['compact', 'normal', 'slow'].map((pace) => {
+        const option = parsed.options?.find((item) => item.pace === pace);
+        const duration = Number(option?.duration);
+        if (!Number.isInteger(duration) || duration < 15 || duration > 600 || typeof option?.reason !== 'string' || !option.reason.trim()) throw Error('时长分析结果无效');
+        return { pace, duration, reason: option.reason.trim().slice(0, 300) };
+      });
+      if (options[0].duration >= options[1].duration || options[1].duration >= options[2].duration) throw Error('三个节奏的时长顺序无效');
+      return { options, duration: options[1].duration, reason: options[1].reason };
     } catch (error) { lastError = error; }
   }
   throw lastError || Error('时长分析失败，请重试');

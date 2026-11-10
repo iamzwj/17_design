@@ -529,3 +529,12 @@
 
 /* Portaled menus are sized to their trigger by ComposerSelect. */
 .composer-select-menu.film-floating-menu { min-width: 0; }
+
+.film-duration-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.film-studio .film-duration-choices button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--dp-rule); border-radius: 8px; padding: 8px 12px; background: var(--dp-panel); color: var(--dp-ink); cursor: pointer; }
+.film-studio .film-duration-choices button[aria-pressed="true"] { background: var(--dp-selected); border-color: var(--dp-highlight); }
+.film-studio .film-duration-choices button:hover { border-color: var(--dp-highlight); }
+.film-studio .film-duration-choices button:focus-visible { outline: 2px solid var(--dp-highlight); outline-offset: 2px; }
+
+.film-studio .film-duration-choices button { flex: 1 1 180px; align-items: flex-start; flex-direction: column; text-align: left; white-space: normal; }
+.film-duration-choices small { color: var(--dp-secondary); line-height: 1.5; }

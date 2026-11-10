@@ -141,16 +141,36 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
       setBusy(false);
     }
   }
-  async function analyzeDuration() {
+  useEffect(() => {
     const story = form.story.trim();
+    if (!user || id || !story) {
+      setAnalyzing(false);
+      return;
+    }
+    let current = true;
     setAnalyzing(true);
-    setError('');
-    try {
-      const result = await request('/analyze', { story });
-      setAnalysis({ ...result, story });
-      setForm(current => current.story.trim() === story ? { ...current, duration: result.duration } : current);
-    } catch (error) { setError(userError(error.message)); }
-    finally { setAnalyzing(false); }
+    const timer = setTimeout(async () => {
+      try {
+        const result = await request('/analyze', { story });
+        if (!current) return;
+        if (!Array.isArray(result.options) || result.options.length !== 3) throw new Error('时长分析结果不完整，请重新输入故事重试');
+        setError('');
+        setAnalysis({ ...result, story });
+        setForm(previous => previous.story.trim() === story ? { ...previous, duration: result.duration } : previous);
+      } catch (error) {
+        if (current) setError(userError(error.message));
+      } finally {
+        if (current) setAnalyzing(false);
+      }
+    }, 800);
+    return () => { current = false; clearTimeout(timer); };
+  }, [form.story, user, id]);
+
+  async function createFilm() {
+    if (!form.story.trim() || busy || analyzing) return;
+    const { brandId, skillId, ...filmSettings } = form;
+    void brandId; void skillId;
+    await action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
   }
   async function download() {
     try {
@@ -199,9 +219,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const { brandId, skillId, ...filmSettings } = form;
-                void brandId; void skillId;
-                action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
+                void createFilm();
               }}
             >
               <header className="film-create-heading">
@@ -220,8 +238,14 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
               <div className="film-duration-analysis">
-                <button type="button" disabled={analyzing || !form.story.trim()} onClick={analyzeDuration}>{analyzing ? '正在分析故事…' : '预分析故事时长'}</button>
-                {analysis && analysis.story === form.story.trim() && <p role="status">建议时长约 {analysis.duration} 秒。{analysis.reason}</p>}
+                {analyzing && <p role="status">正在分析故事时长…</p>}
+                {analysis && analysis.story === form.story.trim() && <>
+                  <div className="film-duration-choices" role="group" aria-label="推荐时长">
+                    {analysis.options.map(option => <button key={option.pace} type="button" aria-pressed={form.duration === option.duration} onClick={() => field('duration', option.duration)}>
+                      <span>{({ compact: '剧情紧凑', normal: '正常节奏', slow: '缓慢叙事' })[option.pace]}</span><strong>{option.duration} 秒</strong><small>{option.reason}</small>
+                    </button>)}
+                  </div>
+                </>}
               </div>
               <div className="film-style-field">
                 <label id="film-style-label">视频风格</label>
@@ -330,9 +354,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               </p>
               <button
                 className="film-primary"
-                disabled={busy || !form.story.trim()}
+                disabled={busy || analyzing || !form.story.trim()}
               >
-                {busy ? "正在创建…" : "一键生成成片"}
+                {analyzing ? "正在分析故事…" : busy ? "正在创建…" : "一键生成成片"}
               </button>
               </div>
             </form>
