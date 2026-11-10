@@ -341,13 +341,14 @@ function mergeFilmHistory(conversations, projects) {
     const existing = records.get(id)
     if (existing?.deleted) continue
     const title = project.named ? project.title : '一键成片 · 导演命名中'
-    if (existing?.filmTitle === title) continue
+    if (existing?.filmTitle === title && Boolean(existing.archived) === Boolean(project.archived)) continue
     const createdAt = new Date(project.createdAt).toISOString()
     records.set(id, {
       id, type: 'film', projectId: project.id, messages: [], createdAt, updatedAt: createdAt,
       ...existing,
       title: existing && existing.title !== existing.filmTitle ? existing.title : title,
       filmTitle: title,
+      archived: Boolean(project.archived),
     })
     changed = true
   }
@@ -1762,7 +1763,7 @@ export default function App() {
     setConversations((current) => {
       const next = transform(current)
       if (next === current) return current
-      try { localStorage.setItem(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
+      try { localStorage.setItem(conversationStorageKey, JSON.stringify(next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
   }
@@ -1771,10 +1772,19 @@ export default function App() {
     if (!user || authState !== 'authenticated') return
     let live = true
     const sync = () => filmRequest('/history').then(({ projects }) => {
+      for (const project of projects.filter((item) => item.archived)) clearFilmCache(user.id, project.id)
       if (live) updateConversations((current) => mergeFilmHistory(current, projects))
     }).catch(() => {})
+    const syncArchives = () => filmRequest('/archive-records').then(({ records }) => {
+      if (!live) return
+      updateConversations(current => {
+        const remoteIds = new Set(records.map(record => record.id))
+        return [...current.filter(item => !remoteIds.has(item.id) && !item.serverArchived), ...records.map(record => ({ ...record, serverArchived: Boolean(record.archived) }))]
+      })
+    }).catch(() => {})
     sync()
-    const timer = setInterval(sync, 15000)
+    syncArchives()
+    const timer = setInterval(() => { sync(); syncArchives() }, 15000)
     return () => { live = false; clearInterval(timer) }
   }, [user, authState, conversationStorageKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1891,20 +1901,57 @@ export default function App() {
       : conversation))
   }
 
-  function archiveConversation(id) {
-    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: true, pinned: false, pinnedAt: null } : conversation))
+  function clearFilmCache(userId, projectId) {
+    try {
+      localStorage.removeItem(`dgen-film-project-${userId}-${projectId}`)
+      for (const suffix of ['stage', 'selected', 'message', 'panel']) localStorage.removeItem(`film-workbench:${projectId}:${suffix}`)
+    } catch { /* Storage may be unavailable. */ }
+  }
+
+  async function archiveConversation(id) {
+    const item = conversations.find((conversation) => conversation.id === id)
+    if (item?.type === 'film' && item.projectId) {
+      try { await filmRequest(`/${encodeURIComponent(item.projectId)}/archive`, { archived: true }) }
+      catch (error) { window.alert(`归档失败：${error.message}`); return }
+      clearFilmCache(user.id, item.projectId)
+    } else if (item && user) {
+      try { await filmRequest('/archive-records', { id, record: item }) }
+      catch (error) { window.alert(`归档失败：${error.message}`); return }
+    }
+    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: true, serverArchived: Boolean(user && item?.type !== 'film'), pinned: false, pinnedAt: null } : conversation))
     if (activeConversationId === id) startNew()
   }
 
-  function restoreConversation(id) {
+  async function restoreConversation(id) {
+    const item = conversations.find((conversation) => conversation.id === id)
+    if (item?.type === 'film' && item.projectId) {
+      try { await filmRequest(`/${encodeURIComponent(item.projectId)}/archive`, { archived: false }) }
+      catch (error) { window.alert(`恢复失败：${error.message}`); return }
+    } else if (item && user) {
+      try {
+        const restored = { ...item, archived: false, updatedAt: new Date().toISOString() }
+        const next = conversations.map(record => record.id === id ? restored : record).filter(record => !(record.archived && record.type !== 'film'))
+        localStorage.setItem(conversationStorageKey, JSON.stringify(next))
+        await filmRequest('/archive-records', { id, record: restored, restore: true })
+      } catch (error) { window.alert(`恢复失败：${error.message}`); return }
+    }
     updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: false, updatedAt: new Date().toISOString() } : conversation))
   }
 
-  function deleteConversation(id) {
+  async function deleteConversation(id) {
+    const item = conversations.find(conversation => conversation.id === id)
+    if (user && item?.type !== 'film') {
+      try { await filmRequest('/archive-records', { id, restore: true }) }
+      catch (error) { window.alert(`删除失败：${error.message}`); return }
+    }
     updateConversations((current) => current.flatMap((conversation) => conversation.id !== id ? [conversation] : conversation.type === 'film' ? [{ id, type: 'film', deleted: true }] : []))
   }
 
-  function deleteAllArchived() {
+  async function deleteAllArchived() {
+    if (user) {
+      try { for (const item of archivedConversations.filter(conversation => conversation.type !== 'film')) await filmRequest('/archive-records', { id: item.id, restore: true }) }
+      catch (error) { window.alert(`删除失败：${error.message}`); return }
+    }
     updateConversations((current) => current.flatMap((conversation) => !conversation.archived ? [conversation] : conversation.type === 'film' ? [{ id: conversation.id, type: 'film', deleted: true }] : []))
   }
 

@@ -40,6 +40,10 @@ function activity(p, key, message) {
 }
 function check(p, inflight=false) {
   drainFilmCommands(root,p);
+  if (fs.existsSync(path.join(root, p.id, 'archived')) && !inflight) {
+    p.schedulingPaused = true;
+    throw Object.assign(Error('项目已归档，停止后续任务'), { code: 'PAUSED' });
+  }
   if (fs.existsSync(path.join(root, p.id, "cancel"))) throw Error("制作已暂停；上游已提交任务可能继续计费");
   if(p.schedulingPaused && !inflight)throw Object.assign(Error('已暂停新任务调度，已提交的外部任务继续保存结果'),{code:'PAUSED'});
 }
@@ -844,6 +848,7 @@ const stage =
     if (state.halted) return state;
     const p = read(state.id);
     try {
+      check(p);
       if (first) {
         p.status = "running";
         p.activeJobs = [];

@@ -17,6 +17,21 @@ import { fork } from "node:child_process";
 export function installFilms(app, { dataDir, requireAuth, worker = true, prepareContext = async()=>null, analyzeStory }) {
   const root = path.join(dataDir, "films");
   fs.mkdirSync(root, { recursive: true });
+  const archivesDir = path.join(dataDir, 'conversation-archives');
+  fs.mkdirSync(archivesDir, { recursive: true });
+  const archiveFile = (req) => path.join(archivesDir, createHash('sha256').update(String(req.user.id)).digest('hex') + '.json');
+  const readArchives = (req) => { try { const data = JSON.parse(fs.readFileSync(archiveFile(req), 'utf8')); return Array.isArray(data) ? data : []; } catch (e) { if (e.code === 'ENOENT') return []; throw e; } };
+  app.get('/api/films/archive-records', requireAuth, (req, res) => res.json({ records: readArchives(req) }));
+  app.post('/api/films/archive-records', requireAuth, (req, res) => {
+    const { record, id, restore } = req.body || {};
+    if (typeof id !== 'string' || !id || id.length > 200 || (restore !== true && (!record || record.id !== id || record.type === 'film'))) return res.status(400).json({ error: '归档数据无效' });
+    const records = readArchives(req).filter(item => item.id !== id);
+    if (!restore) records.push({ ...record, archived: true, pinned: false, pinnedAt: null });
+    else if (record && record.id === id) records.push({ ...record, archived: false });
+    const file = archiveFile(req), temp = file + '.' + randomUUID() + '.tmp';
+    fs.writeFileSync(temp, JSON.stringify(records), { mode: 0o600 }); fs.renameSync(temp, file);
+    res.json({ ok: true });
+  });
   const linkKey = filmLinkKey(root);
   app.get("/api/film-assets/:id/:file", (req, res) => {
     const { id, file } = req.params;
@@ -174,9 +189,20 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     const projects = fs.readdirSync(root).map(read)
       .filter((project) => project?.userId === req.user.id)
       .map(({ id, title, createdAt, plan, directorPlan, script }) => ({
-        id, title, createdAt, named: Boolean(plan || directorPlan || script),
+        id, title, createdAt, archived: fs.existsSync(path.join(root, id, 'archived')), named: Boolean(plan || directorPlan || script),
       }));
     res.json({ projects });
+  });
+  app.post('/api/films/:id/archive', requireAuth, (req, res) => {
+    const p = owned(req, res); if (!p) return;
+    const marker = path.join(root, p.id, 'archived');
+    if (req.body?.archived === true) {
+      fs.writeFileSync(marker, '1', { mode: 0o600 });
+      queueFilmCommand(root, p.id, 'pause');
+    } else if (req.body?.archived === false) {
+      try { fs.unlinkSync(marker); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    } else return res.status(400).json({ error: '归档状态无效' });
+    res.json({ archived: req.body.archived });
   });
   app.get("/api/films/:id", requireAuth, (req, res) => {
     const p = owned(req, res);
