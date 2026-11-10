@@ -242,7 +242,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 {analysis && analysis.story === form.story.trim() && <>
                   <div className="film-duration-choices" role="group" aria-label="推荐时长">
                     {analysis.options.map(option => <button key={option.pace} type="button" aria-pressed={form.duration === option.duration} onClick={() => field('duration', option.duration)}>
-                      <span>{({ compact: '剧情紧凑', normal: '正常节奏', slow: '缓慢叙事' })[option.pace]}</span><strong>{option.duration} 秒</strong><small>{option.reason}</small>
+                      <span>{({ compact: '剧情紧凑', normal: '正常节奏', slow: '缓慢叙事' })[option.pace]}</span><strong>约 {option.duration} 秒</strong>
                     </button>)}
                   </div>
                 </>}

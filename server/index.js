@@ -1,3 +1,4 @@
+import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
 import { installExternalSkills } from './externalSkills.js'
@@ -2066,19 +2067,12 @@ installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async 
   for (const model of ['gemini-3.1-pro', 'gpt-5.6-terra']) {
     try {
       const result = await requestUpstream('/v1/chat/completions', { model, response_format: { type: 'json_object' }, messages: [
-        { role: 'system', content: '独立估算同一故事改编成短片的三个叙事节奏。先识别关键事件、对白和必须展示的动作，再分别按紧凑、正常、缓慢的镜头组织计算时长。紧凑可用蒙太奇合并重复动作但保留关键情节和对白，正常保留动作衔接和自然停顿，缓慢增加人物反应、环境及情绪留白。逐项考虑对白、动作、转场和情绪停顿的具体秒数，禁止按固定比例换算。三个版本都忠于原文，时长有区分，控制在15至600秒，超出时注明需分集。只返回JSON：{options:[{pace:"compact",duration:整数秒,reason:"对应节奏的计算依据"},{pace:"normal",duration:整数秒,reason:"对应节奏的计算依据"},{pace:"slow",duration:整数秒,reason:"对应节奏的计算依据"}]}。' },
+        { role: 'system', content: '你是影视分镜和剪辑导演。先把故事中不可省略的关键事件、每句出声对白及必要人物反应拆为按时间排列的 beats，每个beat有唯一id、description、dialogue（没有对白填空字符串，原话逐字保留）。不可把多个不同地点或因果事件合并成一个beat，重复搬运可用蒙太奇但保留路径、寒冷与出汗细节、结尾情绪。分别为紧凑、正常、缓慢三版编排完整短片，每版必须逐项覆盖所有beat，给每个beat分配现实可表演的整数秒数。考虑人物进入画面、反应、对白语速、动作起落、走位、转场及余韵，动作和对白仅在能实际同时发生时并行。紧凑不是快进，三版同一句对白必须使用相同自然语速。包含对白的每一事件，紧凑版分场秒数不得少于正常版。每秒最多说三个汉字，还要给必要停顿留时间。通过减少无对白的空镜和重复动作调整节奏，不得加快说话。必须叙事完整、因果清晰、空间位置和动作衔接合理，不得压缩为预告片或省略关键情节，不得为缩短时长牺牲正常对白、必要反应或转场。复杂动作、两句交互对白及重要反应需要充足时间。每版给具体分场依据，不能按固定比例换算。只返回JSON：{beats:[{id,description,dialogue}],options:[{pace:"compact",segments:[{beatId,seconds}],reason},{pace:"normal",segments:[{beatId,seconds}],reason},{pace:"slow",segments:[{beatId,seconds}],reason}]}。每版按事件顺序列全所有beat，三个版本时长递增，范围15至600秒。' },
         { role: 'user', content: story },
       ] }, undefined, 90000);
       const content = result.choices?.[0]?.message?.content;
       const parsed = JSON.parse(String(content).replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''));
-      const options = ['compact', 'normal', 'slow'].map((pace) => {
-        const option = parsed.options?.find((item) => item.pace === pace);
-        const duration = Number(option?.duration);
-        if (!Number.isInteger(duration) || duration < 15 || duration > 600 || typeof option?.reason !== 'string' || !option.reason.trim()) throw Error('时长分析结果无效');
-        return { pace, duration, reason: option.reason.trim().slice(0, 300) };
-      });
-      if (options[0].duration >= options[1].duration || options[1].duration >= options[2].duration) throw Error('三个节奏的时长顺序无效');
-      return { options, duration: options[1].duration, reason: options[1].reason };
+      return validateFilmDurationAnalysis(parsed);
     } catch (error) { lastError = error; }
   }
   throw lastError || Error('时长分析失败，请重试');
