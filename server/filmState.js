@@ -81,6 +81,31 @@ export function applyCommand(p,c) {
     target.characterReference={file:body.file,name:body.name};
   }
   else if(type==='resume') { if(p.awaitingCharacters && p.characterMode!=='custom')throw Error('请先选择是否自定义角色，当前恢复操作无效');p.awaitingCharacters=false; p.schedulingPaused=false;p.nextRunAt=0;p.status='queued';p.error=null;for(const r of [...p.resources,...p.shots]) if(body.all)r.paused=false; }
+  else if (type === 'retry-shot') {
+    mutable();
+    const {kind, revision} = body;
+    if (!isShot || !['frame', 'tail', 'video'].includes(kind) ||
+        revision !== target.revision || target[kind] || !target[kind + 'Error']) {
+      throw Error('当前镜头没有可重试的失败任务，或镜头版本已更新');
+    }
+    if (p.schedulingPaused || target.paused || target.stale || p.pausedStages?.[kind === 'video' ? 'videos' : 'images']) {
+      throw Error('重试前请恢复已暂停的项目、阶段或镜头，并确认参考素材');
+    }
+    const task = p.tasks.find(t => t.id === taskId(target.id, kind, revision));
+    if ((!task?.providerId && (task?.submitting || target[kind + 'Submitting'])) ||
+        p.activeJobs?.some(job => job.id === task?.id)) {
+      throw Error('任务正在运行或提交结果未知，暂时无法重试');
+    }
+    target[kind + 'Error'] = null;
+    target[kind + 'Retry'] = (target[kind + 'Retry'] || 0) + 1;
+    if (task) {
+      task.status = 'waiting';
+      task.automaticRetries = 0;
+    }
+    p.error = null;
+    p.nextRunAt = 0;
+    if (p.status !== 'running') p.status = 'queued';
+  }
   else if(type==='stage-pause') {p.pausedStages ||= {};p.pausedStages[body.stage]=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued';}
   else if(type==='lock') { requireTarget();target.locked=Boolean(body.locked); }
   else if(type==='task-pause') { requireTarget();target.paused=Boolean(body.paused);if(!body.paused && !p.schedulingPaused)p.status='queued'; }
@@ -97,7 +122,7 @@ export function applyCommand(p,c) {
     const previousVersion=target.revision;
     if(isShot) {
       if((type==='regenerate' && body.videoOnly) || type==='upload' || (type==='edit'&&changed.every(key=>['dialogue','duration','subtitleText'].includes(key)))) {
-        archive(target); target.revision++;target.video=null;target.videoTask=null;target.videoSubmitting=false;target.videoAttempts=0;target.review=null;target.audio=null;
+        archive(target); target.revision++;target.video=null;target.videoTask=null;target.videoSubmitting=false;target.videoAttempts=0;target.videoError=null;target.review=null;target.audio=null;
       } else invalidateShot(p,target,'镜头版本已更新');
     } else { archive(target);target.revision++;target.output=null;target.image=null;target.imageTask=null;target.imageSubmitting=false;target.imageAttempts=0;invalidateResource(p,target,'上游素材版本已更新'); }
     if(type==='restore') {
@@ -150,7 +175,7 @@ export function applyCommand(p,c) {
   else if(type==='timeline') {p.useTimeline=true;p.timeline=clone(body.timeline);p.timeline.revision=(p.timeline.revision||0)+1;p.output=null;p.status=p.schedulingPaused?'paused':'queued';}
   else throw Error('未知任务操作');
   p.appliedCommands.push(c.id);
-  event(p,'user',body.id || 'project',c.label || ({pause:'暂停新任务调度；已提交的外部任务继续回收结果',resume:'恢复自动制作',lock:body.locked?'锁定当前成果':'解除成果锁定',edit:'更新成果并计算下游影响',regenerate:'重新生成选中任务',restore:'恢复历史版本',upload:'上传并保留原始参考素材',timeline:'更新剪辑工程，仅重新导出成片',revise:'向总导演提交修改要求'}[type]||'更新项目'),{type:'command',commandId:c.id});
+  event(p,'user',body.id || 'project',c.label || ({pause:'暂停新任务调度；已提交的外部任务继续回收结果',resume:'恢复自动制作',lock:body.locked?'锁定当前成果':'解除成果锁定',edit:'更新成果并计算下游影响',regenerate:'重新生成选中任务','retry-shot':'重试这个镜头的失败任务',restore:'恢复历史版本',upload:'上传并保留原始参考素材',timeline:'更新剪辑工程，仅重新导出成片',revise:'向总导演提交修改要求'}[type]||'更新项目'),{type:'command',commandId:c.id});
 }
 let lastCommandTime = 0;
 export function queueFilmCommand(root,id,type,body={}) {

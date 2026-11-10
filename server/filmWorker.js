@@ -7,6 +7,7 @@ import {prepareFilmAudio,renderFilmTimeline,probe} from './filmEditing.js';
 import { readFilmProject, drainFilmCommands, pendingCommands, beginTask, finishTask, event, taskId, clone, applyCommand } from './filmState.js';
 import { createFilmAgents } from './filmAgents.js';
 import { filmPool } from './filmPool.js';
+import { runFilmShotPipeline } from './filmShotPipeline.js';
 import { createFilmDispatcher } from './filmScheduler.js';
 import { filmEvent } from '../shared/filmProgress.js';
 import { filmAssetLink } from "./filmLinks.js";
@@ -85,10 +86,11 @@ async function generate(p,slot,key,body,file) {
   check(p);if(slot.locked)throw Object.assign(Error('锁定资产缺少有效产物，需要人工处理'),{code:'INPUT'});
   const version=slot.revision||1, snapshot=clone(slot), id=taskId(slot.id,key,version);
   let t=p.tasks.find(t=>t.id===id);
-  if(!t)t=beginTask(p,id,p.stage,key==='video'?'visual':'visual',{name:slot.name || `镜头 ${slot.id} ${key}`,version,model:body.model},slot.resourceIds||slot.dependencies||[]);
+  const jobStage = key === 'video' ? 'videos' : ['frame', 'tail'].includes(key) ? 'images' : p.stage;
+  if(!t)t=beginTask(p,id,jobStage,'visual',{name:slot.name || `镜头 ${slot.id} ${key}`,version,model:body.model},slot.resourceIds||slot.dependencies||[]);
   t.kind=key;t.resourceId=slot.id;t.version=version;t.fileBase=file;t.resourceSnapshot ||= snapshot;t.status='running';
   t.providerId ||= slot[key+'Task'];t.submitting ||= slot[key+'Submitting'];
-  const job={id,stage:p.stage,message:`正在制作${slot.name||('镜头 '+slot.id)}${key==='video'?'视频':key==='frame'?'首帧':''}`,startedAt:t.startedAt||Date.now(),resourceId:slot.id,version};
+  const job={id,stage:jobStage,message:`正在制作${slot.name||('镜头 '+slot.id)}${key==='video'?'视频':key==='frame'?'首帧':''}`,startedAt:t.startedAt||Date.now(),resourceId:slot.id,version};
   p.activeJobs ||= [];p.activeJobs.push(job);slot[key+'Error']=null;save(p);
   try {
     if(!t.providerId) {
@@ -315,81 +317,73 @@ async function images(p) {
       `asset-${i}.png`,
     );
   });
-  p.stage = "frames";
-  save(p);
-  await filmPool(p.shots, 5, async (s, i) => {
-    await generate(
-      p,
-      s,
-      "frame",
-      {
-        model: p.imageModel,
-        prompt:
-          "生成电影分镜首帧，保持参考人物服装和场景一致，不要文字。" + s.prompt,
-        images: p.assets
-          .filter((a) => s.assetIds.includes(a.id))
-          .map((a) =>
-            filmAssetLink(
-              root,
-              p.id,
-              a.image.file,
-              process.env.FILM_PUBLIC_BASE_URL || "https://17design.fun",
-            ),
-          ),
-        aspectRatio: p.imageModel.startsWith("nano-")
-          ? p.ratio
-          : p.ratio === "16:9"
-            ? "1536x1024"
-            : "1024x1536",
-        ...(p.imageModel.startsWith("nano-")
-          ? { imageSize: "1K" }
-          : { quality: "auto" }),
-      },
-      `frame-${i}.png`,
-    );
-  });
 }
-async function videos(p) {
-  if (p.status === "review" || p.pausedStages?.videos) return;
-  p.stage = "videos";
+async function legacyFrame(p, s, i) {
+  await generateShot(
+    p,
+    s,
+    "frame",
+    {
+      model: p.imageModel,
+      prompt:
+        "生成电影分镜首帧，保持参考人物服装和场景一致，不要文字。" + s.prompt,
+      images: p.assets
+        .filter((a) => s.assetIds.includes(a.id))
+        .map((a) =>
+          filmAssetLink(
+            root,
+            p.id,
+            a.image.file,
+            process.env.FILM_PUBLIC_BASE_URL || "https://17design.fun",
+          ),
+        ),
+      aspectRatio: p.imageModel.startsWith("nano-")
+        ? p.ratio
+        : p.ratio === "16:9"
+          ? "1536x1024"
+          : "1024x1536",
+      ...(p.imageModel.startsWith("nano-")
+        ? { imageSize: "1K" }
+        : { quality: "auto" }),
+    },
+    `frame-${i}.png`,
+  );
+}
+async function videoShot(p, s, i) {
   const resolution = filmVideoResolution(p.videoModel, p.videoResolution);
-  save(p);
-  await filmPool(p.shots, 10, async (s, i) => {
-    if(!s.frame || s.paused || s.stale)return;
-    const references=p.referenceWorkflow
-      ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
-      : [];
-    const videoRefs=references.slice(0,p.videoModel==='wan-3.0'?9:8);
-    await generate(
-      p,
-      s,
-      "video",
-      {
-        model: p.videoModel,
-        prompt:
-          s.prompt +
-          (videoRefs.length ? "。图1提供镜头构图与动作起点，后续图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
-          (s.dialogue
-            ? "。指定中文对白：" +
-              s.dialogue +
-              "。人物说出上述台词，声音与口型同步。"
-            : ""),
-        images: [
-          referenceImage(p,s.frame),
-          ...videoRefs.map(r=>referenceImage(p,r)),
-        ],
-        aspectRatio:
-          p.videoModel === "minimax-h3"
-            ? p.ratio === "16:9"
-              ? "landscape"
-              : "portrait"
-            : p.ratio,
-        resolution,
-        duration: Math.max(p.videoModel==='wan-3.0'?2:1,Math.ceil(s.duration)),
-      },
-      `shot-${i}.mp4`,
-    );
-  });
+  const references=p.referenceWorkflow
+    ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
+    : [];
+  const videoRefs=references.slice(0,p.videoModel==='wan-3.0'?9:8);
+  await generateShot(
+    p,
+    s,
+    "video",
+    {
+      model: p.videoModel,
+      prompt:
+        s.prompt +
+        (videoRefs.length ? "。图1提供镜头构图与动作起点，后续图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
+        (s.dialogue
+          ? "。指定中文对白：" +
+            s.dialogue +
+            "。人物说出上述台词，声音与口型同步。"
+          : ""),
+      images: [
+        referenceImage(p,s.frame),
+        ...videoRefs.map(r=>referenceImage(p,r)),
+      ],
+      aspectRatio:
+        p.videoModel === "minimax-h3"
+          ? p.ratio === "16:9"
+            ? "landscape"
+            : "portrait"
+          : p.ratio,
+      resolution,
+      duration: Math.max(p.videoModel==='wan-3.0'?2:1,Math.ceil(s.duration)),
+    },
+    `shot-${i}.mp4`,
+  );
 }
 async function quality(p) {
   if (p.status === "review") return;
@@ -769,17 +763,66 @@ async function referenceAssets(p) {
   if(!p.events.some(e=>e.taskId===handoffKey))event(p,'director',handoffKey,'设定图已交给分镜与视频制作，审核意见保留在设定图记录中。',{type:'dispatch'});
 }
 
-async function framesV2(p) {
-  p.stage='images';save(p);if(p.pausedStages?.images)return;
-  const link=r=>referenceImage(p,r.output);
-  await filmPool(p.shots,5,async shot=>{
-    if(shot.paused||shot.stale)return;
-    const refs=(shot.resourceIds||[]).map(id=>p.resources.find(r=>r.id===id));if(refs.some(r=>!r?.output||r.stale))return;
-    if(p.referenceWorkflow && refs.some(r=>!usableSetting(r)))return;
-    if(!shot.frame)shot.referenceVersions=refs.map(r=>({id:r.id,version:r.revision,file:r.output.file}));
-    await generate(p,shot,'frame',{model:p.imageModel,prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,images:refs.map(link),aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536',...(p.imageModel.startsWith('nano-')?{imageSize:'1K'}:{quality:'auto'})},`frame-${shot.id}-v${shot.revision}.png`);
-    if(shot.tailFramePrompt && shot.frame)await generate(p,shot,'tail',{model:p.imageModel,prompt:shot.tailFramePrompt,images:[referenceImage(p,shot.frame)],aspectRatio:p.imageModel.startsWith('nano-')?p.ratio:p.ratio==='16:9'?'1536x1024':'1024x1536'},`frame-tail-${shot.id}-v${shot.revision}.png`);
+async function generateShot(p, shot, kind, body, file) {
+  const version = shot.revision || 1;
+  while (true) {
+    try {
+      await generate(p, shot, kind, body, file);
+      return;
+    } catch (error) {
+      if ((shot.revision || 1) !== version || error.code === 'INPUT' || error.code === 'PAUSED') throw error;
+      const task = p.tasks.find(t => t.id === taskId(shot.id, kind, version));
+      if (!task) throw error;
+      if (task.providerId && (task.automaticRetries || 0) < 2) {
+        task.automaticRetries = (task.automaticRetries || 0) + 1;
+        event(p, 'director', task.id, '保留任务编号，继续查询该镜头', {type:'recovery'});
+      } else if (task.providerStatus === 'failed' && /server_timeout/i.test(error.message) && !task.providerTimeoutRetries) {
+        task.providerTimeoutRetries = 1;
+        event(p, 'director', task.id, '供应商确认超时，自动重试这个镜头一次', {type:'recovery'});
+      } else {
+        throw error;
+      }
+      save(p);
+      await sleep(1000);
+    }
+  }
+}
+
+async function shotImage(p, shot, index, kind) {
+  if (p.schemaVersion !== 2) return legacyFrame(p, shot, index);
+  const refs = (shot.resourceIds || []).map(id => p.resources.find(r => r.id === id));
+  if (refs.some(r => !r?.output || r.stale) || (p.referenceWorkflow && refs.some(r => !usableSetting(r)))) return;
+  const nano = p.imageModel.startsWith('nano-');
+  const aspectRatio = nano ? p.ratio : p.ratio === '16:9' ? '1536x1024' : '1024x1536';
+  if (kind === 'tail') {
+    return generateShot(p, shot, kind, {model:p.imageModel, prompt:shot.tailFramePrompt, images:[referenceImage(p,shot.frame)], aspectRatio}, `frame-tail-${shot.id}-v${shot.revision}.png`);
+  }
+  shot.referenceVersions = refs.map(r => ({id:r.id, version:r.revision, file:r.output.file}));
+  return generateShot(p, shot, kind, {
+    model:p.imageModel,
+    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,
+    images:refs.map(r=>referenceImage(p,r.output)),
+    aspectRatio,
+    ...(nano ? {imageSize:'1K'} : {quality:'auto'}),
+  }, `frame-${shot.id}-v${shot.revision}.png`);
+}
+
+async function produceShots(p) {
+  p.stage = 'images';
+  save(p);
+  await runFilmShotPipeline(p, {
+    check, save,
+    image:(shot, index, kind) => shotImage(p, shot, index, kind),
+    video:(shot, index) => videoShot(p, shot, index),
   });
+  if (p.needsRerun || p.schedulingPaused) return;
+  const incomplete = p.shots.filter(s => !s.video || s.paused || s.stale);
+  if (!incomplete.length) return;
+  p.stage = incomplete.some(s => !s.frame || (s.tailFramePrompt && !s.tail)) ? 'images' : 'videos';
+  const failed = incomplete.some(s => s.frameError || s.tailError || s.videoError);
+  p.status = failed ? 'failed' : 'needs-input';
+  p.error = failed ? '部分镜头生成失败，可以在分镜卡片中单独重试。' : '部分镜头缺少可用素材或已暂停。';
+  save(p);
 }
 async function directorReview(p) {
   const issues=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
@@ -858,7 +901,7 @@ const stage =
       await fn(p);save(p);
       if(p.schedulingPaused){p.status='paused';save(p);return {...state,halted:true};}
       if(p.needsRerun){p.needsRerun=false;p.status='queued';save(p);return {...state,halted:true};}
-      return { ...state, halted: ["review","queued","needs-input"].includes(p.status) };
+      return { ...state, halted: ["review","queued","needs-input","failed"].includes(p.status) };
     } catch (e) {
       if(p.schemaVersion===2 && await recoverFailure(p,e))return {...state,halted:true};
       p.status = fs.existsSync(path.join(root, p.id, "cancel"))
@@ -876,8 +919,8 @@ const graph = new StateGraph(State)
   .addNode('character_scene',stage(async p=>{if(p.schemaVersion===2){const results=await Promise.allSettled([agents.characters(p),agents.scenes(p)]);const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;}}))
   .addNode('reference_assets',stage(async p=>{if(p.schemaVersion===2 && p.referenceWorkflow)await referenceAssets(p);}))
   .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2)await agents.continuity(p);}))
-  .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);if(p.status!=='review')await framesV2(p);}else await images(p);}))
-  .addNode('video_shots',stage(videos))
+  .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);}else await images(p);}))
+  .addNode('video_shots',stage(produceShots))
   .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2)await directorReview(p);}))
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))

@@ -274,7 +274,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     const legacyAuto=film.read(id);legacyAuto.schemaVersion=1;film.write(legacyAuto);
     const autoDone = await until("succeeded");
     assert.ok(autoDone.output);
-    assert.equal(imagePeak, 5);
+    assert.equal(imagePeak, 10);
     assert.equal(videoPeak, 10);
     assert.equal(filmProgress(autoDone).completed, 6);
     assert.equal((await fetch(base + "/api/films/" + id + "/files/" + autoDone.output)).status, 200);

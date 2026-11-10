@@ -58,7 +58,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
         story: "",
         duration: 30,
         ratio: "16:9",
-        imageModel: "gpt-image-2.5",
+        imageModel: "nano-banana-2.1",
         videoModel: "minimax-h3",
         style: "",
         narrativeStyleId: "",

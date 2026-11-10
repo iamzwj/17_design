@@ -11,7 +11,7 @@ export default function FilmEditor({project:p,stage,selected,onSelect,send,reque
   const options=stage==='characters'||stage==='scenes'?(p.resources||[]).filter(r=>r.category===stage):stage==='images'?[...(p.resources||[]),...(p.shots||[])]:p.shots||[];
   const item=options.find(r=>r.id===selected)||options[0];
   if(stage==='media')return <FilmMediaLibrary project={p} onSelect={onSelect}/>;
-  if(stage==='storyboard')return <FilmStoryboard project={p} selected={selected} onSelect={onSelect} renderEditor={shot=><ResourceEditor key={shot.id+':'+shot.revision} item={shot} project={p} stage="videos" send={send} request={request} notice={notice} hideMedia/>}/>;
+  if(stage==='storyboard')return <FilmStoryboard project={p} selected={selected} onSelect={onSelect} send={send} renderEditor={shot=><ResourceEditor key={shot.id+':'+shot.revision} item={shot} project={p} stage="videos" send={send} request={request} notice={notice} hideMedia/>}/>;
   if(stage==='characters'||stage==='scenes')return <AssetBoard project={p} stage={stage} resources={options} selected={selected} onSelect={onSelect} send={send} request={request} notice={notice}/>;
   if(stage==='editing')return <div className="fw-editing-home"><h3>剪辑与导出</h3><p>当前工程包含 {p.timeline?.clips?.length||p.shots.length} 个镜头。调整顺序、时长、字幕及音轨后，仅重新合成成片。</p><button className="film-primary" onClick={onOpenTimeline}>展开剪辑时间线</button>{p.output&&<FilmMedia project={p.id} file={p.output} video/>}</div>;
   if(stage==='script')return <ScriptEditor key={(p.scriptRevision||1)+':'+Boolean(p.script)} project={p} send={send}/>;
