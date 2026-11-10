@@ -247,7 +247,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               />
               <div className="film-duration-analysis">
                 {analyzing && <div className="film-analysis-progress" role="status">
-                  <p>正在分析故事时长… <span>预估 {analysisProgress}%</span></p>
+                  <p>正在分析故事时长… <span>{analysisProgress}%</span></p>
                   <progress max="100" value={analysisProgress} aria-label="故事时长分析预估进度"/>
                 </div>}
                 {analysis && analysis.story === form.story.trim() && <>
