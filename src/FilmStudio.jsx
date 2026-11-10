@@ -41,7 +41,16 @@ const filmStylePresets = [
 export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew }) {
   const [characterLibrary, setCharacterLibrary] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [project, setProject] = useState(null);
+  const cacheKey = user?.id && projectId ? `dgen-film-project-${user.id}-${projectId}` : '';
+  const [project, setProject] = useState(() => {
+    if (!cacheKey) return null;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey));
+      return cached?.id === projectId && cached?.userId === user.id ? cached : null;
+    } catch {
+      return null;
+    }
+  });
   const [id, setId] = useState(projectId || ""),
     [form, setForm] = useState(() => {
       const defaults = {
@@ -66,6 +75,15 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     [lastSynced, setLastSynced] = useState(0);
   const p = project?.id === id ? project : null;
   const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
+  useEffect(() => {
+    if (!user?.id || !project?.id || project.userId !== user.id) return;
+    try {
+      localStorage.setItem(`dgen-film-project-${user.id}-${project.id}`, JSON.stringify(project));
+    } catch {
+      // A full browser store must not stop the server-backed project from working.
+    }
+  }, [user?.id, project]);
+
   useEffect(() => {
     if (!user || !id) return;
     let live = true;
