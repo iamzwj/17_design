@@ -31,6 +31,7 @@ export async function filmRequest(path = "", body) {
 }
 const request = filmRequest;
 const filmStylePresets = [
+  { label: "常规", image: null, prompt: "" },
   { label: "院线电影写实", image: "cinematic", prompt: "真人电影摄影。保留自然肤质和真实衣料，柔和侧光、低饱和冷暖对比与细微胶片颗粒。各镜头色调统一，背景适度虚化。" },
   { label: "日系二维动画", image: "anime", prompt: "手绘二维动画。清晰轮廓、两层赛璐璐阴影与水彩背景。固定线宽、角色比例和色板，动作有清晰的关键姿势。" },
   { label: "三维卡通动画", image: "cartoon", prompt: "三维卡通动画。角色轮廓圆润、比例适度夸张，采用哑光材质和柔和漫反射光。固定脸型、服装配色与材质，表情清楚有弹性。" },
@@ -59,12 +60,12 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
         ratio: "16:9",
         imageModel: "gpt-image-2.5",
         videoModel: "minimax-h3",
-        style: filmStylePresets[0].prompt,
-        narrativeStyleId: filmNarrativePresets[0].id,
+        style: "",
+        narrativeStyleId: "",
       };
       try {
         const saved = JSON.parse(localStorage.getItem("dgen-film-draft-" + getAuthToken().slice(-12)));
-        const style = filmStylePresets.find((preset) => preset.prompt === saved?.style)?.prompt;
+        const style = typeof saved?.style === "string" ? saved.style : defaults.style;
         return { ...defaults, ...saved, style: style ?? defaults.style };
       } catch {
         return defaults;
@@ -72,7 +73,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     }),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [lastSynced, setLastSynced] = useState(0);
+    [lastSynced, setLastSynced] = useState(0),
+    [analysis, setAnalysis] = useState(null),
+    [analyzing, setAnalyzing] = useState(false);
   const p = project?.id === id ? project : null;
   const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
   useEffect(() => {
@@ -137,6 +140,17 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     } finally {
       setBusy(false);
     }
+  }
+  async function analyzeDuration() {
+    const story = form.story.trim();
+    setAnalyzing(true);
+    setError('');
+    try {
+      const result = await request('/analyze', { story });
+      setAnalysis({ ...result, story });
+      setForm(current => current.story.trim() === story ? { ...current, duration: result.duration } : current);
+    } catch (error) { setError(userError(error.message)); }
+    finally { setAnalyzing(false); }
   }
   async function download() {
     try {
@@ -205,6 +219,10 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 onChange={(e) => field("story", e.target.value)}
                 placeholder="描述故事、人物、画面风格，以及希望人物说的话…"
               />
+              <div className="film-duration-analysis">
+                <button type="button" disabled={analyzing || !form.story.trim()} onClick={analyzeDuration}>{analyzing ? '正在分析故事…' : '预分析故事时长'}</button>
+                {analysis && analysis.story === form.story.trim() && <p role="status">建议时长约 {analysis.duration} 秒。{analysis.reason}</p>}
+              </div>
               <div className="film-style-field">
                 <label id="film-style-label">视频风格</label>
                 <div className="film-style-presets" role="group" aria-labelledby="film-style-label">
@@ -216,7 +234,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                       aria-pressed={form.style === prompt}
                       onClick={() => field("style", prompt)}
                     >
-                      <img src={`/film-presets/${image}.webp`} alt="" />
+                      {image ? <img src={`/film-presets/${image}.webp`} alt="" /> : <span className="film-style-plain" aria-hidden="true">常规</span>}
                       <span>{label}</span>
                     </button>
                   ))}
@@ -225,6 +243,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
               <section className="film-narrative-field" aria-labelledby="film-narrative-label">
                 <label id="film-narrative-label">叙事风格</label>
                 <div className="film-style-presets" role="group" aria-label="叙事风格预设">
+                  <button type="button" aria-pressed={!form.narrativeStyleId} onClick={() => field("narrativeStyleId", "")}><span>常规</span></button>
                   {filmNarrativePresets.map((preset) => (
                     <button key={preset.id} type="button"
                       aria-pressed={form.narrativeStyleId === preset.id}
@@ -236,15 +255,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                 </div>
               </section>
               <div className="film-create-settings">
-                <ComposerSelect
-                  label="成片时长"
-                  value={form.duration}
-                  options={[15, 30, 60, 90, 120].map((v) => ({
-                    value: v,
-                    label: v + "秒",
-                  }))}
-                  onChange={(v) => field("duration", v)}
-                />
+                <label>成片时长（秒）
+                  <input type="number" min="15" max="600" step="1" value={form.duration} onChange={(e) => field("duration", Number(e.target.value))} required />
+                </label>
                 <ComposerSelect
                   label="画面比例"
                   value={form.ratio}

@@ -477,3 +477,8 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.film-duration-analysis { margin: 12px 0 20px; }
+.film-duration-analysis p { margin: 8px 0 0; line-height: 1.6; }
+.film-studio .film-style-plain { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 10; margin-bottom: 8px; background: var(--dp-panel); color: var(--dp-secondary); }
+.film-create-settings input[type="number"] { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--dp-ink); background: var(--dp-panel); border: 1px solid var(--dp-border); border-radius: 8px; padding: 9px; }

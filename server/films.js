@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
-export function installFilms(app, { dataDir, requireAuth, worker = true, prepareContext = async()=>null }) {
+export function installFilms(app, { dataDir, requireAuth, worker = true, prepareContext = async()=>null, analyzeStory }) {
   const root = path.join(dataDir, "films");
   fs.mkdirSync(root, { recursive: true });
   const linkKey = filmLinkKey(root);
@@ -58,6 +58,14 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
         .sort((a, b) => b.createdAt - a.createdAt),
     }),
   );
+  app.post("/api/films/analyze", requireAuth, async (req, res, next) => {
+    try {
+      const story = String(req.body?.story || '').trim();
+      if (!story || story.length > 12000) return res.status(400).json({ error: '请填写故事，最多12000字' });
+      if (!analyzeStory) return res.status(503).json({ error: '时长分析暂不可用' });
+      res.json(await analyzeStory(story));
+    } catch (error) { next(error); }
+  });
   app.post("/api/films", requireAuth, async (req, res) => {
     const b = req.body || {};
     if (!String(b.story || "").trim() || String(b.story).length > 12000)
@@ -67,7 +75,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       !filmVideoResolutions(b.videoModel).length ||
       (b.videoResolution != null && !filmVideoResolutions(b.videoModel).includes(b.videoResolution)) ||
       !["16:9", "9:16"].includes(b.ratio) ||
-      ![15, 30, 60, 90, 120].includes(Number(b.duration))
+      (!Number.isInteger(Number(b.duration)) || Number(b.duration) < 15 || Number(b.duration) > 600)
     )
       return res.status(400).json({ error: "制作参数无效" });
     const requestId = /^[a-f0-9-]{36}$/.test(b.requestId || "")
@@ -103,7 +111,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       userId: req.user.id,
       title: "导演命名中",
       story: b.story,
-      settings: { style: String(b.style || "电影写实").slice(0,200), transition:"cut", sourceVolume:1, subtitles:true },
+      settings: { style: String(b.style ?? "电影写实").slice(0,200), transition:"cut", sourceVolume:1, subtitles:true },
       resources: [], tasks: [], appliedCommands: [],
       ratio: b.ratio,
       duration: Number(b.duration),

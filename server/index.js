@@ -2061,7 +2061,23 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   res.json({ users: listUsers(), images })
 })
 
-installFilms(app, { dataDir: waterfallDataDir, requireAuth, prepareContext: async (user, input) => {
+installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async (story) => {
+  let lastError;
+  for (const model of ['gemini-3.1-pro', 'gpt-5.6-terra']) {
+    try {
+      const result = await requestUpstream('/v1/chat/completions', { model, response_format: { type: 'json_object' }, messages: [
+        { role: 'system', content: '估算将完整故事改编为短片所需时长。保留关键事件、完整对白与必要停顿，依据对白和动作节奏估算，不强行压缩。只返回JSON：{duration:秒数,reason:简短说明}。范围15到600秒；超出范围时说明需要分集。' },
+        { role: 'user', content: story },
+      ] }, undefined, 90000);
+      const content = result.choices?.[0]?.message?.content;
+      const parsed = JSON.parse(String(content).replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''));
+      const duration = Math.round(Number(parsed.duration));
+      if (!Number.isFinite(duration) || duration < 15 || duration > 600 || typeof parsed.reason !== 'string') throw Error('时长分析结果无效');
+      return { duration, reason: parsed.reason.slice(0, 300) };
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || Error('时长分析失败，请重试');
+}, prepareContext: async (user, input) => {
   const selection = input.brandId ? { brandId: input.brandId } : null
   const context = selection ? await knowledge.prepare(user, { knowledge: selection, prompt: input.story, model: input.imageModel }, 'video') : null
   const skill = input.skillId ? skillLibrary.resolve(user, input.skillId, 'video') : null

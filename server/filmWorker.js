@@ -89,10 +89,10 @@ async function generate(p,slot,key,body,file) {
   try {
     if(!t.providerId) {
       if(t.submitting)throw Object.assign(Error('生成提交结果未知，已停止重复提交，请核对供应商任务'),{code:'INPUT'});
-      const style = p.settings?.style?.trim() || '电影写实';
+      const style = p.settings?.style?.trim() || '';
       t.requestBody = {
         ...body,
-        prompt: `${body.prompt}\n全片视觉风格：${style}。按此风格表现材质、色彩和光影；参考图用于保持人物身份、服装和空间布局，画面表现以全片视觉风格为准。`,
+        prompt: style ? `${body.prompt}\n全片视觉风格：${style}。按此风格表现材质、色彩和光影；参考图用于保持人物身份、服装和空间布局，画面表现以全片视觉风格为准。` : body.prompt,
       };
       slot[key+'Attempts']=(slot[key+'Attempts']||0)+1;t.submitting=true;slot[key+'Submitting']=true;save(p);
       let response;
