@@ -801,9 +801,9 @@ async function generateShot(p, shot, kind, body, file) {
       } else if (error.code === 'RATE_LIMIT' && (task.rateLimitRetries || 0) < 5) {
         task.rateLimitRetries = (task.rateLimitRetries || 0) + 1;
         event(p, 'director', task.id, '供应商限流，等待后重试该请求', {type:'recovery'});
-      } else if (task.providerStatus === 'failed' && /server_timeout/i.test(error.message) && !task.providerTimeoutRetries) {
+      } else if (task.providerStatus === 'failed' && /server_timeout|generate failed|generation failed/i.test(error.message) && !task.providerTimeoutRetries) {
         task.providerTimeoutRetries = 1;
-        event(p, 'director', task.id, '供应商确认超时，自动重试这个镜头一次', {type:'recovery'});
+        event(p, 'director', task.id, '供应商确认生成失败，自动重试这个镜头一次', {type:'recovery'});
       } else {
         if (error.code === 'RATE_LIMIT') finishTask(p, task, null, error);
         throw error;

@@ -81,7 +81,30 @@ export function applyCommand(p,c) {
     if(p.status!=='review'||!p.awaitingCharacters||p.characterMode!=='custom')throw Error('当前角色参考设置无效');
     target.characterReference={file:body.file,name:body.name};
   }
-  else if(type==='resume') { if(p.awaitingCharacters && p.characterMode!=='custom')throw Error('请先选择是否自定义角色，当前恢复操作无效');p.awaitingCharacters=false; p.schedulingPaused=false;p.nextRunAt=0;p.status='queued';p.error=null;for(const r of [...p.resources,...p.shots]) if(body.all)r.paused=false; }
+  else if(type==='resume') {
+    if(p.awaitingCharacters && p.characterMode!=='custom')throw Error('请先选择是否自定义角色，当前恢复操作无效');
+    p.awaitingCharacters=false;
+    p.schedulingPaused=false;
+    p.nextRunAt=0;
+    p.status='queued';
+    p.error=null;
+    if(body.all)for(const r of [...p.resources,...p.shots])r.paused=false;
+    for (const shot of p.shots) {
+      if (shot.paused || shot.stale || shot.locked) continue;
+      for (const kind of ['frame', 'tail', 'video']) {
+        if (shot[kind] || !shot[kind + 'Error'] ||
+            p.pausedStages?.[kind === 'video' ? 'videos' : 'images']) continue;
+        const task = p.tasks.find(t => t.id === taskId(shot.id, kind, shot.revision || 1));
+        if (task?.status !== 'failed' || task.providerStatus !== 'failed' ||
+            task.providerId || task.submitting || shot[kind + 'Submitting'] ||
+            p.activeJobs?.some(job => job.id === task.id)) continue;
+        shot[kind + 'Error'] = null;
+        shot[kind + 'Retry'] = (shot[kind + 'Retry'] || 0) + 1;
+        task.status = 'waiting';
+        task.providerTimeoutRetries = 0;
+      }
+    }
+  }
   else if (type === 'retry-shot') {
     mutable();
     const {kind, revision} = body;

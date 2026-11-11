@@ -46,11 +46,22 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
   const pendingAssets=(p.resources||[]).filter(r=>r.output && r.assetReview?.version===r.revision && r.approvedVersion!==r.revision && !r.stale);
   function showPending(r){setStage(r.category);setSelected(r.id);setPanel('editor');requestAnimationFrame(()=>requestAnimationFrame(()=>document.getElementById('film-asset-'+r.id)?.scrollIntoView({behavior:'smooth',block:'center'})));}
   const events=(p.events||[]).filter(e=>details||!['dispatch','started'].includes(e.type));
-  return <div className="film-workbench"><header className="fw-control"><div><h2>{filmTaskName(p).replace(/^一键成片 · /, "")}</h2><p>{p.duration == null ? "时长自动" : `秒`} · {p.ratio} · {p.settings?.style||'电影写实'}{p.status!=='succeeded'&&` · ${phaseLabel}`}</p></div><div className="fw-control-actions"><span className={`fw-state ${p.status}`}>{labels[p.status]||p.status}</span>{p.status!=='succeeded'&&<b>{complete} / {stages.length} 阶段</b>}{!p.awaitingCharacters&&(p.schedulingPaused||['paused','cancelled','failed','needs-input','review'].includes(p.status)?<button className="film-primary" disabled={busy} onClick={()=>send('resume',{all:false})}>继续自动制作</button>:p.status!=='succeeded'&&<button disabled={busy} onClick={()=>send('pause')}>暂停新任务</button>)}{p.output&&<button className="film-primary" onClick={onDownload}>下载成片</button>}{!['output','media'].includes(stage)&&<button disabled={busy} onClick={()=>send('stage-pause',{stage,paused:!p.pausedStages?.[stage]})}>{p.pausedStages?.[stage]?'恢复当前阶段':'暂停当前阶段'}</button>}<button aria-expanded={settings} onClick={()=>setSettings(!settings)}>项目设置</button></div></header>
+  return <div className="film-workbench"><header className="fw-control"><div><h2>{filmTaskName(p).replace(/^一键成片 · /, "")}</h2><p>{p.duration == null ? "时长自动" : `${p.duration} 秒`} · {p.ratio} · {p.settings?.style||'电影写实'}{p.status!=='succeeded'&&` · ${phaseLabel}`}</p></div><div className="fw-control-actions"><span className={`fw-state ${p.status}`}>{labels[p.status]||p.status}</span>{p.status!=='succeeded'&&<b>{complete} / {stages.length} 阶段</b>}{!p.awaitingCharacters&&(p.schedulingPaused||['paused','cancelled','failed','needs-input','review'].includes(p.status)?<button className="film-primary" disabled={busy} onClick={()=>send('resume',{all:false})}>继续自动制作</button>:p.status!=='succeeded'&&<button disabled={busy} onClick={()=>send('pause')}>暂停新任务</button>)}{p.output&&<button className="film-primary" onClick={onDownload}>下载成片</button>}{!['output','media'].includes(stage)&&<button disabled={busy} onClick={()=>send('stage-pause',{stage,paused:!p.pausedStages?.[stage]})}>{p.pausedStages?.[stage]?'恢复当前阶段':'暂停当前阶段'}</button>}<button aria-expanded={settings} onClick={()=>setSettings(!settings)}>项目设置</button></div></header>
 
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
     {settings&&<ProjectSettings project={p} send={send}/>}
-    {(notice||p.error)&&<div className={p.error?'fw-warning':'fw-notice'} role="status">{pendingAssets.length?'设定图存在审核意见，可查看详情。':userError(p.error)||notice}{pendingAssets.map(r=><button key={r.id} onClick={()=>showPending(r)}>查看{r.name}</button>)}{p.error&&notice&&<p>{notice}</p>}</div>}
+    {p.error && <div className="fw-warning" role="alert">{userError(p.error)}</div>}
+    {notice && <div className="fw-notice" role="status">{notice}</div>}
+    {pendingAssets.length > 0 && (
+      <details className="fw-impact">
+        <summary>{pendingAssets.length} 张设定图有审核意见</summary>
+        {pendingAssets.map(resource => (
+          <button key={resource.id} type="button" onClick={() => showPending(resource)}>
+            查看{resource.name}
+          </button>
+        ))}
+      </details>
+    )}
     {p.reviewWarning>0&&!reviewDismissed&&<div className="fw-warning fw-review-warning" role="status">有 {p.reviewWarning} 项导演检查记录，制作无需人工确认。 <button type="button" className="fw-review-view" onClick={viewReview}>查看</button><button type="button" disabled={dismissBusy} onClick={dismissReview}>忽略</button></div>}
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     {p.lastImpact&&<details className="fw-impact"><summary>最近修改影响了 {p.lastImpact.shots.length} 个镜头</summary><p>{p.lastImpact.sourceId}：v{p.lastImpact.fromVersion} → v{p.lastImpact.toVersion}；相关镜头 {p.lastImpact.shots.join('、')||'无'}。未关联的素材保留。</p></details>}
