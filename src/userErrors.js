@@ -28,3 +28,11 @@ export function localizeErrors(value) {
       ? userError(item) : localizeErrors(item),
   ]))
 }
+
+// Review records can contain several model failures after a Chinese summary.
+export function reviewSummary(value) {
+  return String(value || '').replace(
+    /([a-zA-Z0-9][a-zA-Z0-9._/-]*[：:]\s*)([^；\n]+)/g,
+    (_match, model, failure) => model + userError(failure),
+  )
+}
