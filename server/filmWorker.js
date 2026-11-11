@@ -1,6 +1,6 @@
 import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
-import { filmConsistencyPrompt, filmScalePrompt } from './filmConsistency.js';
+import { filmConsistencyPrompt, filmScalePrompt, filmSceneStyle } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
@@ -697,9 +697,13 @@ async function reviewSetting(p, resource, references) {
   const lightingCheck = lightingPeriods?.length
     ? '。只审核这些时段：'+lightingPeriods.join('、')+'。画出未列出的时段视为可修正错误'
     : '';
+  const sceneStyle = resource.type === 'environment' && filmSceneStyle(p.settings?.style);
+  const styleCheck = sceneStyle
+    ? '。逐张检查主图和细节小图的实际渲染媒介，用可见的实体厚度、边缘倒角、遮挡及接触阴影判断。标题、标注写着“三维”、单有透视或昼夜光差均不能作为通过依据。任何一格明确呈二维插画时填 repair/high，并指出哪一格需要三维重渲染'
+    : '。核对实际画面是否符合指定的全片视觉风格';
   try {
     const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingChecks[resource.type] || '核对图像是否满足设定中的明确要求')+
-      '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+lightingCheck+'。必须核对全片风格，写实时卡通、插画、概念绘画属于明确错误。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
+      '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+lightingCheck+styleCheck+'。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
       '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。若能明确指出至少一处可见且可修复的错误（包括遗漏明确要求的视图或连接路径），返回 repair 和 high，并在 correction 写清要补什么，即使其他项目无法确认。只有没有明确错误但存在不确定时才返回 review。全部要求均确认符合才 pass。'}];
     for(const image of [output,...references]) {
       const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
@@ -794,7 +798,7 @@ async function referenceAssets(p, onlyResource) {
             : correction;
           await generate(p,r,'image',{
             model,
-            prompt:[repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
+            prompt:[landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
             images:[...(previous ? [previous] : []),...references].map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
