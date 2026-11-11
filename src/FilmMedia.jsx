@@ -9,9 +9,12 @@ export default function FilmMedia({ project, file, characterId, video = false, a
     if ((!file && !characterId) || !visible) return;
     setUrl("");
     setMediaError(false);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
     let live = true,
       src;
     fetch(base() + (characterId ? `/api/films/characters/${characterId}/image` : `/api/films/${project}/files/${file}`), {
+      signal: controller.signal,
       headers: { Authorization: `Bearer ${getAuthToken()}` },
     })
       .then((r) => {
@@ -23,17 +26,20 @@ export default function FilmMedia({ project, file, characterId, video = false, a
         if (live) setUrl(src);
         else URL.revokeObjectURL(src);
       })
-      .catch(() => { if (live) setMediaError(true); });
+      .catch(() => { if (live) setMediaError(true); })
+      .finally(() => clearTimeout(timeout));
     return () => {
       live = false;
+      clearTimeout(timeout);
+      controller.abort();
       if (src) URL.revokeObjectURL(src);
     };
   }, [project, file, characterId, retry, visible]);
   return <div className="film-media" ref={container}>{url ? (
-    audio ? <audio src={url} controls preload="metadata"/> : video ? (
-      <video src={url} controls preload="metadata" />
+    audio ? <audio onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata"/> : video ? (
+      <video onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata" />
     ) : (
-      <img src={url} alt="制作素材" />
+      <img onError={() => { setUrl(""); setMediaError(true); }} src={url} alt="制作素材" />
     )
   ) : (
     mediaError ? <button onClick={() => setRetry(v => v + 1)}>素材读取失败，点击重试</button> : <span>素材读取中…</span>

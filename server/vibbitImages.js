@@ -10,7 +10,7 @@ export async function vibbitApi(pathname, { signal, ...options } = {}) {
   const body = await response.json().catch(() => ({}))
   if (!response.ok || body.code !== 200) {
     const message = String(body.message || `Vibbit 返回 HTTP ${response.status}`).replaceAll(key, '[redacted]')
-    throw Object.assign(new Error(message), { status: response.status >= 400 ? response.status : 502 })
+    throw Object.assign(new Error(message), { status: response.status >= 400 ? response.status : 502, upstreamCode: body.code })
   }
   return body.data || {}
 }

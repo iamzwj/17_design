@@ -1,3 +1,4 @@
+import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
 import { submitSeedanceShot, pollSeedanceShot } from './vibbitVideos.js';
 import sharp from 'sharp';
@@ -114,6 +115,11 @@ async function generate(p,slot,key,body,file) {
           response = await api('/v1/api/generate', { ...t.requestBody, replyType: 'async' });
         }
       } catch (error) {
+        if (isFilmRateLimit(error)) {
+          t.submitting = false;
+          slot[key + 'Submitting'] = false;
+          throw Object.assign(Error('供应商请求频率受限，稍后自动重试'), { code: 'RATE_LIMIT' });
+        }
         throw Object.assign(Error('生成提交未确认：' + error.message), { code: 'INPUT' });
       }
       if(!response.id)throw Object.assign(Error('生成服务未返回任务编号，禁止重复扣费提交'),{code:'INPUT'});
@@ -135,7 +141,7 @@ async function generate(p,slot,key,body,file) {
         t.updatedAt = Date.now();
         save(p);
         if (queryFailures >= 5) {
-          throw Error('连续5次查询生成结果失败，已保留供应商任务编号，恢复后继续查询：' + error.message);
+          throw Object.assign(Error('结果查询暂时不可用，保留任务编号继续查询'), { code: 'PROVIDER_PENDING' });
         }
         await sleep(8000);
         continue;
@@ -167,8 +173,16 @@ async function generate(p,slot,key,body,file) {
       }
       await sleep(8000);
     }
-    throw Error('上游仍在制作，已保留任务编号，稍后继续查询不会重复提交');
+    throw Object.assign(Error('上游仍在制作，保留任务编号继续查询'), { code: 'PROVIDER_PENDING' });
   } catch(error) {
+    error.taskId = id;
+    if (error.code === 'PROVIDER_PENDING' || error.code === 'RATE_LIMIT') {
+      t.status = 'waiting';
+      t.error = null;
+      if ((slot.revision || 1) === version) slot[key + 'Error'] = null;
+      save(p);
+      throw error;
+    }
     finishTask(p,t,null,error);t.status=error.code==='INPUT'?'needs-input':'failed';
     if((slot.revision||1)===version)slot[key+'Error']=error.message;
     throw error;
@@ -773,17 +787,22 @@ async function generateShot(p, shot, kind, body, file) {
       if ((shot.revision || 1) !== version || error.code === 'INPUT' || error.code === 'PAUSED') throw error;
       const task = p.tasks.find(t => t.id === taskId(shot.id, kind, version));
       if (!task) throw error;
-      if (task.providerId && (task.automaticRetries || 0) < 2) {
-        task.automaticRetries = (task.automaticRetries || 0) + 1;
-        event(p, 'director', task.id, '保留任务编号，继续查询该镜头', {type:'recovery'});
+      if (task.providerId && (error.code === 'PROVIDER_PENDING' || (task.automaticRetries || 0) < 2)) {
+        if (error.code !== 'PROVIDER_PENDING') task.automaticRetries = (task.automaticRetries || 0) + 1;
+        event(p, 'director', task.id, '上游仍在处理，保留原任务编号继续查询', {type:'recovery'});
+      } else if (error.code === 'RATE_LIMIT' && (task.rateLimitRetries || 0) < 5) {
+        task.rateLimitRetries = (task.rateLimitRetries || 0) + 1;
+        event(p, 'director', task.id, '供应商限流，等待后重试该请求', {type:'recovery'});
       } else if (task.providerStatus === 'failed' && /server_timeout/i.test(error.message) && !task.providerTimeoutRetries) {
         task.providerTimeoutRetries = 1;
         event(p, 'director', task.id, '供应商确认超时，自动重试这个镜头一次', {type:'recovery'});
       } else {
+        if (error.code === 'RATE_LIMIT') finishTask(p, task, null, error);
         throw error;
       }
       save(p);
-      await sleep(1000);
+      await sleep(error.code === 'RATE_LIMIT' ? Math.min(120000, 10000 * 2 ** task.rateLimitRetries) : 30000);
+      check(p);
     }
   }
 }
@@ -858,8 +877,27 @@ async function recoverDetached(p) {
   }
 }
 async function recoverFailure(p,error) {
-  const t=[...p.tasks].reverse().find(t=>['failed','needs-input'].includes(t.status));
+  const t = error.taskId ? p.tasks.find(t => t.id === error.taskId) : [...p.tasks].reverse().find(t => ['failed', 'needs-input'].includes(t.status));
   if(!t || error.code==='INPUT' || error.code==='PAUSED' || p.schedulingPaused)return false;
+  if (error.code === 'PROVIDER_PENDING' && t.providerId) {
+    p.status = 'queued';
+    p.nextRunAt = Date.now() + 30000;
+    event(p, 'director', t.id, '上游仍在处理，保留原任务编号继续查询', {type:'recovery'});
+    save(p);
+    return true;
+  }
+  if (error.code === 'RATE_LIMIT') {
+    if ((t.rateLimitRetries || 0) >= 5) {
+      finishTask(p, t, null, error);
+      return false;
+    }
+    t.rateLimitRetries = (t.rateLimitRetries || 0) + 1;
+    p.status = 'queued';
+    p.nextRunAt = Date.now() + Math.min(120000, 10000 * 2 ** t.rateLimitRetries);
+    event(p, 'director', t.id, '供应商限流，等待后重试该请求', {type:'recovery'});
+    save(p);
+    return true;
+  }
   if(t.providerId && (t.automaticRetries||0)<2) {
     t.automaticRetries=(t.automaticRetries||0)+1;p.status='queued';p.nextRunAt=Date.now()+10000;
     event(p,'director',t.id,'保留原生成请求，稍后自动继续查询；不会再次提交计费任务',{type:'recovery'});save(p);return true;

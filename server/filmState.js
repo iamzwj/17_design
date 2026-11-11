@@ -1,3 +1,4 @@
+import { clearRejectedFilmSubmission } from './filmGenerationRecovery.js';
 import {legacyResourceCategory} from '../shared/filmPresentation.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -92,6 +93,7 @@ export function applyCommand(p,c) {
       throw Error('重试前请恢复已暂停的项目、阶段或镜头，并确认参考素材');
     }
     const task = p.tasks.find(t => t.id === taskId(target.id, kind, revision));
+    clearRejectedFilmSubmission(task, target, kind);
     if ((!task?.providerId && (task?.submitting || target[kind + 'Submitting'])) ||
         p.activeJobs?.some(job => job.id === task?.id)) {
       throw Error('任务正在运行或提交结果未知，暂时无法重试');
