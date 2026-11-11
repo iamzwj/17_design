@@ -49,7 +49,7 @@ function check(p, inflight=false) {
   if (fs.existsSync(path.join(root, p.id, "cancel"))) throw Error("制作已暂停；上游已提交任务可能继续计费");
   if(p.schedulingPaused && !inflight)throw Object.assign(Error('已暂停新任务调度，已提交的外部任务继续保存结果'),{code:'PAUSED'});
 }
-async function api(endpoint, body) {
+async function api(endpoint, body, timeout = 180000) {
   const r = await fetch(base + endpoint, {
     method: body ? "POST" : "GET",
     headers: {
@@ -57,7 +57,7 @@ async function api(endpoint, body) {
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(timeout),
   });
   const d = await r.json();
   if (!r.ok || (d.error && !d.id))
@@ -669,7 +669,7 @@ async function render(p) {
 const agents=createFilmAgents({api,save,check});
 const settingChecks = {
   face: '一张图有正面、45°、90°面部特写，三处五官、脸型、发际线和肤色属于同一人；有原始参考时核对身份',
-  wardrobe: '与参考面部图同一身份；全身正面、侧面、背面穿同一套服装，呈现鞋履、配饰和必要细节',
+  wardrobe: '与参考面部图同一身份，并严格比较视觉媒介与质感：真人照片面部搭配卡通、绘画、插画或游戏角色身体是明确风格错误，必须repair；同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
   environment: '同一空间的白天和夜晚主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节',
 };
 
@@ -698,14 +698,22 @@ async function reviewSetting(p, resource, references) {
       const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
       parts.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
     }
-    const response = await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts}],generationConfig:{temperature:0.1}});
-    const raw = (response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
+    let raw;
+    try {
+      const response = await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts}],generationConfig:{temperature:0.1}}, 30000);
+      raw = (response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
+    } catch (error) {
+      event(p, 'director', id, '视觉审核服务未响应，正在使用备用视觉模型', {type:'recovery'});
+      const content = parts.map(part => part.text ? {type:'text',text:part.text} : {type:'image_url',image_url:{url:'data:image/png;base64,'+part.inline_data.data}});
+      const response = await api('/v1/chat/completions',{model:'gpt-5.6-terra',response_format:{type:'json_object'},messages:[{role:'user',content}]}, 30000);
+      raw = response.choices?.[0]?.message?.content || '';
+    }
     review = JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
     if(!['pass','repair','review'].includes(review.status) || typeof review.summary!=='string' || !review.summary.trim())throw Error('审核返回缺少有效证据');
     if(review.confidence!=='high')review.status='review';
     finishTask(p,task,review);
   } catch(error) {
-    review = {status:'review',confidence:'low',summary:'自动审核未完成，请核对设定图。'+error.message};
+    review = {status:'review',confidence:'low',summary:'自动审核暂不可用，已记录并继续制作：'+error.message};
     finishTask(p,task,review,error);
   }
   check(p);
@@ -737,13 +745,13 @@ async function referenceAssets(p) {
         if(!r.output) {
           await generate(p,r,'image',{
             model:p.imageModel,
-            prompt:[references.length?'以参考图为准，保持明确要求保留的身份与特征。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
+            prompt:[references.length?'严格匹配参考图的视觉媒介和人物身份：真人参考必须是同一真人照片质感的全身服装，禁止变成卡通、插画、概念设计图或游戏角色。若参考图为动画则保持其动画风格。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
             images:references.map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
         if(!strict || !r.output || approvedSetting(r))return;
-        if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file)await reviewSetting(p,r,references);
+        if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file || /自动审核未完成/.test(r.assetReview.summary || ''))await reviewSetting(p,r,references);
         const review=r.assetReview;
         if(review?.version!==r.revision || review.status!=='repair' || typeof review.correction!=='string' ||
           !review.correction.trim() || r.locked || r.qualityRetryUsed)return;
@@ -877,7 +885,7 @@ async function recoverDetached(p) {
   }
 }
 async function recoverFailure(p,error) {
-  const t = error.taskId ? p.tasks.find(t => t.id === error.taskId) : [...p.tasks].reverse().find(t => ['failed', 'needs-input'].includes(t.status));
+  const t = p.tasks.find(task => task.id === error.taskId);
   if(!t || error.code==='INPUT' || error.code==='PAUSED' || p.schedulingPaused)return false;
   if (error.code === 'PROVIDER_PENDING' && t.providerId) {
     p.status = 'queued';
@@ -902,14 +910,14 @@ async function recoverFailure(p,error) {
     t.automaticRetries=(t.automaticRetries||0)+1;p.status='queued';p.nextRunAt=Date.now()+10000;
     event(p,'director',t.id,'保留原生成请求，稍后自动继续查询；不会再次提交计费任务',{type:'recovery'});save(p);return true;
   }
-  if (t.providerStatus === 'failed' && /server_timeout/i.test(error.message) && (t.providerTimeoutRetries || 0) < 1) {
+  if (t.providerStatus === 'failed' && /server_timeout|generate failed|generation failed/i.test(error.message) && (t.providerTimeoutRetries || 0) < 2) {
     t.providerTimeoutRetries = (t.providerTimeoutRetries || 0) + 1;
     t.submitting = false;
     const resource = [...p.resources, ...p.assets, ...p.shots].find(item => item.id === t.resourceId);
     if (resource) resource[t.kind + 'Submitting'] = false;
     p.status = 'queued';
     p.nextRunAt = Date.now() + 10000;
-    event(p, 'director', t.id, '供应商已确认超时失败，刷新参考图链接后自动重试一次', { type: 'recovery' });
+    event(p, 'director', t.id, '供应商已确认生成失败，刷新参考图链接后自动重试', { type: 'recovery' });
     save(p);
     return true;
   }
