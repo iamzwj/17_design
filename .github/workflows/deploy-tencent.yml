@@ -130,6 +130,8 @@ jobs:
             # Keep the served directory intact until the replacement is complete.
             rm -rf dist.next
             npm run build -- --outDir dist.next
+            # Retain previously published hashed files for clients holding older HTML.
+            if [ -d dist/assets ]; then cp -an dist/assets/. dist.next/assets/; fi
             test -s dist.next/index.html
             node --input-type=module -e "import fs from 'node:fs'; const html=fs.readFileSync('dist.next/index.html','utf8'); const assets=[...html.matchAll(/(?:src|href)=\"(\/assets\/[^\"]+)\"/g)].map(m=>'dist.next'+m[1]); if(!assets.length||assets.some(p=>!fs.statSync(p).size)) process.exit(1)"
             rm -rf dist.previous

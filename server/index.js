@@ -14,7 +14,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { inflateSync } from 'node:zlib'
+import { inflateSync, gzipSync } from 'node:zlib'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { promisify } from 'node:util'
@@ -2085,6 +2085,23 @@ installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async 
 
 const distDir = path.join(rootDir, 'dist')
 if (fs.existsSync(distDir)) {
+  const compressedAssets = new Map()
+  app.get(/^\/assets\/([\w.-]+\.(?:js|css))$/, (req, res, next) => {
+    res.vary('Accept-Encoding')
+    if (!req.acceptsEncodings('gzip')) return next()
+    const filename = req.params[0]
+    const file = path.join(distDir, 'assets', filename)
+    if (!fs.existsSync(file)) return res.sendStatus(404)
+    let compressed = compressedAssets.get(filename)
+    if (!compressed) {
+      compressed = gzipSync(fs.readFileSync(file))
+      compressedAssets.set(filename, compressed)
+    }
+    res.set('Content-Encoding', 'gzip')
+    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    return res.type(filename).send(compressed)
+  })
+  app.use('/assets', express.static(path.join(distDir, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }))
   app.use(express.static(distDir))
   app.use((_req, res) => res.sendFile(path.join(distDir, 'index.html')))
 }

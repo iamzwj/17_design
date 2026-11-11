@@ -9,11 +9,6 @@ import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import mammoth from 'mammoth'
-import * as XLSX from 'xlsx'
-import JSZip from 'jszip'
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
-import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
 import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
@@ -117,7 +112,6 @@ const MAX_COMPLIANCE_TEXT_LENGTH = 60_000
 const FAILURE_MESSAGE_TTL_MS = 5 * 60 * 1000
 const FAILED_TASK_STATUSES = new Set(['failed', 'timeout'])
 
-GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 function hasSupportedDrag(dataTransfer) {
   const types = Array.from(dataTransfer?.types || []).map((type) => type.toLowerCase())
@@ -232,10 +226,13 @@ async function extractComplianceText(file) {
   if (/\.doc$/i.test(name)) throw new Error('暂不支持旧版 .doc，请在 Word 中另存为 .docx 后上传')
   if (/\.ppt$/i.test(name)) throw new Error('暂不支持旧版 .ppt，请在 PowerPoint 中另存为 .pptx 后上传')
   if (/\.docx$/i.test(name)) {
+    const { default: mammoth } = await import('mammoth')
     const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
     return result.value.slice(0, MAX_COMPLIANCE_TEXT_LENGTH)
   }
   if (/\.pdf$/i.test(name)) {
+    const [{ getDocument, GlobalWorkerOptions }, { default: pdfWorkerUrl }] = await Promise.all([import('pdfjs-dist/legacy/build/pdf.mjs'), import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')])
+    GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     const pdf = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
     const pages = []
     for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 30); pageNumber += 1) {
@@ -247,10 +244,12 @@ async function extractComplianceText(file) {
     return pages.join('\n\n').slice(0, MAX_COMPLIANCE_TEXT_LENGTH)
   }
   if (/\.(xlsx|xls)$/i.test(name)) {
+    const XLSX = await import('xlsx')
     const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
     return workbook.SheetNames.slice(0, 12).map((sheetName) => `--- 工作表：${sheetName} ---\n${XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]).slice(0, 12_000)}`).join('\n\n').slice(0, MAX_COMPLIANCE_TEXT_LENGTH)
   }
   if (/\.pptx$/i.test(name)) {
+    const { default: JSZip } = await import('jszip')
     const archive = await JSZip.loadAsync(await file.arrayBuffer())
     const slides = Object.keys(archive.files).filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path)).sort((a, b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]))
     const text = await Promise.all(slides.slice(0, 30).map(async (path, index) => {
