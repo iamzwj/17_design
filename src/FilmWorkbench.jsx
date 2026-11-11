@@ -17,6 +17,32 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
   const timelinePanel = useRef(null);
   const timelineTrigger = useRef(null);
   useEffect(() => {
+    function placeTimeline() {
+      const trigger = timelineTrigger.current;
+      const sheet = timelinePanel.current;
+      if (!trigger || !sheet) return;
+      const rect = trigger.getBoundingClientRect();
+      const nav = trigger.closest('nav')?.getBoundingClientRect();
+      const left = Math.max(rect.right, nav?.right || 0) + 12;
+      const narrow = window.innerWidth - left < 240;
+      sheet.style.left = narrow ? '12px' : left + 'px';
+      sheet.style.right = '12px';
+      sheet.style.bottom = narrow ? Math.max(12, window.innerHeight - rect.top + 12) + 'px' : '12px';
+      sheet.style.maxHeight = Math.max(120, (narrow ? rect.top - 24 : window.innerHeight - 36)) + 'px';
+    }
+    placeTimeline();
+    window.addEventListener('resize', placeTimeline);
+    window.addEventListener('scroll', placeTimeline, true);
+    const observer = new ResizeObserver(placeTimeline);
+    if (timelineTrigger.current) observer.observe(timelineTrigger.current);
+    return () => {
+      window.removeEventListener('resize', placeTimeline);
+      window.removeEventListener('scroll', placeTimeline, true);
+      observer.disconnect();
+    };
+  }, [timelineOpen]);
+
+  useEffect(() => {
     if (!timelineOpen) return;
     function dismissOutside(event) {
       if (timelinePanel.current?.contains(event.target) || event.target.closest?.('[data-fw-timeline-trigger], .film-floating-menu')) return;

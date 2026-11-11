@@ -353,3 +353,33 @@
   overflow: auto;
   overscroll-behavior: contain;
 }
+
+/* Keep the timeline beside its trigger and size panels to available space. */
+.film-workbench .fw-timeline-sheet {
+  inset-inline: auto;
+  left: var(--timeline-left, 240px);
+  right: 12px;
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
+}
+.film-workbench .fw-inspector {
+  height: auto;
+  max-height: calc(100dvh - 120px);
+  min-height: 0;
+  align-self: start;
+}
+.film-workbench .fw-inspector-body { flex: 0 1 auto; }
+.film-workbench .fw-columns { align-items: start; }
+.film-workbench .fw-conversation { max-height: calc(100dvh - 120px); }
+.film-workbench .fw-feed { height: auto; max-height: calc(100dvh - 200px); min-height: 0; overflow: auto; }
+
+@media (min-width: 951px) {
+  .film-workbench .fw-columns { flex: 1 1 0; min-height: 0; align-items: stretch; padding-bottom: 16px; box-sizing: border-box; }
+  .film-workbench .fw-stage-nav { position: static; height: auto; min-height: 0; align-self: stretch; }
+  .film-workbench .fw-conversation { position: static; display: flex; flex-direction: column; height: 100%; max-height: none; min-height: 0; box-sizing: border-box; }
+  .film-workbench .fw-feed { flex: 1 1 0; height: auto; max-height: none; min-height: 0; }
+  .film-workbench .fw-inspector-scroll { height: 100%; min-height: 0; overflow: hidden; }
+  .film-workbench .fw-inspector { height: 100%; max-height: none; min-height: 0; box-sizing: border-box; align-self: stretch; border: 1px solid var(--fw-border); border-radius: 12px; overflow: hidden; }
+  .film-workbench .fw-inspector-body { flex: 1 1 0; min-height: 0; overflow: auto; }
+}
