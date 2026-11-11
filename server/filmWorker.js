@@ -1,5 +1,5 @@
 import { reviewFilmImages } from './filmImageReview.js';
-import { filmConsistencyPrompt } from './filmConsistency.js';
+import { filmConsistencyPrompt, filmScalePrompt } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
@@ -343,7 +343,7 @@ async function legacyFrame(p, s, i) {
     {
       model: p.imageModel,
       prompt:
-        "生成电影分镜首帧，保持参考人物服装和场景一致，不要文字。" + s.prompt,
+        "生成电影分镜首帧，保持参考人物服装和场景一致，不要文字。" + s.prompt + "。" + filmScalePrompt,
       images: p.assets
         .filter((a) => s.assetIds.includes(a.id))
         .map((a) =>
@@ -440,7 +440,7 @@ async function quality(p, onlyShot) {
         { timeout: 60000 },
       );
       const prompt =
-        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景和主体完整性错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
+        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性及明确的人车相对尺度错误（考虑景深与透视），不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
         shot.prompt;
       const d = await api("/v1beta/models/gemini-3.1-pro:generateContent", {
         contents: [
@@ -828,7 +828,7 @@ async function shotImage(p, shot, index, kind) {
   const nano = p.imageModel.startsWith('nano-');
   const aspectRatio = nano ? p.ratio : p.ratio === '16:9' ? '1536x1024' : '1024x1536';
   if (kind === 'tail') {
-    return generateShot(p, shot, kind, {model:p.imageModel, prompt:shot.tailFramePrompt, images:[referenceImage(p,shot.frame)], aspectRatio}, `frame-tail-${shot.id}-v${shot.revision}.png`);
+    return generateShot(p, shot, kind, {model:p.imageModel, prompt:shot.tailFramePrompt + "。" + filmScalePrompt, images:[referenceImage(p,shot.frame)], aspectRatio}, `frame-tail-${shot.id}-v${shot.revision}.png`);
   }
   shot.referenceVersions = refs.map(r => ({id:r.id, version:r.revision, file:r.output.file}));
   return generateShot(p, shot, kind, {
