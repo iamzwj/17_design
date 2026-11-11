@@ -1,4 +1,5 @@
 import { applyFilmLocations, validateFilmLocations } from './filmLocations.js';
+import { normalizeFilmDialogue } from '../shared/filmWorkflow.js';
 import { createHash } from 'node:crypto';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { beginTask, finishTask, event, taskId, applyCommand } from './filmState.js';
@@ -67,6 +68,7 @@ export function normalizeShots(raw,p) {
     s.time=normalizeFilmTime(s.time);
     s.sceneNumber=String(s.sceneNumber ?? s.sceneId ?? '');
     for(const key of ['dialogue','ambience','continuity','emotion']){if(s[key]==null)s[key]='';else if(Array.isArray(s[key])&&s[key].every(v=>typeof v==='string'))s[key]=s[key].join('；');}
+    s.dialogue=normalizeFilmDialogue(s.dialogue);
     if(!validId(s.id)||ids.has(s.id)||!Number.isFinite(s.duration)||s.duration<1||s.duration>10||!timePrefix(s.time)||!p.scenes.some(c=>c.id===s.sceneId)||!Array.isArray(s.characterIds)||s.characterIds.some(id=>!p.characters.some(c=>c.id===id)))throw Error('分镜字段、时间、引用或15秒时长上限校验失败');
     if(['sceneNumber','shotSize','angle','composition','action','emotion','light','camera','ambience','continuity','firstFramePrompt','videoPrompt','dialogue'].some(key=>typeof s[key]!=='string'))throw Error('分镜必填字段未完整返回：'+['sceneNumber','shotSize','angle','composition','action','emotion','light','camera','ambience','continuity','firstFramePrompt','videoPrompt','dialogue'].filter(key=>typeof s[key]!=='string').join('、'));
     ids.add(s.id);
@@ -176,7 +178,7 @@ export function createFilmAgents({api,save,check}) {
       plan => validateFilmLocations(plan, p.scenes),
       plan => applyFilmLocations(p, plan));
   };
-  const storyboard=async p=>{if(p.storyboardReady||!p.characters||!p.scenes)return;await run(p,'storyboard','storyboard','storyboard','自动分镜。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。原稿第一人称叙述作为画外旁白写入videoPrompt的声音要求；dialogue只放明确出声的人物对白，并说明谁对谁说。所有镜头沿用script.narrator身份和声线，在videoPrompt中逐镜明确旁白性别、年龄、音色及画外音方式。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。',{script:p.script,characters:p.characters,scenes:p.scenes,duration:p.duration,ratio:p.ratio,style:p.settings.style,resourceVersions:p.resources.filter(r=>r.output&&!r.stale).map(r=>({id:r.id,version:r.approvedVersion||r.revision}))},r=>normalizeShots(r.shots,p),r=>{p.shots=normalizeShots(r.shots,p);if(p.autoDuration)p.duration=p.shots.reduce((sum,shot)=>sum+shot.duration,0);p.storyboardReady=true;p.plan={title:p.title,summary:p.script.summary};});};
+  const storyboard=async p=>{if(p.storyboardReady||!p.characters||!p.scenes)return;await run(p,'storyboard','storyboard','storyboard','自动分镜。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。原稿第一人称叙述作为画外旁白写入videoPrompt的声音要求；dialogue只放明确出声的人物对白，并说明谁对谁说；无对白时返回空字符串。所有镜头沿用script.narrator身份和声线，在videoPrompt中逐镜明确旁白性别、年龄、音色及画外音方式。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。',{script:p.script,characters:p.characters,scenes:p.scenes,duration:p.duration,ratio:p.ratio,style:p.settings.style,resourceVersions:p.resources.filter(r=>r.output&&!r.stale).map(r=>({id:r.id,version:r.approvedVersion||r.revision}))},r=>normalizeShots(r.shots,p),r=>{p.shots=normalizeShots(r.shots,p);if(p.autoDuration)p.duration=p.shots.reduce((sum,shot)=>sum+shot.duration,0);p.storyboardReady=true;p.plan={title:p.title,summary:p.script.summary};});};
   const revise=async p=>{
     if(!p.revisionRequest)return;const request=p.revisionRequest;const id=taskId('revision-'+request.at,'director');
     const t=beginTask(p,id,'storyboard','director',{name:'分析局部修改影响',text:request.text});save(p);

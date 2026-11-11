@@ -1,4 +1,5 @@
 import { clearRejectedFilmSubmission } from './filmGenerationRecovery.js';
+import { normalizeFilmDialogue } from '../shared/filmWorkflow.js';
 import {legacyResourceCategory} from '../shared/filmPresentation.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +14,7 @@ export function migrateFilm(p) {
   p.settings ||= { style:'电影写实', transition:'cut', sourceVolume:1, subtitles:true };
   p.timeline ||= { clips:[], tracks:[], captions:[] };
   for (const a of p.assets || []) { a.revision ||= 1; a.history ||= []; a.kind ||= /场景|环境/.test(a.name) ? 'scene' : 'legacy'; }
-  for (const s of p.shots || []) { s.revision ||= 1; s.history ||= []; if(!s.time){const match=/^(?:时间[：:]\s*)?([^；。;\n]{1,25})[；。;]/.exec(s.prompt||'');if(match&&/(白天|夜晚|早晨|清晨|上午|中午|下午|黄昏|傍晚|深夜|凌晨|[0-9]+点)/.test(match[1]))s.time=match[1].trim();} }
+  for (const s of p.shots || []) { if(typeof s.dialogue==='string')s.dialogue=normalizeFilmDialogue(s.dialogue); s.revision ||= 1; s.history ||= []; if(!s.time){const match=/^(?:时间[：:]\s*)?([^；。;\n]{1,25})[；。;]/.exec(s.prompt||'');if(match&&/(白天|夜晚|早晨|清晨|上午|中午|下午|黄昏|傍晚|深夜|凌晨|[0-9]+点)/.test(match[1]))s.time=match[1].trim();} }
   if (p.schemaVersion < 2 && p.plan) {
     p.legacy = true; // Keep already paid/generated projects on their original path.
     for(const a of p.assets) if(!p.resources.some(r=>r.id===a.id)) p.resources.push({ ...clone(a), sourceId:a.id, category:a.kind==='scene'?'scenes':'characters', type:'reference', output:a.image, agent:'visual' });

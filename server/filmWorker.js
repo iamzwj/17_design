@@ -1,3 +1,4 @@
+import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
 import { filmConsistencyPrompt, filmScalePrompt } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
@@ -918,7 +919,7 @@ async function directorReview(p) {
   const issues=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
   const unresolvedSettings=(p.resources||[]).filter(r=>r.output&&!r.stale&&r.assetReview&&r.assetReview.status!=='pass');
   const assetIssues=p.referenceWorkflow?[]:unresolvedSettings.filter(r=>!settingChecks[r.type]);
-  p.reviewWarning=issues.length+unresolvedSettings.length+Number(p.continuityReview?.status==='manual');
+  p.reviewWarning=issues.length+unresolvedSettings.length+filmLocationReviewTargets(p).length+Number(p.continuityReview?.status==='manual');
   if(!issues.length&&!assetIssues.length)return;
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {

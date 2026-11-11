@@ -11,3 +11,8 @@ export function replaceFilmPromptTime(prompt,time) {
   const text=String(prompt||'');const match=/^(?:时间[：:]\s*)?([^；。;\n]{1,30})([；。;])/.exec(text);
   return match&&/^(白天|夜晚|早晨|早上|清晨|上午|中午|下午|傍晚|黄昏|深夜|晚上|凌晨|午夜|\d)/.test(match[1])?String(time)+match[2]+text.slice(match[0].length):String(time)+'；'+text;
 }
+
+
+export function normalizeFilmDialogue(value) {
+  return typeof value === 'string' && /^(?:无|无对白|无台词|none|no dialogue)[。.!！\s]*$/i.test(value.trim()) ? '' : value;
+}
