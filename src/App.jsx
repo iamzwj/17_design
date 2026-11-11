@@ -8,12 +8,10 @@ import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
-import QrBatchStudio from './QrBatchStudio.jsx'
-import MoreTools from './MoreTools.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
@@ -112,6 +110,9 @@ const MAX_COMPLIANCE_TEXT_LENGTH = 60_000
 const FAILURE_MESSAGE_TTL_MS = 5 * 60 * 1000
 const FAILED_TASK_STATUSES = new Set(['failed', 'timeout'])
 
+
+const QrBatchStudio = lazy(() => import('./QrBatchStudio.jsx'))
+const MoreTools = lazy(() => import('./MoreTools.jsx'))
 
 function hasSupportedDrag(dataTransfer) {
   const types = Array.from(dataTransfer?.types || []).map((type) => type.toLowerCase())
@@ -2023,8 +2024,8 @@ export default function App() {
     clearAuthToken(); setUser(null); setConversations([]); setAuthState('guest')
   }
 
-  if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><QrBatchStudio/></main></div>
+  if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Suspense fallback={<p role="status">正在加载工具…</p>}><QrBatchStudio/></Suspense></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}{content}</main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}<Suspense fallback={<p role="status">正在加载工具…</p>}>{content}</Suspense></main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
