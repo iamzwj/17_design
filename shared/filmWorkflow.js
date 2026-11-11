@@ -2,7 +2,7 @@ export const FILM_AGENT_NAMES={director:'AI 总导演',writer:'编剧 Agent',cha
 export const WORKFLOW_STAGES=[['script','剧本'],['characters','角色'],['scenes','场景'],['storyboard','分镜'],['images','图片'],['videos','视频'],['audio','音频'],['editing','剪辑'],['output','成片']];
 export function workflowStages(p) {
   const resources=p.resources||[],shots=p.shots||[];
-  const ready = r => r.output && (!p.referenceWorkflow || (!r.stale && r.approvedVersion===r.revision));
+  const ready = r => r.output && !r.stale;
   const counts={script:[p.script||p.plan?1:0,1],characters:[resources.filter(r=>r.category==='characters'&&r.type!=='reference-original'&&ready(r)).length,resources.filter(r=>r.category==='characters'&&r.type!=='reference-original').length],scenes:[resources.filter(r=>r.category==='scenes'&&ready(r)).length,resources.filter(r=>r.category==='scenes').length],storyboard:[shots.length,shots.length],images:[shots.filter(s=>s.frame&&!s.stale).length,shots.length],videos:[shots.filter(s=>s.video&&!s.stale).length,shots.length],audio:[shots.filter(s=>s.audio&&s.audio.source===s.video?.file).length,shots.length],editing:[p.output?1:0,1],output:[p.output?1:0,1]};
   const active=({plan:'script',assets:'images',frames:'images',quality:'videos',render:'editing',done:'output'})[p.stage]||p.stage;
   return WORKFLOW_STAGES.map(([id,label])=>({id,label,done:counts[id][0],total:counts[id][1],complete:counts[id][1]>0&&counts[id][0]===counts[id][1],active:active===id || (p.stage==='assets' && ['characters','scenes'].includes(id) && counts[id][0]<counts[id][1])}));
