@@ -341,14 +341,15 @@ function mergeFilmHistory(conversations, projects) {
     const existing = records.get(id)
     if (existing?.deleted) continue
     const title = project.named ? project.title : '一键成片 · 导演命名中'
-    if (existing?.filmTitle === title && Boolean(existing.archived) === Boolean(project.archived)) continue
+    const archived = Boolean(project.archived ?? existing?.archived)
+    if (existing?.filmTitle === title && Boolean(existing.archived) === archived) continue
     const createdAt = new Date(project.createdAt).toISOString()
     records.set(id, {
       id, type: 'film', projectId: project.id, messages: [], createdAt, updatedAt: createdAt,
       ...existing,
       title: existing && existing.title !== existing.filmTitle ? existing.title : title,
       filmTitle: title,
-      archived: Boolean(project.archived),
+      archived,
     })
     changed = true
   }
@@ -1726,10 +1727,14 @@ export default function App() {
   const activeWorkspace = useRef(workspaceToken)
   activeWorkspace.current = workspaceToken
   const [archiveViewOpen, setArchiveViewOpen] = useState(false)
-  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) || null
-  const activeConversations = conversations.filter((conversation) => !conversation.archived && !conversation.deleted)
-  const archivedConversations = conversations.filter((conversation) => conversation.archived && !conversation.deleted)
+  const pendingArchives = useRef(new Map())
+  const archiveRevision = useRef(0)
+  const accountScope = useRef(user?.id)
+  accountScope.current = user?.id
   const conversationStorageKey = user ? `${STORAGE_KEY}:${user.email}` : STORAGE_KEY
+  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) || null
+  const activeConversations = conversations.filter((conversation) => !conversation.archived && !conversation.deleted && pendingArchives.current.get(conversation.id) !== conversationStorageKey)
+  const archivedConversations = conversations.filter((conversation) => conversation.archived && !conversation.deleted)
 
   useEffect(() => {
     if (authState !== 'checking') return
@@ -1771,17 +1776,27 @@ export default function App() {
   useEffect(() => {
     if (!user || authState !== 'authenticated') return
     let live = true
-    const sync = () => filmRequest('/history').then(({ projects }) => {
-      for (const project of projects.filter((item) => item.archived)) clearFilmCache(user.id, project.id)
-      if (live) updateConversations((current) => mergeFilmHistory(current, projects))
-    }).catch(() => {})
-    const syncArchives = () => filmRequest('/archive-records').then(({ records }) => {
-      if (!live) return
-      updateConversations(current => {
-        const remoteIds = new Set(records.map(record => record.id))
-        return [...current.filter(item => !remoteIds.has(item.id) && !item.serverArchived), ...records.map(record => ({ ...record, serverArchived: Boolean(record.archived) }))]
-      })
-    }).catch(() => {})
+    const pending = id => pendingArchives.current.get(id) === conversationStorageKey
+    const sync = () => {
+      const revision = archiveRevision.current
+      return filmRequest('/history').then(({ projects }) => {
+        if (!live || revision !== archiveRevision.current) return
+        const confirmed = projects.filter(project => !pending(`film:${project.id}`))
+        for (const project of confirmed.filter(item => item.archived)) clearFilmCache(user.id, project.id)
+        updateConversations(current => mergeFilmHistory(current, confirmed))
+      }).catch(() => {})
+    }
+    const syncArchives = () => {
+      const revision = archiveRevision.current
+      return filmRequest('/archive-records').then(({ records }) => {
+        if (!live || revision !== archiveRevision.current) return
+        updateConversations(current => {
+          const confirmed = records.filter(record => !pending(record.id))
+          const remoteIds = new Set(confirmed.map(record => record.id))
+          return [...current.filter(item => pending(item.id) || (!remoteIds.has(item.id) && !item.serverArchived)), ...confirmed.map(record => ({ ...record, serverArchived: Boolean(record.archived) }))]
+        })
+      }).catch(() => {})
+    }
     sync()
     syncArchives()
     const timer = setInterval(() => { sync(); syncArchives() }, 15000)
@@ -1909,17 +1924,38 @@ export default function App() {
   }
 
   async function archiveConversation(id) {
-    const item = conversations.find((conversation) => conversation.id === id)
-    if (item?.type === 'film' && item.projectId) {
-      try { await filmRequest(`/${encodeURIComponent(item.projectId)}/archive`, { archived: true }) }
-      catch (error) { window.alert(`归档失败：${error.message}`); return }
-      clearFilmCache(user.id, item.projectId)
-    } else if (item && user) {
-      try { await filmRequest('/archive-records', { id, record: item }) }
-      catch (error) { window.alert(`归档失败：${error.message}`); return }
-    }
-    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: true, serverArchived: Boolean(user && item?.type !== 'film'), pinned: false, pinnedAt: null } : conversation))
+    const item = conversations.find(conversation => conversation.id === id)
+    if (!item || item.archived || pendingArchives.current.get(id) === conversationStorageKey) return
+    pendingArchives.current.set(id, conversationStorageKey)
+    archiveRevision.current++
+    updateConversations(current => current.map(conversation => conversation.id === id
+      ? { ...conversation, archived: true, pinned: false, pinnedAt: null }
+      : conversation))
     if (activeConversationId === id) startNew()
+
+    try {
+      const signal = AbortSignal.timeout(20000)
+      if (item.type === 'film' && item.projectId) {
+        await filmRequest(`/${encodeURIComponent(item.projectId)}/archive`, { archived: true }, { signal })
+        clearFilmCache(user.id, item.projectId)
+      } else if (user) {
+        await filmRequest('/archive-records', { id, record: item }, { signal })
+      }
+      if (accountScope.current === user?.id) {
+        updateConversations(current => current.map(conversation => conversation.id === id
+          ? { ...conversation, serverArchived: Boolean(user && item.type !== 'film') }
+          : conversation))
+      }
+    } catch (error) {
+      if (accountScope.current !== user?.id) return
+      updateConversations(current => current.map(conversation => conversation.id === id
+        ? { ...conversation, archived: item.archived, pinned: item.pinned, pinnedAt: item.pinnedAt }
+        : conversation))
+      window.alert(`归档失败：${error.message}`)
+    } finally {
+      if (pendingArchives.current.get(id) === conversationStorageKey) pendingArchives.current.delete(id)
+      archiveRevision.current++
+    }
   }
 
   async function restoreConversation(id) {

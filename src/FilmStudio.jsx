@@ -16,9 +16,10 @@ const base = () =>
       import.meta.env.VITE_API_BASE_URL ||
       "",
   ).replace(/\/$/, "");
-export async function filmRequest(path = "", body) {
+export async function filmRequest(path = "", body, { signal } = {}) {
   const r = await fetch(base() + "/api/films" + path, {
     method: body ? "POST" : "GET",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getAuthToken()}`,
