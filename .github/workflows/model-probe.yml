@@ -52,4 +52,13 @@ jobs:
               }
             }
           }
+          for (const model of models) {
+            const start=performance.now();
+            try {
+              const response=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,stream:false,messages:[{role:'user',content:'请只回复：模型连接测试成功。'}]}),signal:AbortSignal.timeout(45000)});
+              const data=await response.json();
+              const message=String(data.choices?.[0]?.message?.content || data.error?.message || data.error || '').replaceAll(process.env.GRSAI_API_KEY,'[redacted]').slice(0,180);
+              console.log(JSON.stringify({mode:'json',model,status:response.status,seconds:+((performance.now()-start)/1000).toFixed(2),message}));
+            }catch(error){console.log(JSON.stringify({mode:'json',model,error:error.name}));}
+          }
           JS
