@@ -29,6 +29,12 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     setTimelineOpen(false);
     timelineTrigger.current?.focus();
   }
+  const hasStarted = (stage) => stage.done > 0 ||
+    (stage.active && ['running', 'pausing'].includes(p.status)) ||
+    (stage.id === 'storyboard' && p.shots.some(shot => shot.frame || shot.video || shot.frameTask || shot.frameError || shot.videoTask || shot.videoError)) ||
+    (p.tasks || []).some(task => task.startedAt && (task.stage === stage.id ||
+      (stage.id === 'storyboard' && ['images','frames','videos','quality'].includes(task.stage)) ||
+      (stage.id === 'editing' && task.stage === 'render')));
   const feed=useRef(null),submitting=useRef(false);const stages=workflowStages(p).filter(s=>!['images','videos','audio'].includes(s.id)).map(s=>s.id==='storyboard'?{...s,done:p.shots.filter(shot=>shot.frame&&shot.video).length,total:p.shots.length,complete:p.shots.length>0&&p.shots.every(shot=>shot.frame&&shot.video),active:['storyboard','images','frames','videos','quality','audio'].includes(p.stage)}:s),complete=stages.filter(s=>s.complete).length;const phaseLabel=({plan:'导演规划',script:'剧本编写',characters:'角色设定',scenes:'场景设定',storyboard:'分镜规划',assets:'角色与场景制作',frames:'分镜图片生成',images:'图片生成',videos:'视频生成',quality:'镜头审核',audio:'声音处理',editing:'成片剪辑',render:'成片合成',done:'已完成'})[p.stage]||'等待调度';const mediaCount=filmMediaIndex(p).length;
   useEffect(()=>{localStorage.setItem(key+':stage',stage);localStorage.setItem(key+':selected',selected);localStorage.setItem(key+':panel',panel);},[key,stage,selected,panel]);
   useEffect(()=>{if(feed.current&&recordMode==='activity')feed.current.scrollTop=feed.current.scrollHeight;},[p.events?.length,recordMode]);
@@ -45,7 +51,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     {p.lastImpact&&<details className="fw-impact"><summary>最近修改影响了 {p.lastImpact.shots.length} 个镜头</summary><p>{p.lastImpact.sourceId}：v{p.lastImpact.fromVersion} → v{p.lastImpact.toVersion}；相关镜头 {p.lastImpact.shots.join('、')||'无'}。未关联的素材保留。</p></details>}
     <div className="fw-mobile-tabs"><button className={panel==='conversation'?'active':''} onClick={()=>setPanel('conversation')}>制作记录</button><button className={panel==='editor'?'active':''} onClick={()=>setPanel('editor')}>成果与编辑</button></div>
-    <div className={`fw-columns show-${panel}`}><nav className="fw-stage-nav" aria-label="制作流程">{stages.map((s,i)=><button key={s.id} className={stage===s.id?'active':''} onClick={()=>chooseStage(s.id)} aria-current={stage===s.id?'step':undefined}><span className="fw-step-marker" aria-hidden="true">{s.complete?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4 10-10"/></svg>:i+1}</span><b>{s.label}</b><small className={s.id === 'storyboard' ? 'fw-storyboard-counts' : undefined}>{s.id === 'storyboard' ? <>
+    <div className={`fw-columns show-${panel}`}><nav className="fw-stage-nav" aria-label="制作流程">{stages.map((s,i)=><button key={s.id} className={stage===s.id?'active':''} onClick={()=>chooseStage(s.id)} aria-current={stage===s.id?'step':undefined}><span className="fw-step-marker" aria-hidden="true">{s.complete?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4 10-10"/></svg>:i+1}</span><b>{s.label}</b><small className={s.id === 'storyboard' && hasStarted(s) ? 'fw-storyboard-counts' : undefined}>{p.pausedStages?.[s.id] ? '已暂停' : !hasStarted(s) ? '等待' : s.id === 'storyboard' ? <>
           <span>{p.shots.filter(shot => shot.frame).length}/{p.shots.length}</span><span>图片</span>
           <span>{p.shots.filter(shot => shot.video).length}/{p.shots.length}</span><span>视频</span>
         </> : p.pausedStages?.[s.id]?'已暂停':s.complete?'已完成':s.total?`${s.done}/${s.total}`:s.active?'进行中':'等待'}</small></button>)}<div className="fw-stage-library"><button type="button" className={stage==='media'?'active':''} onClick={()=>chooseStage('media')}>
