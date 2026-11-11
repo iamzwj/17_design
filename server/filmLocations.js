@@ -13,9 +13,14 @@ export function validateFilmLocations(plan, scenes) {
       if (!sceneIds.has(id) || covered.has(id)) throw Error('场景归属重复或不存在');
       covered.add(id);
     }
+    if (location.connections != null && !Array.isArray(location.connections)) throw Error('场景连接路径无效');
     for (const connection of location.connections || []) {
-      if (!location.sceneIds.includes(connection.from) || !location.sceneIds.includes(connection.to) ||
-          typeof connection.description !== 'string') throw Error('场景连接路径无效');
+      const endpoints = [connection?.from, connection?.to];
+      if (endpoints.some(value => typeof value !== 'string' || !value.trim() ||
+          (sceneIds.has(value) && !location.sceneIds.includes(value))) ||
+          typeof connection.description !== 'string' || !connection.description.trim()) {
+        throw Error('场景连接路径无效');
+      }
     }
   }
   if (covered.size !== sceneIds.size) throw Error('地点设定遗漏场景');
@@ -23,12 +28,20 @@ export function validateFilmLocations(plan, scenes) {
 
 export function applyFilmLocations(project, plan) {
   validateFilmLocations(plan, project.scenes);
-  project.locations = plan.locations;
+  project.locations = plan.locations.map(location => {
+    const connections = [];
+    const routeNotes = [];
+    for (const route of location.connections || []) {
+      if (location.sceneIds.includes(route.from) && location.sceneIds.includes(route.to)) connections.push(route);
+      else routeNotes.push(route);
+    }
+    return { ...location, connections, routeNotes };
+  });
   project.locationPlanVersion = 1;
   project.locationSceneIds = project.scenes.map(scene => scene.id).sort().join(',');
-  for (const location of plan.locations) {
+  for (const location of project.locations) {
     const masterId = location.masterSceneId + '-environment';
-    const constraint = `共享地点 ${location.name || location.id}。固定空间：${location.layout}。固定建筑及地标：${location.anchors.join('；')}。区域连接：${JSON.stringify(location.connections || [])}。仅改变当前区域机位和剧本要求的时段光照，禁止重新设计共同建筑、门岗、外墙和道路。`;
+    const constraint = `共享地点 ${location.name || location.id}。固定空间：${location.layout}。固定建筑及地标：${location.anchors.join('；')}。区域连接：${JSON.stringify(location.connections)}。${location.routeNotes.length ? '区域内动线：'+JSON.stringify(location.routeNotes)+'。' : ''}仅改变当前区域机位和剧本要求的时段光照，禁止重新设计共同建筑、门岗、外墙和道路。`;
     for (const sceneId of location.sceneIds) {
       const scene = project.scenes.find(item => item.id === sceneId);
       scene.locationId = location.id;
@@ -42,7 +55,7 @@ export function applyFilmLocations(project, plan) {
     }
   }
   for (const shot of project.shots || []) {
-    const location = plan.locations.find(item => item.sceneIds.includes(shot.sceneId));
+    const location = project.locations.find(item => item.sceneIds.includes(shot.sceneId));
     if (!location) continue;
     shot.locationId = location.id;
     const masterId = location.masterSceneId + '-environment';

@@ -103,10 +103,13 @@ export function createFilmAgents({api,save,check}) {
     const version=p.scriptRevision||1,id=taskId(key,agent,version);
     let existing=p.tasks.find(t=>t.id===id);
     if(existing?.status==='succeeded') {commit(existing.output);return;}
-    if(key==='script' && existing?.status==='failed' && existing.lastStructuredOutput) {
+    if((key==='script' || agent==='location') && existing?.status==='failed' && existing.lastStructuredOutput) {
       let recovered;
       try {
-        recovered = normalizeFilmScript(existing.lastStructuredOutput);
+        if (agent === 'location') {
+          validate(existing.lastStructuredOutput);
+          recovered = existing.lastStructuredOutput;
+        } else recovered = normalizeFilmScript(existing.lastStructuredOutput);
       } catch {
         // Invalid content still goes through the configured model fallback.
       }
@@ -114,7 +117,7 @@ export function createFilmAgents({api,save,check}) {
         check(p);
         finishTask(p,existing,recovered);
         commit(recovered);
-        event(p,'writer',id,'已恢复保存的剧本并统一时间格式',{type:'recovery'});
+        event(p,agent,id,agent==='location'?'已恢复保存的场景规划并保留区域内动线':'已恢复保存的剧本并统一时间格式',{type:'recovery'});
         save(p);
         return;
       }
@@ -173,7 +176,7 @@ export function createFilmAgents({api,save,check}) {
     await extractScenes(p);
     if (!p.scenes?.length || (p.locationPlanVersion === 1 && p.locationSceneIds === p.scenes.map(scene => scene.id).sort().join(','))) return;
     await run(p, 'location-layout-v1-' + createHash('sha256').update(JSON.stringify(p.scenes)).digest('hex').slice(0,12), 'location', 'scenes',
-      '把所有场景组织成真实地点与子区域。一个小区的大门、内部通道、楼栋入口、电梯厅属于同一地点的不同区域，必须共享建筑材料、门岗、道路和连接路线。不同地址才分地点。返回{locations:[{id,name,sceneIds:[全部所属场景ID],masterSceneId,layout,anchors:[固定建筑外观和空间地标],connections:[{from,to,description}]}]}。每个场景恰好属于一个地点，主场景选择最能体现建筑与路线的现有场景，不修改原稿地理关系。',
+      '把所有场景组织成真实地点与子区域。一个小区的大门、内部通道、楼栋入口、电梯厅属于同一地点的不同区域，必须共享建筑材料、门岗、道路和连接路线。不同地址才分地点。返回{locations:[{id,name,sceneIds:[全部所属场景ID],masterSceneId,layout,anchors:[固定建筑外观和空间地标],connections:[{from,to,description}]}]}。connections 的 from/to 优先填写该地点 sceneIds 中的场景 ID；场景内部的门岗、楼梯、电梯或门口等具体节点可以用文字说明。每个场景恰好属于一个地点，主场景选择最能体现建筑与路线的现有场景，不修改原稿地理关系。',
       { scenes: p.scenes, script: p.script },
       plan => validateFilmLocations(plan, p.scenes),
       plan => applyFilmLocations(p, plan));

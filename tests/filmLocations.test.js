@@ -21,3 +21,22 @@ test('trimming and reordering move manual captions and attached audio with retai
  assert.equal(split.captions.filter(c=>c.text==='甲').reduce((sum,c)=>sum+c.end-c.start,0),3);
  assert.equal(filmClipDuration({duration:5,video:{file:'v'},audio:{source:'v',duration:5.2}}),5.2);
 });
+
+test('recovers a saved location plan with named landmarks without calling another model', async () => {
+  const {createFilmAgents}=await import('../server/filmAgents.js');
+  const {createHash}=await import('node:crypto');
+  const scenes=['S1','S2','S3'].map(id=>({id}));
+  const key='location-layout-v1-'+createHash('sha256').update(JSON.stringify(scenes)).digest('hex').slice(0,12);
+  const route={from:'金属电梯门及轿厢',to:'楼上家门外的楼道口',description:'电梯上行后连接公共楼道'};
+  const candidate={locations:[{id:'L1',sceneIds:['S1','S2','S3'],masterSceneId:'S2',layout:'小区入口到家门',anchors:['电梯'],connections:[route]}]};
+  const p={scenes,resources:scenes.map(({id})=>({id:id+'-environment',type:'environment'})),shots:[],events:[],tasks:[{
+    id:key+':location:v1',agent:'location',input:{name:key},status:'failed',lastStructuredOutput:candidate,
+  }]};
+  const agents=createFilmAgents({api(){assert.fail('Saved valid plan should be reused');},save(){},check(){}});
+  await agents.scenes(p);
+  assert.equal(p.tasks[0].status,'succeeded');
+  assert.deepEqual(p.locations[0].connections,[]);
+  assert.deepEqual(p.locations[0].routeNotes,[route]);
+  assert.deepEqual(p.resources[0].dependencies,['S2-environment']);
+  assert.match(p.resources[0].locationConstraint,/金属电梯门及轿厢/);
+});
