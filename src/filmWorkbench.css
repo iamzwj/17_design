@@ -57,8 +57,25 @@
 .fw-clip-time { font-variant-numeric: tabular-nums; }
 .fw-clip-shot { text-align: left; overflow-wrap: anywhere; }
 
-.film-studio .fw-stage-library > .fw-timeline-toggle { grid-template-columns: 12px 1fr; column-gap: 4px; }
-.fw-timeline-toggle b { white-space: nowrap; }
+.film-studio .fw-stage-library > button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 4px 6px;
+  padding: 9px 8px;
+  text-align: left;
+}
+.fw-library-icon {
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+}
+.fw-stage-library > button > b,
+.fw-stage-library > button > small {
+  grid-column: 2;
+}
 
 .fw-asset-board .fw-file-control { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 10px; border-style: solid; font-size: var(--dp-typography-metadata); }
 .fw-asset-board .fw-file-control:has(input:disabled) { opacity: .5; cursor: not-allowed; }
@@ -77,27 +94,6 @@
   }
   .film-studio .fw-stage-library > button {
     min-height: 96px;
-    display: grid;
-    grid-template-columns: 20px max-content;
-    grid-template-rows: auto auto;
-    justify-content: center;
-    align-content: center;
-    column-gap: 8px;
-    row-gap: 4px;
-    padding: 12px 10px;
-    text-align: left;
-  }
-  .fw-stage-library > button > span {
-    grid-row: 1 / 3;
-    align-self: center;
-  }
-  .fw-stage-library > button > b,
-  .fw-stage-library > button > small {
-    grid-column: 2;
-  }
-  .film-studio .fw-stage-library > .fw-timeline-toggle > span,
-  .film-studio .fw-stage-library > .fw-timeline-toggle > b {
-    grid-row: 1;
   }
 }
 
