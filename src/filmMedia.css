@@ -1,0 +1,13 @@
+.film-media > .film-image-preview-trigger {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.film-media > .film-image-preview-trigger:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

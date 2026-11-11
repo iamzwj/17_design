@@ -1,13 +1,18 @@
 import {useEffect,useState,useRef} from "react";
+import {createPortal} from "react-dom";
+import ImagePreview from "./ImagePreview.jsx";
+import "./filmMedia.css";
 import {getAuthToken} from "./api.js";
 const base=()=>String(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 export default function FilmMedia({ project, file, characterId, video = false, audio = false }) {
   const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
   const container=useRef(null);const [visible,setVisible]=useState(false);
   useEffect(()=>{if(!('IntersectionObserver' in window)){setVisible(true);return;}const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){setVisible(true);observer.disconnect();}},{rootMargin:'200px'});if(container.current)observer.observe(container.current);return()=>observer.disconnect();},[]);
   useEffect(() => {
     if ((!file && !characterId) || !visible) return;
     setUrl("");
+    setPreviewUrl("");
     setMediaError(false);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
@@ -44,7 +49,12 @@ export default function FilmMedia({ project, file, characterId, video = false, a
     audio ? <audio onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata"/> : video ? (
       <video onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata" />
     ) : (
+      <>
+        <button className="image-preview-trigger film-image-preview-trigger" type="button" aria-label="放大预览制作素材" onClick={() => setPreviewUrl(url)}>
       <img onError={() => { setUrl(""); setMediaError(true); }} src={url} alt="制作素材" />
+        </button>
+        {previewUrl === url && createPortal(<ImagePreview url={url} prompt={file} onClose={() => setPreviewUrl("")}/>, document.body)}
+      </>
     )
   ) : (
     mediaError ? <button onClick={() => setRetry(v => v + 1)}>素材读取失败，点击重试</button> : <span>素材读取中…</span>
