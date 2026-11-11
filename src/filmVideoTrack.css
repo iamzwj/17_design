@@ -27,7 +27,7 @@
 .film-video-thumbnail { position: absolute; inset: 0; pointer-events: none; }
 .film-video-thumbnail .film-media { width: 100%; height: 100%; }
 .film-video-thumbnail .film-media img { width: 100%; height: 100%; object-fit: cover; }
-.film-video-thumbnail .film-media button, .film-video-thumbnail .film-media > span { display: none; }
+.film-video-thumbnail .film-media > span { display: none; }
 .film-video-label {
   position: absolute;
   inset: auto 0 0;
@@ -64,3 +64,8 @@
 .film-video-thumbnail { z-index: 1; inset: 2px 2px 24px; overflow: hidden; border-radius: 4px 4px 0 0; }
 .film-studio .film-video-clip > .film-video-handle { z-index: 2; }
 .film-video-playhead { z-index: 3; }
+
+.film-video-thumbnail .film-media > .film-image-preview-trigger { display: block; height: 100%; }
+.film-video-tools { padding: 4px 0; }
+.film-studio .film-video-tools > button { min-height: 30px; padding: 5px 10px; font-size: 12px; }
+.film-video-time { margin-bottom: 16px; }

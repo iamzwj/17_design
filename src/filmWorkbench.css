@@ -311,8 +311,10 @@
   margin: 8px 12px 4px;
 }
 
-@media (min-width: 601px) {
-  .film-workbench:has(.fw-timeline-sheet:not([hidden])) .fw-stage-nav {
-    z-index: 51;
-  }
-}
+
+
+.fw-timeline-sheet { z-index: 1200; isolation: isolate; }
+.fw-timeline-sheet .fw-timeline-heading { padding-right: 140px; min-height: 42px; align-items: center; }
+.fw-timeline-sheet .fw-timeline-content { padding-top: 4px; }
+.fw-timeline-sheet .fw-timeline-content > h4 { margin: 12px 0; }
+.fw-timeline-sheet .fw-timeline-close { margin-bottom: 0; }
