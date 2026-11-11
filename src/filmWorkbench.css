@@ -283,3 +283,36 @@
 }
 
 .fw-setting-review p{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.fw-timeline-sheet {
+  position: fixed;
+  z-index: 50;
+  inset-inline: max(12px, calc((100% - 1180px) / 2));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  max-height: 55vh;
+  max-height: 55dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--dp-panel-solid);
+  border: 1px solid var(--fw-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 24%);
+}
+.fw-timeline-sheet .fw-timeline {
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+.fw-timeline-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 1;
+  margin: 8px 12px 4px;
+}
+
+@media (min-width: 601px) {
+  .film-workbench:has(.fw-timeline-sheet:not([hidden])) .fw-stage-nav {
+    z-index: 51;
+  }
+}

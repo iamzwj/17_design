@@ -13,9 +13,22 @@ const labels={queued:'等待调度',running:'正在制作',pausing:'正在暂停
 export default function FilmWorkbench({project:p,lastSynced,request,onProject,onDownload}) {
   const key='film-workbench:'+p.id;
   const [stage,setStage]=useState(()=>{const value=localStorage.getItem(key+':stage')||'script';return ['images','videos','audio'].includes(value)?'media':value;}),[selected,setSelected]=useState(()=>localStorage.getItem(key+':selected')||''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[limit,setLimit]=useState(60),[panel,setPanel]=useState(()=>localStorage.getItem(key+':panel')||'conversation'),[settings,setSettings]=useState(false),[details,setDetails]=useState(false),[recordMode,setRecordMode]=useState(()=>p.status==='succeeded'?'history':'activity');
-  const [timelineOpen,setTimelineOpen]=useState(false);
-  const timelinePanel=useRef(null);
-  useEffect(()=>{if(timelineOpen)timelinePanel.current?.scrollIntoView({block:"start"});},[timelineOpen]);
+  const [timelineOpen,setTimelineOpen]=useState(null);
+  const timelinePanel = useRef(null);
+  const timelineTrigger = useRef(null);
+  useEffect(() => {
+    if (!timelineOpen) return;
+    function dismissOutside(event) {
+      if (timelinePanel.current?.contains(event.target) || event.target.closest?.('[data-fw-timeline-trigger], .film-floating-menu')) return;
+      setTimelineOpen(false);
+    }
+    document.addEventListener('click', dismissOutside, true);
+    return () => document.removeEventListener('click', dismissOutside, true);
+  }, [timelineOpen]);
+  function closeTimeline() {
+    setTimelineOpen(false);
+    timelineTrigger.current?.focus();
+  }
   const feed=useRef(null),submitting=useRef(false);const stages=workflowStages(p).filter(s=>!['images','videos','audio'].includes(s.id)).map(s=>s.id==='storyboard'?{...s,done:p.shots.filter(shot=>shot.frame&&shot.video).length,total:p.shots.length,complete:p.shots.length>0&&p.shots.every(shot=>shot.frame&&shot.video),active:['storyboard','images','frames','videos','quality','audio'].includes(p.stage)}:s),complete=stages.filter(s=>s.complete).length;const phaseLabel=({plan:'导演规划',script:'剧本编写',characters:'角色设定',scenes:'场景设定',storyboard:'分镜规划',assets:'角色与场景制作',frames:'分镜图片生成',images:'图片生成',videos:'视频生成',quality:'镜头审核',audio:'声音处理',editing:'成片剪辑',render:'成片合成',done:'已完成'})[p.stage]||'等待调度';const mediaCount=filmMediaIndex(p).length;
   useEffect(()=>{localStorage.setItem(key+':stage',stage);localStorage.setItem(key+':selected',selected);localStorage.setItem(key+':panel',panel);},[key,stage,selected,panel]);
   useEffect(()=>{if(feed.current&&recordMode==='activity')feed.current.scrollTop=feed.current.scrollHeight;},[p.events?.length,recordMode]);
@@ -38,14 +51,22 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
         </> : p.pausedStages?.[s.id]?'已暂停':s.complete?'已完成':s.total?`${s.done}/${s.total}`:s.active?'进行中':'等待'}</small></button>)}<div className="fw-stage-library"><button type="button" className={stage==='media'?'active':''} onClick={()=>chooseStage('media')}>
           <svg className="fw-library-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m3 17 5-4 4 3 4-5 5 5"/>
-          </svg><b>素材库</b><small>{mediaCount} 个文件</small></button><button type="button" aria-expanded={timelineOpen} aria-controls="fw-timeline-panel" className={timelineOpen?"active":""} onClick={()=>{setStage('editing');setPanel('editor');setTimelineOpen(open=>!open)}}><svg className="fw-library-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          </svg><b>素材库</b><small>{mediaCount} 个文件</small></button><button type="button" ref={timelineTrigger} data-fw-timeline-trigger aria-expanded={Boolean(timelineOpen)} aria-controls={timelineOpen === null ? undefined : "fw-timeline-panel"} className={timelineOpen?"active":""} onClick={()=>setTimelineOpen(open=>!open)}><svg className="fw-library-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 5h18M3 12h18M3 19h18"/><rect x="5" y="9" width="6" height="6" rx="1" fill="var(--fw-soft)"/><rect x="14" y="16" width="5" height="6" rx="1" fill="var(--fw-soft)"/>
           </svg><b>剪辑时间线</b><small>{timelineOpen?'已展开':'查看轨道'}</small></button></div></nav>
       <section className="fw-conversation" aria-label="Agent协作工作过程"><div className="fw-record-toolbar"><div className="fw-record-tabs"><button className={recordMode==='activity'?'active':''} onClick={()=>setRecordMode('activity')}>制作动态</button><button className={recordMode==='history'?'active':''} onClick={()=>setRecordMode('history')}>历史记录</button></div><label><input type="checkbox" checked={details} onChange={e=>setDetails(e.target.checked)}/>执行细节</label></div><div className="fw-feed" ref={feed}><FilmActivity events={events} project={p} history={recordMode==='history'} details={details} limit={limit} onMore={()=>setLimit(limit+80)} onSelect={chooseTask}/>
         {(p.activeJobs||[]).length>0&&<details className="fw-live-tasks"><summary>{p.activeJobs.length} 项正在制作中</summary>{p.activeJobs.map(job=><button key={job.id} onClick={()=>chooseTask(job.id)}>{job.message}</button>)}</details>}</div>
       </section>
-      <div className="fw-inspector-scroll"><aside className="fw-inspector" aria-label="成果预览与编辑"><header><h3>{stage==='media'?'素材库':stages.find(s=>s.id===stage)?.label||'成果'} · 预览与编辑</h3>{stage==='media'&&<small>图片 · 视频 · 音频</small>}</header><FilmEditor project={p} stage={stage} selected={selected} onSelect={id=>stage==='media'?chooseTask(id):setSelected(id)} send={send} request={request} notice={setNotice} onOpenTimeline={()=>setTimelineOpen(true)}/>{timelineOpen&&<div id="fw-timeline-panel" ref={timelinePanel}><FilmTimeline key={(p.timeline?.revision||0)+':'+p.shots.map(s=>s.id).join(',')} project={p} request={request} send={send} onSelect={id=>{setStage('storyboard');setSelected(id);setPanel('editor');}} notice={setNotice}/></div>}</aside></div>
+      <div className="fw-inspector-scroll"><aside className="fw-inspector" aria-label="成果预览与编辑"><header><h3>{stage==='media'?'素材库':stages.find(s=>s.id===stage)?.label||'成果'} · 预览与编辑</h3>{stage==='media'&&<small>图片 · 视频 · 音频</small>}</header><FilmEditor project={p} stage={stage} selected={selected} onSelect={id=>stage==='media'?chooseTask(id):setSelected(id)} send={send} request={request} notice={setNotice} onOpenTimeline={()=>setTimelineOpen(true)}/></aside></div>
     </div>
+    {timelineOpen !== null && <div id="fw-timeline-panel" className="fw-timeline-sheet" ref={timelinePanel} hidden={!timelineOpen}>
+      <button type="button" className="fw-timeline-close" onClick={closeTimeline}>关闭时间线</button>
+      <FilmTimeline
+        key={(p.timeline?.revision || 0) + ':' + p.shots.map(s => s.id).join(',')}
+        project={p} request={request} send={send} notice={setNotice}
+        onSelect={id => { chooseStage('storyboard'); setSelected(id); setTimelineOpen(false); }}
+      />
+    </div>}
   </div>;
 }
 function ProjectSettings({project:p,send}) {
