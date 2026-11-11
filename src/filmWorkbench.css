@@ -58,23 +58,14 @@
 .fw-clip-shot { text-align: left; overflow-wrap: anywhere; }
 
 .film-studio .fw-stage-library > button {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-content: center;
-  gap: 4px 6px;
-  padding: 9px 8px;
-  text-align: left;
-}
-.fw-library-icon {
-  grid-row: 1 / 3;
-  align-self: center;
-  width: 16px;
-  height: 16px;
-}
-.fw-stage-library > button > b,
-.fw-stage-library > button > small {
-  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 9px 10px;
+  border-style: solid;
+  text-align: center;
 }
 
 .fw-asset-board .fw-file-control { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 10px; border-style: solid; font-size: var(--dp-typography-metadata); }
@@ -93,7 +84,7 @@
     margin-top: auto;
   }
   .film-studio .fw-stage-library > button {
-    min-height: 96px;
+    min-height: 56px;
   }
 }
 
