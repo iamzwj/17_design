@@ -30,6 +30,25 @@ export function normalizeFilmScript(result) {
   });
   return { ...result, scenes };
 }
+export function sceneLightingPeriods(scenes, scriptScenes) {
+  const times = new Map(scriptScenes.map(scene => [scene.id, normalizeFilmTime(scene.time)]));
+  const assigned = new Set();
+  const periods = new Map();
+  for (const scene of scenes) {
+    if (!Array.isArray(scene.scriptSceneIds) || !scene.scriptSceneIds.length) {
+      throw Error('每个场景必须填写对应的剧本场次 ID');
+    }
+    const lighting = scene.scriptSceneIds.map(id => {
+      if (!times.has(id) || assigned.has(id)) throw Error('剧本场次 ID 不存在或被重复分配');
+      assigned.add(id);
+      return times.get(id).replace(/^时间[:：\s]*/, '').split(/[；;，,]/, 1)[0].trim();
+    });
+    periods.set(scene.id, [...new Set(lighting)]);
+  }
+  if (assigned.size !== times.size) throw Error('场景设定遗漏了剧本场次');
+  return periods;
+}
+
 export const FILM_STORY_FIDELITY = '用户原始故事是剧情依据。已有完整剧本时按剧本拍摄，不重新自由创作；保留人物身份与关系、关键事件的因果顺序、具体数字及道具意义、时间跨越、转折与结尾。时间阶段必须以原稿为准，不能把“现在”擅自改成“几年后”；同一人物的年龄状态和角色身份按原稿变化，不能混淆不同人物或互换关系。对白要说明谁对谁说，旁白和内心独白不能强行变成人物口播。时长不足时保留完整的最小因果链，说明压缩取舍，不通过篡改事实、删掉关键转折或编造结尾来凑时长；无法忠实表达则明确指出冲突。';
 export function filmContinuityKey(p) {
   const shots=(p.shots||[]).map(({id,revision,time,sceneId,characterIds,outfitIds,duration,prompt,dialogue,action,continuity,firstFramePrompt,tailFramePrompt})=>({id,revision,time,sceneId,characterIds,outfitIds,duration,prompt,dialogue,action,continuity,firstFramePrompt,tailFramePrompt}));
@@ -119,7 +138,35 @@ export function createFilmAgents({api,save,check}) {
       p.characters=r.characters;
       for(const c of r.characters){p.resources.push({id:`${c.id}-face`,sourceId:c.id,name:`${c.name} · 面部三视图`,category:'characters',type:'face',agent:'character',attributes:c.identity,prompt:`同一人物面部特写三视图：正面、45°、90°；保持身份、年龄、肤色、发型、发际线和五官比例一致；中性光线、保留可辨认的面部特征、简洁背景，不加装饰文字或背景人物。${c.facePrompt}`,revision:p.scriptRevision||1,history:[]});for(const o of c.outfits)p.resources.push({id:`${c.id}-look-${o.id}`,sourceId:c.id,outfitId:o.id,name:`${c.name} · ${o.name}`,category:'characters',type:'wardrobe',agent:'character',dependencies:[`${c.id}-face`],attributes:o,prompt:`独立穿搭设定图，保持参考图面部身份：全身正面、侧面、背面，展示服装版型材质、鞋履、配饰和随身物品。${o.prompt}`,revision:p.scriptRevision||1,history:[]});}
     });};
-  const extractScenes=async p=>{if(p.scenes||!p.script)return;await run(p,'scenes','scene','scenes','提取实际出现的独立场景。相同空间在不同时间、天气出现时合并成一个场景 ID。返回{scenes:[{id,name,location,spaceType,indoorOutdoor,layout,materials,colors,season,weather,mood,light,props:[含外观及固定位置的字符串],day,night,states:[DAY,NIGHT,MORNING,SUNSET,LATE_NIGHT,RAIN,SNOW],prompt}]}。每场景prompt生成一张完整环境设定图，同时包含同一空间白天和夜晚主视图，布局、建筑结构和固定道具位置一致，明确光源色温及材质。',{script:p.script,style:p.settings.style},r=>{if(!Array.isArray(r.scenes)||!r.scenes.length||new Set(r.scenes.map(s=>s?.id)).size!==r.scenes.length||r.scenes.some(s=>!s||!validId(s.id)||!s.prompt||!s.day||!s.night))throw Error('场景设定无效');},r=>{p.scenes=r.scenes;for(const s of r.scenes)p.resources.push({id:`${s.id}-environment`,sourceId:s.id,name:`${s.name} · 昼夜设定`,category:'scenes',type:'environment',agent:'scene',attributes:{...s,states:[...new Set(['DAY','NIGHT',...(Array.isArray(s.states)?s.states:[]).filter(state=>['MORNING','SUNSET','LATE_NIGHT','RAIN','SNOW'].includes(state))])]},prompt:`同一个空间的昼夜环境设定图，包含白天与夜晚主视图，同一参考机位，布局、门窗和道具固定一致；附环境材质细节、光源方向与色温、道具及固定位置小图；${s.prompt}`,revision:p.scriptRevision||1,history:[]});});};
+  const extractScenes = async p => {
+    if (p.scenes || !p.script) return;
+    await run(p, 'scene-periods-v2', 'scene', 'scenes',
+      '提取实际出现的独立空间。相同空间在不同时间、天气出现时合并成一个场景 ID。每个剧本场次 ID 必须且只能归入一个场景。返回{scenes:[{id,name,location,scriptSceneIds:[剧本场次ID],spaceType,indoorOutdoor,layout,materials,colors,season,weather,mood,light,props:[含外观及固定位置的字符串],prompt}]}。prompt 描述固定布局、建筑结构、材质、道具和机位，光照仅考虑对应剧本场次真实出现的时段，不额外构造昼夜对照或其他时段。',
+      {script:p.script, style:p.settings.style},
+      result => {
+        const scenes = result.scenes;
+        if (!Array.isArray(scenes) || !scenes.length ||
+            new Set(scenes.map(scene => scene?.id)).size !== scenes.length ||
+            scenes.some(scene => !scene || !validId(scene.id) || !scene.prompt)) {
+          throw Error('场景设定无效');
+        }
+        sceneLightingPeriods(scenes, p.script.scenes);
+      },
+      result => {
+        const periods = sceneLightingPeriods(result.scenes, p.script.scenes);
+        p.scenes = result.scenes.map(scene => ({...scene, lightingPeriods:periods.get(scene.id)}));
+        for (const scene of p.scenes) {
+          const times = scene.lightingPeriods.join('、');
+          const views = scene.lightingPeriods.length === 1 ? '只画这一时段的主视图' : '每个列出的时段画一个主视图，沿用同一参考机位';
+          p.resources.push({
+            id:`${scene.id}-environment`, sourceId:scene.id, name:`${scene.name} · 场景设定`,
+            category:'scenes', type:'environment', agent:'scene', attributes:scene,
+            prompt:`同一空间的环境设定图。剧本所需时段仅为：${times}。${views}，不画其他时段。固定布局、门窗、道具和建筑结构。另附环境材质细节、光源方向与色温、道具及固定位置小图。${scene.prompt}`,
+            revision:p.scriptRevision||1, history:[],
+          });
+        }
+      });
+  };
   const scenes = async p => {
     await extractScenes(p);
     if (!p.scenes?.length || (p.locationPlanVersion === 1 && p.locationSceneIds === p.scenes.map(scene => scene.id).sort().join(','))) return;

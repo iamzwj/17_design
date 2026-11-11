@@ -672,7 +672,7 @@ const agents=createFilmAgents({api,save,check});
 const settingChecks = {
   face: '一张图有正面、45°、90°面部特写，三处五官、脸型、发际线和肤色属于同一人；有原始参考时核对身份',
   wardrobe: '与参考面部图同一身份，并严格比较视觉媒介与质感：真人照片面部搭配卡通、绘画、插画或游戏角色身体是明确风格错误，必须repair；同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
-  environment: '同一空间的白天和夜晚主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节；如设计要求有连接路径或空间过渡，核对每一段是否展示',
+  environment: '设计要求明确列出的时段主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节；如设计要求有连接路径或空间过渡，核对每一段是否展示',
 };
 
 function approvedSetting(resource) {
@@ -692,9 +692,13 @@ async function reviewSetting(p, resource, references) {
   const task = beginTask(p,id,'assets','director',{name:resource.name+' · 导演审核'});
   save(p);
   let review;
+  const lightingPeriods = resource.attributes?.lightingPeriods;
+  const lightingCheck = lightingPeriods?.length
+    ? '。只审核这些时段：'+lightingPeriods.join('、')+'。画出未列出的时段视为可修正错误'
+    : '';
   try {
     const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingChecks[resource.type] || '核对图像是否满足设定中的明确要求')+
-      '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+'。必须核对全片风格，写实时卡通、插画、概念绘画属于明确错误。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
+      '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+lightingCheck+'。必须核对全片风格，写实时卡通、插画、概念绘画属于明确错误。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
       '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。若能明确指出至少一处可见且可修复的错误（包括遗漏明确要求的视图或连接路径），返回 repair 和 high，并在 correction 写清要补什么，即使其他项目无法确认。只有没有明确错误但存在不确定时才返回 review。全部要求均确认符合才 pass。'}];
     for(const image of [output,...references]) {
       const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
@@ -725,10 +729,10 @@ async function reviewLocationGroup(p, location) {
   if (p.locationReviews[location.id]?.key === key) return;
   let review;
   try {
-    const parts = [{text: '整组场景一致性审核。第一张是地点主图，其余按下列顺序是各区域昼夜设定图：' +
+    const parts = [{text: '整组场景一致性审核。第一张是地点主图，其余按下列顺序是各区域场景设定图：' +
       JSON.stringify(group.map(resource => ({id:resource.id,name:resource.name}))) +
       '。固定空间和连接：' + JSON.stringify(location) +
-      '。逐图横向比较固定建筑、门岗、地标、道路连通性和材质，允许视角与昼夜变化。只有明确可见、可定位且能按主图修复的子区域错误才返回 repair。否则证据不足用 review，确认一致用 pass。只输出 JSON {status,confidence:"high"|"low",summary:"可见证据",targetId:"待修复子区域ID",correction:"定向修复要求"}。'}];
+      '。逐图横向比较固定建筑、门岗、地标、道路连通性和材质，允许视角与剧本要求的时段光照变化。只有明确可见、可定位且能按主图修复的子区域错误才返回 repair。否则证据不足用 review，确认一致用 pass。只输出 JSON {status,confidence:"high"|"low",summary:"可见证据",targetId:"待修复子区域ID",correction:"定向修复要求"}。'}];
     for (const file of files) {
       const image = await sharp(path.join(root,p.id,file)).resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).jpeg().toBuffer();
       parts.push({inline_data:{mime_type:'image/jpeg',data:image.toString('base64')}});
@@ -827,7 +831,7 @@ async function referenceAssets(p, onlyResource) {
       if(r.assetReview?.file===r.output.file)return;
       const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
       try {
-        const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否在一张完整环境设定图中体现同一空间的白天与夜晚，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
+        const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否体现设计要求明确列出的时段，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
         const response=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}]}],generationConfig:{temperature:0.1}});
         const raw=(response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
         save(p);if(r.revision===version)r.assetReview={...review,file};finishTask(p,t,{...review,file});

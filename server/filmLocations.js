@@ -28,7 +28,7 @@ export function applyFilmLocations(project, plan) {
   project.locationSceneIds = project.scenes.map(scene => scene.id).sort().join(',');
   for (const location of plan.locations) {
     const masterId = location.masterSceneId + '-environment';
-    const constraint = `共享地点 ${location.name || location.id}。固定空间：${location.layout}。固定建筑及地标：${location.anchors.join('；')}。区域连接：${JSON.stringify(location.connections || [])}。仅改变当前区域机位、昼夜光照，禁止重新设计共同建筑、门岗、外墙和道路。`;
+    const constraint = `共享地点 ${location.name || location.id}。固定空间：${location.layout}。固定建筑及地标：${location.anchors.join('；')}。区域连接：${JSON.stringify(location.connections || [])}。仅改变当前区域机位和剧本要求的时段光照，禁止重新设计共同建筑、门岗、外墙和道路。`;
     for (const sceneId of location.sceneIds) {
       const scene = project.scenes.find(item => item.id === sceneId);
       scene.locationId = location.id;
