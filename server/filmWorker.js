@@ -1,3 +1,4 @@
+import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
 import { submitSeedanceShot, pollSeedanceShot } from './vibbitVideos.js';
@@ -364,6 +365,10 @@ async function legacyFrame(p, s, i) {
   );
 }
 async function videoShot(p, s, i) {
+  for (const kind of s.tailFramePrompt ? ['frame','tail'] : ['frame']) {
+    await checkFrameIntegrity(p,s,kind,{root,api,check,save,applyCommand,event});
+  }
+  check(p);
   const resolution = filmVideoResolution(p.videoModel, p.videoResolution);
   const references=p.referenceWorkflow
     ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
