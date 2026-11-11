@@ -13,18 +13,23 @@ export default function FilmMedia({ project, file, characterId, video = false, a
     const timeout = setTimeout(() => controller.abort(), 30000);
     let live = true,
       src;
-    fetch(base() + (characterId ? `/api/films/characters/${characterId}/image` : `/api/films/${project}/files/${file}`), {
+    fetch(base() + (characterId ? `/api/films/characters/${characterId}/image` : `/api/films/${project}/media/${file}`), {
       signal: controller.signal,
       headers: { Authorization: `Bearer ${getAuthToken()}` },
     })
       .then((r) => {
         if (!r.ok) throw Error("读取素材失败");
-        return r.blob();
+        return characterId ? r.blob() : r.json();
       })
-      .then((b) => {
-        src = URL.createObjectURL(b);
-        if (live) setUrl(src);
-        else URL.revokeObjectURL(src);
+      .then((result) => {
+        if (characterId) {
+          src = URL.createObjectURL(result);
+          if (live) setUrl(src);
+          else URL.revokeObjectURL(src);
+        } else {
+          if (!result.url) throw Error("素材链接不可用");
+          if (live) setUrl(base() + result.url);
+        }
       })
       .catch(() => { if (live) setMediaError(true); })
       .finally(() => clearTimeout(timeout));

@@ -34,7 +34,7 @@ export function validFilmLink(
   const time = Math.floor(now / 1000);
   if (
     !/^[a-f0-9-]{36}$/.test(id) ||
-    !/^(asset|frame)-[a-zA-Z0-9_-]+\.png$/.test(file) ||
+    !/^[a-zA-Z0-9_-]+\.(png|jpg|mp4|wav|mp3|m4a|aac|ogg)$/.test(file) ||
     !/^\d+$/.test(String(expires)) ||
     Number(expires) < time ||
     Number(expires) > time + FILM_REFERENCE_TTL_SECONDS ||

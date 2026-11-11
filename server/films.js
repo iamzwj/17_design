@@ -9,7 +9,7 @@ import {probe} from './filmEditing.js';
 import sharp from 'sharp';
 import { readFilmProject, clone, applyCommand, pendingCommands, queueFilmCommand } from './filmState.js';
 import { filmEvent } from '../shared/filmProgress.js';
-import { filmLinkKey, validFilmLink } from "./filmLinks.js";
+import { filmLinkKey, validFilmLink, filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -33,14 +33,36 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     res.json({ ok: true });
   });
   const linkKey = filmLinkKey(root);
-  app.get("/api/film-assets/:id/:file", (req, res) => {
+  app.get("/api/film-assets/:id/:file", async (req, res, next) => {
     const { id, file } = req.params;
     if (
       !validFilmLink(linkKey, id, file, req.query.expires, req.query.signature)
     )
       return res.sendStatus(404);
     res.setHeader("Cache-Control", "private, no-store");
-    res.sendFile(path.resolve(root, id, file));
+    const source = path.resolve(root, id, file);
+    if (req.query.preview !== '1' || !/\.(png|jpg)$/.test(file)) {
+      return res.sendFile(source);
+    }
+    try {
+      const metadata = await fs.promises.stat(source);
+      const previewDir = path.join(root, id, '.media-previews');
+      await fs.promises.mkdir(previewDir, { recursive: true });
+      const preview = path.join(previewDir, `${file}-${metadata.size}-${metadata.mtimeMs}.webp`);
+      if (!fs.existsSync(preview)) {
+        const temporary = preview + '.' + randomUUID() + '.tmp';
+        try {
+          await sharp(source).rotate().resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
+            .webp({ quality: 82 }).toFile(temporary);
+          await fs.promises.rename(temporary, preview);
+        } finally {
+          await fs.promises.rm(temporary, { force: true });
+        }
+      }
+      res.type('webp').sendFile(preview, { dotfiles: 'allow' });
+    } catch (error) {
+      next(error);
+    }
   });
   const read = (id) => {
     if (!/^[a-f0-9-]{36}$/.test(id)) return null;
@@ -436,6 +458,17 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     if (!p) return;
     fs.writeFileSync(path.join(root, p.id, "cancel"), "1");
     res.json({ ok: true });
+  });
+  // The native player can seek without first downloading a complete video Blob.
+  app.get('/api/films/:id/media/:file', requireAuth, (req, res) => {
+    const project = owned(req, res);
+    if (!project) return;
+    const file = req.params.file;
+    if (!/^[a-zA-Z0-9_-]+\.(png|jpg|mp4|wav|mp3|m4a|aac|ogg)$/.test(file) ||
+        !fs.existsSync(path.join(root, project.id, file))) return res.sendStatus(404);
+    const link = filmAssetLink(root, project.id, file, '');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ url: /\.(png|jpg)$/.test(file) ? link + '&preview=1' : link });
   });
   app.get("/api/films/:id/files/:file", requireAuth, (req, res) => {
     const p = owned(req, res);
