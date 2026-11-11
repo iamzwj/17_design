@@ -1,3 +1,4 @@
+import { filmConsistencyPrompt } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
@@ -381,7 +382,7 @@ async function videoShot(p, s, i) {
     {
       model: p.videoModel,
       prompt:
-        s.prompt +
+        filmConsistencyPrompt(p,s) + "；" + s.prompt +
         (videoRefs.length ? "。图1提供镜头构图与动作起点，后续图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
         (s.dialogue
           ? "。指定中文对白：" +
@@ -843,7 +844,7 @@ async function shotImage(p, shot, index, kind) {
   shot.referenceVersions = refs.map(r => ({id:r.id, version:r.revision, file:r.output.file}));
   return generateShot(p, shot, kind, {
     model:p.imageModel,
-    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${shot.firstFramePrompt||shot.prompt}`,
+    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${filmConsistencyPrompt(p,shot)}；${shot.firstFramePrompt||shot.prompt}`,
     images:refs.map(r=>referenceImage(p,r.output)),
     aspectRatio,
     ...(nano ? {imageSize:'1K'} : {quality:'auto'}),
