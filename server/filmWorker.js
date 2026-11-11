@@ -766,15 +766,31 @@ async function referenceAssets(p, onlyResource) {
       const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
       if(dependencies.some(dep=>strict || settingChecks[dep?.type] ? !usableSetting(dep) : !dep?.output || dep.stale))return;
       const references=r.characterReference?[r.characterReference]:dependencies.map(dep=>dep.output);
-      const nano=p.imageModel.startsWith('nano-');
       const landscape=r.type==='environment';
-      const aspectRatio=nano?(landscape?'16:9':'1:1'):(landscape?'1536x1024':'1024x1024');
       while(true) {
         if(!r.output) {
+          const correction = r.reviewCorrection;
+          const previous = correction && landscape
+            ? r.history?.findLast(item => item.version === r.revision - 1)?.value.output
+            : null;
+          const finalRepair = previous && r.qualityRepairAttempts >= 2;
+          const model = finalRepair
+            ? p.imageModel.startsWith('nano-') ? 'gpt-image-2.5' : 'nano-banana-2.1'
+            : p.imageModel;
+          const nano = model.startsWith('nano-');
+          const aspectRatio = nano ? (landscape ? '16:9' : '1:1') : (landscape ? '1536x1024' : '1024x1024');
+          const guide = references.length && landscape
+            ? '以共同地点参考图为建筑与空间依据，固定地标、门岗、道路和材质；仅改变本区域观察位置与光照。'
+            : references.length
+              ? '严格匹配参考图的视觉媒介和人物身份：真人参考必须是同一真人照片质感的全身服装，禁止变成卡通、插画、概念设计图或游戏角色。若参考图为动画则保持其动画风格。'
+              : '';
+          const repair = previous
+            ? '第一张是待修的上一版场景图。保留已经符合要求的布局、材质和光照，只修改以下明确缺陷：'+correction
+            : correction;
           await generate(p,r,'image',{
-            model:p.imageModel,
-            prompt:[references.length && r.type==='environment' ? '以共同地点参考图为建筑与空间依据，固定地标、门岗、道路和材质；仅改变本区域观察位置与光照。' : references.length?'严格匹配参考图的视觉媒介和人物身份：真人参考必须是同一真人照片质感的全身服装，禁止变成卡通、插画、概念设计图或游戏角色。若参考图为动画则保持其动画风格。':'',r.locationConstraint,r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
-            images:references.map(image=>referenceImage(p,image)),
+            model,
+            prompt:[repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
+            images:[...(previous ? [previous] : []),...references].map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
@@ -823,7 +839,7 @@ async function referenceAssets(p, onlyResource) {
   check(p);
   if(p.needsRerun)return;
   const pending=resources.filter(r=>!usableSetting(r));
-  if(pending.length && !pending.some(r=>r.paused || p.pausedStages?.[r.category]))throw Error('设定图缺少可用成果：'+pending.map(r=>r.name).join('、'));
+  if(pending.length && !pending.some(r=>r.paused || p.pausedStages?.[r.category]))throw Object.assign(Error('设定图仍需处理：'+pending.map(r=>r.name).join('、')+'。可查看审核证据后确认或重做。'),{code:'INPUT'});
   const handoffKey='reference-handoff:'+resources.map(r=>r.id+'-'+r.revision).join(',');
   if(!p.events.some(e=>e.taskId===handoffKey))event(p,'director',handoffKey,'设定图已交给分镜与视频制作，审核意见保留在设定图记录中。',{type:'dispatch'});
 }
