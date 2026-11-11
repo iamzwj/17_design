@@ -1,3 +1,4 @@
+import { reviewFilmImages } from './filmImageReview.js';
 import { filmConsistencyPrompt } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
@@ -704,19 +705,7 @@ async function reviewSetting(p, resource, references) {
       const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
       parts.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
     }
-    let raw;
-    try {
-      const response = await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts}],generationConfig:{temperature:0.1}}, 30000);
-      raw = (response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
-    } catch (error) {
-      event(p, 'director', id, '视觉审核服务未响应，正在使用备用视觉模型', {type:'recovery'});
-      const content = parts.map(part => part.text ? {type:'text',text:part.text} : {type:'image_url',image_url:{url:'data:image/png;base64,'+part.inline_data.data}});
-      const response = await api('/v1/chat/completions',{model:'gpt-5.6-terra',response_format:{type:'json_object'},messages:[{role:'user',content}]}, 30000);
-      raw = response.choices?.[0]?.message?.content || '';
-    }
-    review = JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
-    if(!['pass','repair','review'].includes(review.status) || typeof review.summary!=='string' || !review.summary.trim())throw Error('审核返回缺少有效证据');
-    if(review.confidence!=='high')review.status='review';
+    review = await reviewFilmImages(api, parts);
     finishTask(p,task,review);
   } catch(error) {
     review = {status:'review',confidence:'low',summary:'自动审核暂不可用，已记录并继续制作：'+error.message};
