@@ -157,7 +157,7 @@
 /* Workbench hierarchy: project, stages, results, then supporting activity. */
 .film-workbench { --fw-card: color-mix(in srgb, #fff 90%, transparent); --fw-heading: #eef2f8; }
 :root[data-theme='dark'] .film-workbench { --fw-card: color-mix(in srgb, #191b21 90%, transparent); --fw-heading: #17191f; }
-.film-workbench .fw-control { padding: 20px 0 24px; margin-bottom: 16px; border-bottom: 1px solid var(--fw-border); }
+.film-workbench .fw-control { padding: 20px 0 8px; margin-bottom: 16px; }
 .film-workbench .fw-control h2 { font-size: 24px; font-weight: 650; margin: 0 0 8px; }
 .film-workbench .fw-control p { color: var(--dp-secondary); font-size: 13px; }
 .film-workbench .fw-control-actions { gap: 8px; }
@@ -180,11 +180,12 @@
 .film-workbench .fw-activity-row .fw-task-link { font-size: 11px; padding: 3px 0; }
 .film-workbench { --fw-step-border: #c8ced8; }
 :root[data-theme=dark] .film-workbench { --fw-step-border: #373b44; }
-:root .film-studio .fw-stage-nav > button { background: transparent; border: 1px solid transparent; border-radius: 8px; min-height: 62px; padding: 10px; }
+:root .film-studio .fw-stage-nav > button { background: transparent; border: .5px solid transparent; border-radius: 8px; min-height: 62px; padding: 10px; }
 :root .film-studio .film-workbench .fw-stage-nav > button { border-color: var(--fw-step-border); }
 :root .film-studio .film-workbench .fw-stage-nav > button:hover:not(.active) { border-color: color-mix(in srgb, var(--fw-step-border), var(--dp-secondary) 25%); }
 :root .film-studio .film-workbench .fw-stage-nav > button:focus-visible { outline: 2px solid var(--fw-accent); outline-offset: 1px; }
-:root .film-studio .fw-stage-nav > button.active { background: var(--dp-selected); box-shadow: inset 3px 0 var(--fw-accent); }
+:root .film-studio .film-workbench .fw-stage-nav > button.active { background: transparent; border-color: var(--fw-accent); color: var(--dp-ink); box-shadow: none; }
+:root[data-theme=dark] .film-studio .film-workbench .fw-stage-nav > button.active { background: var(--dp-panel); }
 .film-workbench .fw-stage-nav .fw-step-marker { color: var(--dp-ink); }
 .film-workbench .fw-stage-nav b { font-size: 14px; font-weight: 600; }
 .film-workbench .fw-stage-nav small { font-size: 11px; color: var(--dp-secondary); }
