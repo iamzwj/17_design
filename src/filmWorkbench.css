@@ -187,8 +187,13 @@
 .film-workbench .fw-activity-row header > small { font-size: 10px; }
 .film-workbench .fw-activity-row p { font-size: 12px; line-height: 1.7; margin: 8px 0; }
 .film-workbench .fw-activity-row .fw-task-link { font-size: 11px; padding: 3px 0; }
+.film-workbench { --fw-step-border: #adb6c5; }
+:root[data-theme=dark] .film-workbench { --fw-step-border: #555b68; }
 :root .film-studio .fw-stage-nav > button { background: transparent; border: 1px solid transparent; border-radius: 8px; min-height: 62px; padding: 10px; }
-:root .film-studio .fw-stage-nav > button.active { background: var(--dp-selected); border-color: var(--fw-accent); box-shadow: inset 3px 0 var(--fw-accent); }
+:root .film-studio .film-workbench .fw-stage-nav > button { border-color: var(--fw-step-border); }
+:root .film-studio .film-workbench .fw-stage-nav > button:is(:hover, .active) { border-color: var(--fw-accent); }
+:root .film-studio .film-workbench .fw-stage-nav > button:focus-visible { outline: 2px solid var(--fw-accent); outline-offset: 1px; }
+:root .film-studio .fw-stage-nav > button.active { background: var(--dp-selected); box-shadow: inset 3px 0 var(--fw-accent); }
 .film-workbench .fw-stage-nav b { font-size: 14px; font-weight: 600; }
 .film-workbench .fw-stage-nav small { font-size: 11px; color: var(--dp-secondary); }
 .film-workbench .fw-editor-form { padding: 22px; }
