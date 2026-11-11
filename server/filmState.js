@@ -239,7 +239,7 @@ export function applyCommand(p,c) {
   else if(type==='revise') {p.revisionRequest={text:body.text,targetId:body.id||null,at:Date.now()};p.status=p.schedulingPaused?'paused':'queued';}
   else if(type==='inventory') { p.uploads ||= [];p.uploads.push({...body,at:Date.now()}); }
   else if(type==='settings') {p.useTimeline=true;p.settings={...p.settings,...body.settings};p.output=null;p.status=p.schedulingPaused?'paused':'queued';}
-  else if(type==='timeline') {p.useTimeline=true;p.timeline=clone(body.timeline);p.timeline.revision=(p.timeline.revision||0)+1;p.output=null;p.status=p.schedulingPaused?'paused':'queued';}
+  else if(type==='timeline') {p.useTimeline=true;const revision=(p.timeline.revision||0)+1;p.timeline={...clone(body.timeline),revision};p.output=null;p.status=p.schedulingPaused?'paused':'queued';}
   else throw Error('未知任务操作');
   p.appliedCommands.push(c.id);
   event(p,'user',body.id || 'project',c.label || ({pause:'暂停新任务调度；已提交的外部任务继续回收结果',resume:'恢复自动制作',lock:body.locked?'锁定当前成果':'解除成果锁定',edit:'更新成果并计算下游影响',regenerate:'重新生成选中任务','retry-shot':'重试这个镜头的失败任务',restore:'恢复历史版本',upload:'上传并保留原始参考素材',timeline:'更新剪辑工程，仅重新导出成片',revise:'向总导演提交修改要求'}[type]||'更新项目'),{type:'command',commandId:c.id});

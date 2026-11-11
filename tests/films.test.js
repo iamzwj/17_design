@@ -76,6 +76,10 @@ test("film project survives worker restart, renders MP4, and remakes only select
         ],
       };
     } else if (req.url === "/v1/chat/completions") {
+      if (Array.isArray(b.messages[0].content)) {
+        res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({status:"pass",confidence:"high",summary:"测试参考一致",issues:[]})}}]}));
+        return;
+      }
       const revision = b.messages[0].content.includes("JSON数组");
       d = {
         choices: [

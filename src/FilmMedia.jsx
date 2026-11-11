@@ -4,9 +4,17 @@ import ImagePreview from "./ImagePreview.jsx";
 import "./filmMedia.css";
 import {getAuthToken} from "./api.js";
 const base=()=>String(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
-export default function FilmMedia({ project, file, characterId, video = false, audio = false }) {
+export default function FilmMedia({ project, file, characterId, video = false, audio = false, previewTime }) {
   const [url, setUrl] = useState(""), [mediaError, setMediaError] = useState(false), [retry, setRetry] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
+  const videoElement=useRef(null);
+  useEffect(() => {
+    const video=videoElement.current;
+    if (video && Number.isFinite(previewTime) && video.readyState >= 1) {
+      video.pause();
+      video.currentTime=Math.min(previewTime, Math.max(0,video.duration-.001));
+    }
+  }, [previewTime,url]);
   const container=useRef(null);const [visible,setVisible]=useState(false);
   useEffect(()=>{if(!('IntersectionObserver' in window)){setVisible(true);return;}const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){setVisible(true);observer.disconnect();}},{rootMargin:'200px'});if(container.current)observer.observe(container.current);return()=>observer.disconnect();},[]);
   useEffect(() => {
@@ -47,7 +55,9 @@ export default function FilmMedia({ project, file, characterId, video = false, a
   }, [project, file, characterId, retry, visible]);
   return <div className="film-media" ref={container}>{url ? (
     audio ? <audio onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata"/> : video ? (
-      <video onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata" />
+      <video ref={videoElement} onLoadedMetadata={event => {
+        if (Number.isFinite(previewTime)) event.currentTarget.currentTime=Math.min(previewTime,Math.max(0,event.currentTarget.duration-.001));
+      }} onError={() => { setUrl(""); setMediaError(true); }} src={url} controls preload="metadata" />
     ) : (
       <>
         <button className="image-preview-trigger film-image-preview-trigger" type="button" aria-label="放大预览制作素材" onClick={() => setPreviewUrl(url)}>

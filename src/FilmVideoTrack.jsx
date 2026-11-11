@@ -1,3 +1,4 @@
+import { filmClipDuration } from '../shared/filmTimelineEditing.js';
 import { useRef, useState } from 'react';
 import FilmMedia from './FilmMedia.jsx';
 import './filmVideoTrack.css';
@@ -8,7 +9,7 @@ const SCALE = 40;
 const round = seconds => Math.round(seconds * 1000) / 1000;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-export default function FilmVideoTrack({ project, clips, onChange, onSelect }) {
+export default function FilmVideoTrack({ project, clips, onChange, onSelect, canUndo, canRedo, onUndo, onRedo }) {
   const [selected, setSelected] = useState(0);
   const [position, setPosition] = useState(0);
   const [preview, setPreview] = useState(null);
@@ -39,9 +40,9 @@ export default function FilmVideoTrack({ project, clips, onChange, onSelect }) {
     const clip = source[index];
     const shot = shots.get(clip.shotId);
     const input = Number(clip.trimIn);
-    const end = round(input + Number(clip.duration));
+    const end = Math.min(round(input + Number(clip.duration)), filmClipDuration(shot));
     const measured = shot?.audio?.source && shot.audio.source === shot.video?.file ? shot.audio.duration : null;
-    const limit = Math.max(end, Number(measured || shot?.duration) || end);
+    const limit = Number(measured) || filmClipDuration(shot);
     const start = edge === 'start' ? round(clamp(input + delta, Math.max(0, end - 15), Math.min(120, end - MIN_CLIP))) : input;
     const out = edge === 'end' ? round(clamp(end + delta, input + MIN_CLIP, Math.min(limit, input + 15))) : end;
     return source.map((item, i) => i === index ? { ...clip, trimIn: start, duration: round(out - start) } : item);
@@ -52,6 +53,7 @@ export default function FilmVideoTrack({ project, clips, onChange, onSelect }) {
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { pointer: event.pointerId, x: event.clientX, clips, index, edge };
     setSelected(index);
+    setPosition(entries[index][edge === 'start' ? 'start' : 'end']);
   }
 
   function updateTrim(event, commit) {
@@ -67,6 +69,8 @@ export default function FilmVideoTrack({ project, clips, onChange, onSelect }) {
       if (changed.trimIn !== previous.trimIn || changed.duration !== previous.duration) onChange(next);
     } else {
       setPreview(next);
+      const start = next.slice(0, gesture.index).reduce((sum, clip) => sum + Number(clip.duration), 0);
+      setPosition(gesture.edge === 'start' ? start : start + Number(next[gesture.index].duration));
     }
   }
 
@@ -95,7 +99,13 @@ export default function FilmVideoTrack({ project, clips, onChange, onSelect }) {
 
   const tickStep = total > 120 ? 10 : 5;
   return <section className="film-video-lane" aria-label="视频轨道">
+    {entry && shots.get(entry.clip.shotId)?.video?.file && <div className="film-timeline-preview">
+      <FilmMedia project={project.id} file={shots.get(entry.clip.shotId).video.file} video
+        previewTime={Number(entry.clip.trimIn) + clamp(offset, 0, Number(entry.clip.duration))}/>
+    </div>}
     <div className="film-video-tools">
+      <button type="button" disabled={!canUndo || !!preview} onClick={onUndo}>撤销</button>
+      <button type="button" disabled={!canRedo || !!preview} onClick={onRedo}>重做</button>
       <output aria-label="播放头时间">{playhead.toFixed(1)} 秒</output>
       <button type="button" onClick={split} disabled={!canSplit}>切开</button>
       <button type="button" disabled={!entry || clips.length < 2 || !!preview} onClick={() => {

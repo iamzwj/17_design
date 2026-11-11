@@ -89,7 +89,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     {timelineOpen !== null && <div id="fw-timeline-panel" className="fw-timeline-sheet" ref={timelinePanel} hidden={!timelineOpen}>
       <button type="button" className="fw-timeline-close" onClick={closeTimeline}>关闭时间线</button>
       <FilmTimeline
-        key={(p.timeline?.revision || 0) + ':' + p.shots.map(s => s.id).join(',')}
+        key={p.id + ':' + p.shots.map(s => s.id).join(',')}
         project={p} request={request} send={send} notice={setNotice}
         onSelect={id => { chooseStage('storyboard'); setSelected(id); setTimelineOpen(false); }}
       />

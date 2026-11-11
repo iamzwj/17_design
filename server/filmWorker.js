@@ -16,6 +16,7 @@ import { createFilmDispatcher } from './filmScheduler.js';
 import { filmEvent } from '../shared/filmProgress.js';
 import { filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
+import { filmSettingGroups } from './filmLocations.js';
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -375,7 +376,9 @@ async function videoShot(p, s, i) {
   const references=p.referenceWorkflow
     ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
     : [];
-  const videoRefs=references.slice(0,p.videoModel==='wan-3.0'?9:8);
+  const tail = s.tail ? referenceImage(p,s.tail) : null;
+  const nativeTail = tail && SEEDANCE_MODELS.some(model => model.value === p.videoModel);
+  const videoRefs=nativeTail ? [] : references.slice(0,(p.videoModel==='wan-3.0'?9:8) - Number(Boolean(tail)));
   await generateShot(
     p,
     s,
@@ -383,8 +386,8 @@ async function videoShot(p, s, i) {
     {
       model: p.videoModel,
       prompt:
-        filmConsistencyPrompt(p,s) + "；" + s.prompt +
-        (videoRefs.length ? "。图1提供镜头构图与动作起点，后续图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
+        filmConsistencyPrompt(p,s) + "；" + s.prompt + (s.tail ? '。尾帧参考图是本镜动作终点：最后时刻的人物位置、手中道具和环境必须对应尾帧，禁止把首尾参考拼贴到视频。' : '') +
+        (videoRefs.length ? "。图1提供镜头构图与动作起点，中间参考图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
         (s.dialogue
           ? "。指定中文对白：" +
             s.dialogue +
@@ -393,7 +396,9 @@ async function videoShot(p, s, i) {
       images: [
         referenceImage(p,s.frame),
         ...videoRefs.map(r=>referenceImage(p,r)),
+        ...(tail && !nativeTail ? [tail] : []),
       ],
+      ...(nativeTail ? {tailFrameImageUrl:tail} : {}),
       aspectRatio:
         p.videoModel === "minimax-h3"
           ? p.ratio === "16:9"
@@ -414,7 +419,7 @@ async function quality(p, onlyShot) {
     check(p);
     if((onlyShot && shot.id!==onlyShot) || !shot.video || shot.stale || shot.paused)return;
     if(shot.manualApprovedVersion===shot.revision){shot.review={file:shot.video.file,status:"pass",summary:"用户已确认保留当前版本",manual:true};return;}
-    if(shot.review?.file===shot.video.file)return;
+    if(shot.review?.file===shot.video.file && shot.review.policy===2)return;
     const reviewedVersion=shot.revision,reviewVideo=shot.video.file,reviewFrame=shot.frame?.file;let reviewResult;
     const reviewTask=beginTask(p,taskId(shot.id,"review",reviewedVersion),"quality","quality",{name:`镜头 ${i+1} 一致性检查`});
     p.activeJobs ||= [];p.activeJobs.push({id:reviewTask.id,stage:"quality",resourceId:shot.id,message:`正在审核镜头 ${i+1}`,startedAt:Date.now()});save(p);
@@ -432,7 +437,7 @@ async function quality(p, onlyShot) {
           "-i",
           path.join(dir, reviewVideo),
           "-vf",
-          "fps=1,scale=320:-1,tile=3x1",
+          `fps=${12 / Math.max(.2, Number((await probe(path.join(dir, reviewVideo))).format.duration))},scale=320:-1,tile=4x3`,
           "-frames:v",
           "1",
           image,
@@ -440,41 +445,30 @@ async function quality(p, onlyShot) {
         { timeout: 60000 },
       );
       const prompt =
-        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性及明确的人车相对尺度错误（考虑景深与透视），不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
-        shot.prompt;
-      const d = await api("/v1beta/models/gemini-3.1-pro:generateContent", {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: "image/png",
-                  data: fs
-                    .readFileSync(path.join(dir, reviewFrame))
-                    .toString("base64"),
-                },
-              },
-              {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: fs.readFileSync(image).toString("base64"),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: { temperature: 0.1 },
-      });
-      const text = (d.candidates?.[0]?.content?.parts || [])
-        .map((p) => p.text || "")
-        .join("");
-      const result = JSON.parse(
-        text.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, ""),
-      );
+        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
+        shot.prompt + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
+      const extra = [];
+      const anchorIds = new Set([...(shot.resourceIds || [])]);
+      const images = [...p.resources.filter(r => anchorIds.has(r.id) && r.output && !r.stale).map(r => r.output), ...(shot.tail ? [shot.tail] : [])];
+      const previous = p.shots[i-1];
+      if (previous?.video && (previous.locationId || previous.sceneId) === (shot.locationId || shot.sceneId)) {
+        const previousImage = path.join(dir, `previous-${shot.id}-v${reviewedVersion}.jpg`);
+        await exec('ffmpeg',['-v','error','-y','-sseof','-0.1','-i',path.join(dir,previous.video.file),'-frames:v','1',previousImage],{timeout:60000});
+        images.push({file:path.basename(previousImage)});
+      }
+      for (const reference of images) {
+        const data = await sharp(path.join(dir,reference.file)).resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+        extra.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
+      }
+      const result = await reviewFilmImages(api, [
+        {text: prompt + '。明确证据填 confidence: high，不确定填 low。'},
+        {inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(dir,reviewFrame)).toString('base64')}},
+        {inline_data:{mime_type:'image/jpeg',data:fs.readFileSync(image).toString('base64')}},
+        ...extra,
+      ]);
       reviewResult = {
         file: reviewVideo,
+        policy: 2,
         status: result.status === "pass" ? "pass" : "review",
         summary: String(result.summary || "请核对镜头"),
         issues: Array.isArray(result.issues)?result.issues:[], evidence: {frame:reviewFrame,video:reviewVideo,contact:`check-${shot.id}-v${reviewedVersion}.jpg`},
@@ -482,9 +476,10 @@ async function quality(p, onlyShot) {
     } catch (e) {
       reviewResult = {
         file: reviewVideo,
+        policy: 2,
         status: "review",
         summary:
-          "自动画面检查未完成，请人工核对；已生成镜头保留。" +
+          "自动画面检查服务暂不可用，记录结果并继续制作。" +
           String(e.message).slice(0, 100),
       };
     }
@@ -688,7 +683,7 @@ function approvedSetting(resource) {
 
 function usableSetting(resource) {
   return approvedSetting(resource) || Boolean(resource?.output && !resource.stale &&
-    resource.assetReview?.version === resource.revision && resource.assetReview.file === resource.output.file);
+    resource.assetReview?.status !== 'repair' && resource.assetReview?.version === resource.revision && resource.assetReview.file === resource.output.file);
 }
 
 async function reviewSetting(p, resource, references) {
@@ -699,7 +694,7 @@ async function reviewSetting(p, resource, references) {
   let review;
   try {
     const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingChecks[resource.type] || '核对图像是否满足设定中的明确要求')+
-      '。必须核对全片风格，写实时卡通、插画、概念绘画属于明确错误。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
+      '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+'。必须核对全片风格，写实时卡通、插画、概念绘画属于明确错误。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
       '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。若能明确指出至少一处可见且可修复的错误（包括遗漏明确要求的视图或连接路径），返回 repair 和 high，并在 correction 写清要补什么，即使其他项目无法确认。只有没有明确错误但存在不确定时才返回 review。全部要求均确认符合才 pass。'}];
     for(const image of [output,...references]) {
       const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
@@ -713,9 +708,47 @@ async function reviewSetting(p, resource, references) {
   }
   check(p);
   if(!p.resources.includes(resource) || resource.revision!==revision || resource.output?.file!==output.file)return;
-  resource.assetReview = {...review,file:output.file,version:revision,policy:2};
+  resource.assetReview = {...review,file:output.file,version:revision,policy:2,locationPolicy:resource.locationId ? 1 : undefined};
   if(review.status==='pass')resource.approvedVersion=revision;
+  else if(review.status==='repair' && !resource.locked)resource.approvedVersion=null;
   event(p,'director',id,resource.name+' · '+(review.status==='pass'?'通过并锁定引用版本':'记录风险')+' · '+review.summary,{type:'decision'});
+  save(p);
+}
+
+async function reviewLocationGroup(p, location) {
+  const ids = [location.masterSceneId, ...location.sceneIds.filter(id => id !== location.masterSceneId)];
+  const group = ids.map(id => p.resources.find(resource => resource.id === id + '-environment'));
+  if (group.length < 2 || !group.every(usableSetting)) return;
+  const files = group.map(resource => resource.output.file);
+  const key = JSON.stringify(files);
+  p.locationReviews ||= {};
+  if (p.locationReviews[location.id]?.key === key) return;
+  let review;
+  try {
+    const parts = [{text: '整组场景一致性审核。第一张是地点主图，其余按下列顺序是各区域昼夜设定图：' +
+      JSON.stringify(group.map(resource => ({id:resource.id,name:resource.name}))) +
+      '。固定空间和连接：' + JSON.stringify(location) +
+      '。逐图横向比较固定建筑、门岗、地标、道路连通性和材质，允许视角与昼夜变化。只有明确可见、可定位且能按主图修复的子区域错误才返回 repair。否则证据不足用 review，确认一致用 pass。只输出 JSON {status,confidence:"high"|"low",summary:"可见证据",targetId:"待修复子区域ID",correction:"定向修复要求"}。'}];
+    for (const file of files) {
+      const image = await sharp(path.join(root,p.id,file)).resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).jpeg().toBuffer();
+      parts.push({inline_data:{mime_type:'image/jpeg',data:image.toString('base64')}});
+    }
+    review = await reviewFilmImages(api, parts);
+  } catch (error) {
+    review = {status:'review',confidence:'low',summary:'整组自动审核暂不可用：'+error.message};
+  }
+  check(p);
+  if (!group.every((resource, index) => p.resources.includes(resource) && resource.output?.file === files[index])) return;
+  p.locationReviews[location.id] = {...review,key};
+  event(p,'director','location-review:'+location.id,location.name+' · '+review.summary,{type:'decision'});
+  const target = group.slice(1).find(resource => resource.id === review.targetId);
+  const attempts = target?.qualityRepairAttempts || 0;
+  if (review.status === 'repair' && target && !target.locked && !target.paused && !p.pausedStages?.[target.category] &&
+      attempts < 2 && typeof review.correction === 'string' && review.correction.trim()) {
+    applyCommand(p,{id:'location-repair:'+taskId(target.id,'image',target.revision),type:'regenerate',body:{id:target.id}});
+    target.qualityRepairAttempts = attempts + 1;
+    target.reviewCorrection = review.correction;
+  }
   save(p);
 }
 
@@ -727,7 +760,7 @@ async function referenceAssets(p, onlyResource) {
   save(p);
   const inventoryKey='reference-inventory:'+p.scriptRevision;
   if(strict && !p.events.some(e=>e.taskId===inventoryKey))event(p,'director',inventoryKey,`识别了 ${p.characters.length} 名角色、${p.scenes.length} 个场景，安排制作 ${resources.length} 张设定图`);
-  for(const group of [resources.filter(r=>r.type!=='wardrobe'),resources.filter(r=>r.type==='wardrobe')]) {
+  for(const group of filmSettingGroups(resources)) {
     await filmPool(group,5,async r=>{
       if(p.pausedStages?.images || r.paused || r.stale || p.pausedStages?.[r.category])return;
       const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
@@ -740,14 +773,14 @@ async function referenceAssets(p, onlyResource) {
         if(!r.output) {
           await generate(p,r,'image',{
             model:p.imageModel,
-            prompt:[references.length?'严格匹配参考图的视觉媒介和人物身份：真人参考必须是同一真人照片质感的全身服装，禁止变成卡通、插画、概念设计图或游戏角色。若参考图为动画则保持其动画风格。':'',r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
+            prompt:[references.length && r.type==='environment' ? '以共同地点参考图为建筑与空间依据，固定地标、门岗、道路和材质；仅改变本区域观察位置与光照。' : references.length?'严格匹配参考图的视觉媒介和人物身份：真人参考必须是同一真人照片质感的全身服装，禁止变成卡通、插画、概念设计图或游戏角色。若参考图为动画则保持其动画风格。':'',r.locationConstraint,r.prompt,r.reviewCorrection].filter(Boolean).join('；'),
             images:references.map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
-        if(!r.output || approvedSetting(r))return;
+        if(!r.output || (approvedSetting(r) && (!r.locationId || r.assetReview?.locationPolicy===1)))return;
         if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file ||
-          (r.assetReview.status==='review' && r.assetReview.policy!==2))await reviewSetting(p,r,references);
+          (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
         const review=r.assetReview;
         const attempts = r.qualityRepairAttempts ?? Number(Boolean(r.qualityRetryUsed));
         if(review?.version!==r.revision || review.status!=='repair' || r.locked || attempts>=2)return;
@@ -769,6 +802,10 @@ async function referenceAssets(p, onlyResource) {
   }
   check(p);
   if(onlyResource || p.needsRerun || p.schedulingPaused) return;
+  for (const location of p.locations || []) {
+    await reviewLocationGroup(p, location);
+    if (p.needsRerun) return;
+  }
   if(!strict) {
     await filmPool(p.resources.filter(r=>r.output && !r.stale && r.type!=='reference-original' && !settingChecks[r.type]),10,async r=>{
       if(r.assetReview?.file===r.output.file)return;
@@ -955,6 +992,7 @@ const stage =
       if(p.needsRerun){p.needsRerun=false;p.status='queued';save(p);return {...state,halted:true};}
       return { ...state, halted: ["review","queued","needs-input","failed"].includes(p.status) };
     } catch (e) {
+      if (p.needsRerun && !p.schedulingPaused) { p.needsRerun=false; p.status='queued'; save(p); return {...state,halted:true}; }
       if(p.schemaVersion===2 && await recoverFailure(p,e))return {...state,halted:true};
       p.status = fs.existsSync(path.join(root, p.id, "cancel"))
         ? "cancelled"

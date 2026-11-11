@@ -1,7 +1,7 @@
 import { SEEDANCE_MODELS } from '../shared/filmVideoModels.js'
 import { vibbitApi, normalizeVibbitTask } from './vibbitImages.js'
 
-export async function submitSeedanceShot({ model, prompt, images, duration, resolution, aspectRatio }) {
+export async function submitSeedanceShot({ model, prompt, images, tailFrameImageUrl, duration, resolution, aspectRatio }) {
   const info = SEEDANCE_MODELS.find((entry) => entry.value === model)
   const input = {
     model,
@@ -11,7 +11,11 @@ export async function submitSeedanceShot({ model, prompt, images, duration, reso
     aspect_ratio: aspectRatio,
     generate_audio: true,
   }
-  if (images.length === 1) {
+  if (tailFrameImageUrl && images[0]) {
+    input.first_frame_image_url = images[0]
+    input.last_frame_image_url = tailFrameImageUrl
+    input.aspect_ratio = 'adaptive'
+  } else if (images.length === 1) {
     input.first_frame_image_url = images[0]
     input.aspect_ratio = 'adaptive'
   } else if (images.length > 1) {

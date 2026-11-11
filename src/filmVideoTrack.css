@@ -69,3 +69,6 @@
 .film-video-tools { padding: 4px 0; }
 .film-studio .film-video-tools > button { min-height: 30px; padding: 5px 10px; font-size: 12px; }
 .film-video-time { margin-bottom: 16px; }
+
+.film-timeline-preview { max-width: 360px; margin: 0 auto 12px; }
+.film-timeline-preview video { display: block; max-height: 180px; width: 100%; object-fit: contain; background: #111; }
