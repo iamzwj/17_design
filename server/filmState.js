@@ -140,6 +140,47 @@ export function applyCommand(p,c) {
       target.assetReview={...target.assetReview,file:target.output.file,version:target.revision,status:'manual',summary:'用户确认使用当前设定图。'};
     }
     p.needsRerun=true;p.error=null;p.status=p.schedulingPaused?'paused':'queued'; }
+  else if(type==='redo-media') {
+    mutable();
+    const kind = body.kind;
+    const allowed = isShot ? ['frame','tail','video','audio'] : ['image'];
+    const current = kind === 'image' ? target.output : target[kind];
+    if(!allowed.includes(kind) || !current?.file || target.paused || target.stale ||
+        p.replacement || (['running','queued','pausing'].includes(p.status) && !c.internal))throw Error('当前成果暂时无法重做，请等待制作完成或恢复此成果。');
+    archive(target);
+    target.revision++;
+    if(kind === 'image') {
+      const review = target.assetReview;
+      target.reviewCorrection = review?.file === current.file && !['pass','manual'].includes(review.status)
+        ? [review.correction,review.summary].find(text => typeof text === 'string' && text.trim())
+        : null;
+      target.approvedVersion=null;
+      target.qualityRetryUsed=false;
+      target.qualityRepairAttempts=0;
+      target.output=null;
+    }
+    target[kind]=null;
+    target[kind+'Task']=null;
+    target[kind+'Submitting']=false;
+    target[kind+'Attempts']=0;
+    if(kind==='video') {
+      target.audio=null;
+      target.review=null;
+      target.repairAttempts=0;
+    }
+    p.replacement={id:target.id,kind};
+    p.status=p.schedulingPaused?'paused':'queued';
+    p.error=null;
+    p.nextRunAt=0;
+  }
+  else if(type==='export-replacement') {
+    if(!p.output || !p.replacementReady || p.replacement || ['running','queued','pausing'].includes(p.status))
+      throw Error('当前没有可替换到成片的新素材');
+    p.replacement={kind:'export'};
+    p.status=p.schedulingPaused?'paused':'queued';
+    p.error=null;
+    p.nextRunAt=0;
+  }
   else if(type==='edit' || type==='regenerate' || type==='restore' || type==='upload') {
     mutable();
     const changed=type==='edit'?Object.keys(body.patch||{}).filter(key=>JSON.stringify(target[key])!==JSON.stringify(body.patch[key])):[];
@@ -170,6 +211,7 @@ export function applyCommand(p,c) {
     if(!isShot) {
       target.approvedVersion=null;
       target.qualityRetryUsed=false;
+      target.qualityRepairAttempts=0;
       target.reviewCorrection=null;
       if(type==='upload' && target.type==='face')target.characterReference=null;
     }

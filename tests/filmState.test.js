@@ -22,3 +22,35 @@ test('selecting a library identity during production versions the face and only 
  assert.equal(p.resources.find(r=>r.id==='c1-look').output,null);assert.equal(p.shots[0].video,null);assert.equal(p.shots[1].video.file,'other.mp4');
  assert.equal(p.status,'queued');assert.equal(p.appliedCommands.filter(id=>id===c.id).length,1);
 });
+
+test('targeted redo preserves the finished film, unrelated clips and timeline', () => {
+  const p = fixture();
+  p.status = 'succeeded';
+  p.output = 'finished.mp4';
+  p.shots[0].frame = {file:'original-frame.png'};
+  const timeline = clone(p.timeline);
+  command(p, 'redo-media', {id:'s1',kind:'video'});
+  assert.deepEqual(p.replacement, {id:'s1',kind:'video'});
+  assert.equal(p.output, 'finished.mp4');
+  assert.equal(p.shots[0].video, null);
+  assert.equal(p.shots[0].frame.file, 'original-frame.png');
+  assert.equal(p.shots[1].video.file, 'other.mp4');
+  assert.deepEqual(p.timeline, timeline);
+  assert.throws(() => command(p, 'export-replacement', {}), /没有可替换/);
+  p.replacement = null;
+  p.replacementReady = true;
+  p.status = 'succeeded';
+  command(p, 'export-replacement', {});
+  assert.deepEqual(p.replacement, {kind:'export'});
+  assert.equal(p.output, 'finished.mp4');
+});
+
+test('redoing a reviewed setting uses the existing correction without invalidating clips', () => {
+  const p = fixture();
+  p.status = 'succeeded';
+  p.resources[0].assetReview = {file:'old.png',status:'repair',correction:'补全入口到电梯的路径'};
+  command(p, 'redo-media', {id:'r1',kind:'image'});
+  assert.equal(p.resources[0].reviewCorrection, '补全入口到电梯的路径');
+  assert.equal(p.resources[0].output, null);
+  assert.equal(p.shots[0].video.file, 'old.mp4');
+});

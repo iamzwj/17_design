@@ -5,9 +5,9 @@ import {beginTask,finishTask,event,taskId} from './filmState.js';
 const exec=promisify(execFile);
 export const probe=async file=>JSON.parse((await exec('ffprobe',['-v','error','-show_streams','-show_format','-of','json',file],{timeout:30000})).stdout);
 const stamp=t=>{const ms=Math.round(t*1000);return `${String(Math.floor(ms/3600000)).padStart(2,'0')}:${String(Math.floor(ms/60000)%60).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')},${String(ms%1000).padStart(3,'0')}`;};
-export async function prepareFilmAudio(p,{root,api,save,check}) {
+export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
   p.stage='audio';save(p);const dir=path.join(root,p.id);
-  for(const shot of p.shots.filter(s=>s.video && !s.stale && !s.paused)) {
+  for(const shot of p.shots.filter(s=>(!onlyShot || s.id===onlyShot) && s.video && !s.stale && !s.paused)) {
     check(p);if(shot.audio?.source===shot.video.file)continue;
     const version=shot.revision,id=taskId(shot.id,'audio',version),t=beginTask(p,id,'audio','audio',{name:`镜头 ${shot.id} 声音与字幕`,version},[taskId(shot.id,'video',version)]);save(p);
     try {

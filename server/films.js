@@ -243,10 +243,10 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     res.json({ reviewDismissed: fingerprint });
   });
   app.get('/api/films/:id/media',requireAuth,(req,res)=>{const p=owned(req,res);if(p)res.json({media:filmMediaIndex(p,req.query.history==='1')});});
-  const commandRoute = (fn) => async (req,res,next) => { try { await fn(req,res); } catch(e) { if(e.status) return res.status(e.status).json({error:e.message}); if(/锁定|不存在|无效|未知|上限|先解锁|重试|版本已更新/.test(e.message)) return res.status(400).json({error:e.message}); next(e); } };
+  const commandRoute = (fn) => async (req,res,next) => { try { await fn(req,res); } catch(e) { if(e.status) return res.status(e.status).json({error:e.message}); if(/锁定|不存在|无效|未知|上限|先解锁|重试|版本已更新|暂时无法重做|没有可替换/.test(e.message)) return res.status(400).json({error:e.message}); next(e); } };
   const validateCommand = (p,type,body) => {
     const projected=clone(p);for(const command of pendingCommands(root,p))applyCommand(projected,command);p=projected;
-    const allowed=['character-mode','character-reference','pause','resume','lock','task-pause','keep','edit','regenerate','retry-shot','restore','script','script-lock','revise','settings','timeline','upload','add-outfit','stage-pause'];
+    const allowed=['character-mode','character-reference','pause','resume','lock','task-pause','keep','edit','regenerate','redo-media','export-replacement','retry-shot','restore','script','script-lock','revise','settings','timeline','upload','add-outfit','stage-pause'];
     if(type==='character-reference' && !body.file?.startsWith('asset-character-'))throw Error('角色参考无效');
     if(!allowed.includes(type))throw Error('未知操作');
     if(body.patch?.duration!==undefined && (!Number.isFinite(body.patch.duration)||body.patch.duration<1||body.patch.duration>10))throw Error('镜头时长必须在1至10秒，复杂镜头请拆分');
