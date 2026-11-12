@@ -1,5 +1,5 @@
 import { userError } from './userErrors.js'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createVideoTask, fileToDataUrl, getVideoTask, listVideoTasks, uploadVideoReference } from './api.js'
 import { Icon } from './icons.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
@@ -78,6 +78,10 @@ export default function VideoStudio() {
   const videoRef = useRef(null)
   const resultsRef = useRef(null)
   const promptRef = useRef(null)
+  const listRef = useRef(null)
+  const composerRef = useRef(null)
+  const followingLatest = useRef(true)
+  const lastResultsTop = useRef(0)
   const selectedModel = MODELS.find((item) => item.value === model) || MODELS[0]
   const modes = availableModes(selectedModel)
   const legacyMode = referenceMode === 'text' || referenceMode === 'image'
@@ -90,16 +94,47 @@ export default function VideoStudio() {
   const images = references.filter((item) => item.kind === 'image')
   const videos = references.filter((item) => item.kind === 'video')
 
-  const orderedTasks = useMemo(() => [...tasks].sort((left, right) => right.createdAt - left.createdAt), [tasks])
+  const orderedTasks = useMemo(() => [...tasks].sort((left, right) => left.createdAt - right.createdAt), [tasks])
+  const hasTasks = !loadingTasks && tasks.length > 0
 
   useEffect(() => {
     void listVideoTasks().then((result) => {
-      setTasks(result.tasks || [])
-      window.requestAnimationFrame(() => {
-        if (resultsRef.current) resultsRef.current.scrollTop = 0
+      setTasks((current) => {
+        const loaded = new Map((result.tasks || []).map((task) => [task.id, task]))
+        for (const task of current) loaded.set(task.id, task)
+        return [...loaded.values()]
       })
     }).catch((requestError) => setError(userError(requestError.message))).finally(() => setLoadingTasks(false))
   }, [])
+
+  useLayoutEffect(() => {
+    const results = resultsRef.current
+    const composer = composerRef.current
+    if (!results || !composer) return undefined
+
+    function fitResults() {
+      results.style.setProperty('--video-composer-height', `${composer.offsetHeight}px`)
+      results.style.setProperty('--video-results-height', `${results.clientHeight}px`)
+      if (followingLatest.current) {
+        results.scrollTop = results.scrollHeight
+        lastResultsTop.current = results.scrollTop
+      }
+    }
+
+    fitResults()
+    const observer = new ResizeObserver(fitResults)
+    observer.observe(results)
+    observer.observe(composer)
+    if (listRef.current) observer.observe(listRef.current)
+    return () => observer.disconnect()
+  }, [hasTasks])
+
+  useLayoutEffect(() => {
+    const results = resultsRef.current
+    if (!hasTasks || !results || !followingLatest.current) return
+    results.scrollTop = results.scrollHeight
+    lastResultsTop.current = results.scrollTop
+  }, [hasTasks, orderedTasks])
 
   useEffect(() => {
     if (!modes.includes(referenceMode)) { setReferenceMode('reference'); setReferences([]) }
@@ -183,10 +218,12 @@ export default function VideoStudio() {
     }
   }
 
-  function scrollToLatestTask() {
-    window.requestAnimationFrame(() => {
-      if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' })
-    })
+  function handleResultsScroll(event) {
+    const results = event.currentTarget
+    const top = results.scrollTop
+    if (results.scrollHeight - results.clientHeight - top <= 24) followingLatest.current = true
+    else if (top < lastResultsTop.current) followingLatest.current = false
+    lastResultsTop.current = top
   }
 
   async function submit() {
@@ -196,7 +233,8 @@ export default function VideoStudio() {
     if (['edit', 'extend'].includes(referenceMode) && !videos.length) { setError('视频编辑和视频延长都需要上传一段源视频'); return }
     const request = { skillId: skillState.id, prompt: prompt.trim(), model, resolution, duration, aspectRatio: locksAspectRatio ? 'adaptive' : aspectRatio, referenceMode, references: [...references] }
     const optimistic = { skillSnapshot: skillState.selected ? { id: skillState.selected.id, title: skillState.selected.title } : null, id: `local-${Date.now()}`, prompt: request.prompt, model, resolution, durationSeconds: request.duration, aspectRatio: request.aspectRatio, referenceMode, referenceImages: images.map((item) => item.src), referenceVideos: videos.map((item) => item.src), status: 'PENDING', createdAt: Date.now() }
-    setTasks((current) => [...current, optimistic]); scrollToLatestTask(); setError(''); setPrompt(''); setReferences([])
+    followingLatest.current = true
+    setTasks((current) => [...current, optimistic]); setError(''); setPrompt(''); setReferences([])
     try {
       const uploaded = await Promise.all(request.references.map(async (reference) => ({
         ...reference,
@@ -222,8 +260,8 @@ export default function VideoStudio() {
   }
 
   return <section className={`workspace video-waterfall-workspace ${!loadingTasks && tasks.length === 0 ? 'empty' : ''}`}>
-    <div className="video-waterfall-results" ref={resultsRef}>
-      {loadingTasks ? <div className="waterfall-initial-loading" aria-label="加载视频任务"><i/><i/><i/></div> : tasks.length === 0 ? <GenerationWelcome video/> : <div className="video-waterfall-list">
+    <div className="video-waterfall-results" ref={resultsRef} onScroll={handleResultsScroll}>
+      {loadingTasks ? <div className="waterfall-initial-loading" aria-label="加载视频任务"><i/><i/><i/></div> : tasks.length === 0 ? <GenerationWelcome video/> : <div className="video-waterfall-list" ref={listRef}>
         {orderedTasks.map((task) => (
           <article className="video-waterfall-task" key={task.id}>
             <header>
@@ -253,7 +291,7 @@ export default function VideoStudio() {
         ))}
       </div>}
     </div>
-    <div className="waterfall-composer-wrap">
+    <div className="waterfall-composer-wrap" ref={composerRef}>
       {modes.length > 0 && <div className="reference-mode-picker" aria-label="参考方式">{modes.map((mode) => <button type="button" key={mode} className={referenceMode === mode ? 'selected' : ''} onClick={() => selectMode(mode)}>{REFERENCE_MODES[mode].label}</button>)}</div>}
       <div className="composer waterfall-composer glass-strong">
         {references.length > 0 && <div className="reference-strip sortable-reference-strip video-reference-strip" aria-label="视频参考素材，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview">{item.kind === 'video' ? <video muted preload="metadata" src={item.src}/> : <img src={item.src} alt="参考图"/>}</button><span className="reference-order">{referenceLabel(referenceMode, item, index)}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考素材"><Icon name="x" size={13}/></button></div>)}</div>}
