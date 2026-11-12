@@ -164,6 +164,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       assets: [],
       automatic: true,
       referenceWorkflow: true,
+      editorialWorkflow: true,
     };
     filmEvent(p, "created", "已接收故事，等待 AI 导演开始统筹制作");
     write(p);

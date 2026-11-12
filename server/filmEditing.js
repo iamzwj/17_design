@@ -31,6 +31,18 @@ export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
   }
   p.audioReady=p.shots.every(s=>s.audio&&s.video?.file===s.audio.source);save(p);
 }
+export function automaticFilmClip(project, shot) {
+  const duration = shot.audio?.duration || shot.duration;
+  const full = {shotId:shot.id,trimIn:0,duration};
+  const edit = shot.review?.file === shot.video?.file ? shot.review?.edit : null;
+  if (!project.editorialWorkflow || !edit || typeof edit.evidence !== 'string' || !edit.evidence.trim() ||
+      !Number.isFinite(edit.start) || !Number.isFinite(edit.end) || edit.start < 0 ||
+      edit.end > duration || edit.end - edit.start < 1) return full;
+  if (shot.dialogue && (!shot.audio?.segments?.length ||
+      shot.audio.segments.some(segment => segment.start < edit.start || segment.end > edit.end))) return full;
+  return {shotId:shot.id,trimIn:edit.start,duration:edit.end-edit.start};
+}
+
 export async function renderFilmTimeline(p,{root,save,check}) {
   if(p.pausedStages?.editing||!p.shots.length)throw Object.assign(Error('等待上游阶段或已暂停的剪辑阶段恢复'),{code:'INPUT'});
   const invalid=p.shots.filter(s=>!s.video||s.paused||s.stale);
@@ -38,7 +50,7 @@ export async function renderFilmTimeline(p,{root,save,check}) {
   check(p);p.stage='editing';const id=taskId('timeline-'+createHash('sha256').update(JSON.stringify({shots:p.shots.map(s=>[s.id,s.revision,s.video?.file]),timeline:p.timeline,settings:p.settings})).digest('hex').slice(0,12),'editor',p.timeline.revision||1),t=beginTask(p,id,'editing','editor',{name:'自动剪辑与成片导出',timeline:p.timeline},p.shots.map(s=>taskId(s.id,'audio',s.revision)));save(p);
   const dir=path.join(root,p.id),renderId=Date.now(),work=path.join(dir,`render-${renderId}`);fs.mkdirSync(work,{recursive:true});
   const [w, h] = filmOutputDimensions(p);
-  const clips=p.timeline.clips.length?p.timeline.clips:p.shots.map(s=>({shotId:s.id,trimIn:0,duration:s.audio?.duration || s.duration}));
+  const clips=p.timeline.clips.length?p.timeline.clips:p.shots.map(shot=>automaticFilmClip(p,shot));
   p.timeline.clips=clips;
   const signature=()=>JSON.stringify({shots:p.shots.map(s=>[s.id,s.revision,s.video?.file]),clips:p.timeline.clips,tracks:p.timeline.tracks,revision:p.timeline.revision,settings:p.settings});
   const inputSignature=signature();

@@ -379,7 +379,7 @@ async function videoShot(p, s, i) {
     : [];
   const tail = s.tail ? referenceImage(p,s.tail) : null;
   const nativeTail = tail && SEEDANCE_MODELS.some(model => model.value === p.videoModel);
-  const videoRefs=nativeTail ? [] : references.slice(0,(p.videoModel==='wan-3.0'?9:8) - Number(Boolean(tail)));
+  const videoRefs=nativeTail || (p.editorialWorkflow && p.videoModel === 'minimax-h3') ? [] : references.slice(0,(p.videoModel==='wan-3.0'?9:8) - Number(Boolean(tail)));
   await generateShot(
     p,
     s,
@@ -447,7 +447,7 @@ async function quality(p, onlyShot) {
       );
       const prompt =
         '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
-        shot.prompt + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
+        shot.prompt + (p.editorialWorkflow ? '。同时给剪辑建议 edit:{start:秒,end:秒,evidence:具体动作}。只有从实际画面可确定重复起手或结尾空停才建议裁剪。保留本镜新增的动作和声音，不确定省略 edit。预计取用时长：'+(shot.editDuration || shot.duration)+'秒' : '') + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
       const extra = [];
       const anchorIds = new Set([...(shot.resourceIds || [])]);
       const images = [...p.resources.filter(r => anchorIds.has(r.id) && r.output && !r.stale).map(r => r.output), ...(shot.tail ? [shot.tail] : [])];
@@ -470,6 +470,7 @@ async function quality(p, onlyShot) {
       reviewResult = {
         file: reviewVideo,
         policy: 2,
+        ...(p.editorialWorkflow && result.confidence==='high' && result.edit ? {edit:result.edit} : {}),
         status: result.status === "pass" ? "pass" : "review",
         summary: String(result.summary || "请核对镜头"),
         issues: Array.isArray(result.issues)?result.issues:[], evidence: {frame:reviewFrame,video:reviewVideo,contact:`check-${shot.id}-v${reviewedVersion}.jpg`},
@@ -697,12 +698,16 @@ async function reviewSetting(p, resource, references) {
   const lightingCheck = lightingPeriods?.length
     ? '。只审核这些时段：'+lightingPeriods.join('、')+'。画出未列出的时段视为可修正错误'
     : '';
+  const settingCheck = p.editorialWorkflow && resource.type === 'wardrobe'
+    ? settingChecks.wardrobe.replace('同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
+      '画面只出现一个穿着指定服装的人，从头到脚完整可见，脸、服装、鞋履和配饰清楚，无多视图拼版')
+    : settingChecks[resource.type];
   const sceneStyle = resource.type === 'environment' && filmSceneStyle(p.settings?.style);
   const styleCheck = sceneStyle
     ? '。逐张检查主图和细节小图的实际渲染媒介，用可见的实体厚度、边缘倒角、遮挡及接触阴影判断。标题、标注写着“三维”、单有透视或昼夜光差均不能作为通过依据。任何一格明确呈二维插画时填 repair/high，并指出哪一格需要三维重渲染'
     : '。核对实际画面是否符合指定的全片视觉风格';
   try {
-    const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingChecks[resource.type] || '核对图像是否满足设定中的明确要求')+
+    const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingCheck || '核对图像是否满足设定中的明确要求')+
       '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+lightingCheck+styleCheck+'。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
       '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。若能明确指出至少一处可见且可修复的错误（包括遗漏明确要求的视图或连接路径），返回 repair 和 high，并在 correction 写清要补什么，即使其他项目无法确认。只有没有明确错误但存在不确定时才返回 review。全部要求均确认符合才 pass。'}];
     for(const image of [output,...references]) {
@@ -796,9 +801,12 @@ async function referenceAssets(p, onlyResource) {
           const repair = previous
             ? '第一张是待修的上一版场景图。保留已经符合要求的布局、材质和光照，只修改以下明确缺陷：'+correction
             : correction;
+          const castGuide = p.editorialWorkflow && r.type === 'wardrobe'
+            ? '输出一张从头到脚的定妆参考，只出现一个人物，脸部可辨认、指定服装和配饰完整可见。忽略设定中关于正侧背拼版的排版描述。'
+            : '';
           await generate(p,r,'image',{
             model,
-            prompt:[landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
+            prompt:[castGuide,landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
             images:[...(previous ? [previous] : []),...references].map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
@@ -920,10 +928,11 @@ async function produceShots(p) {
   save(p);
 }
 async function directorReview(p) {
-  const issues=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
+  const pending=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
   const unresolvedSettings=(p.resources||[]).filter(r=>r.output&&!r.stale&&r.assetReview&&r.assetReview.status!=='pass');
   const assetIssues=p.referenceWorkflow?[]:unresolvedSettings.filter(r=>!settingChecks[r.type]);
-  p.reviewWarning=issues.length+unresolvedSettings.length+filmLocationReviewTargets(p).length+Number(p.continuityReview?.status==='manual');
+  const issues=p.editorialWorkflow ? pending.filter(s=>s.review?.issues?.some(issue=>issue.confidence==='high' && issue.evidence)) : pending;
+  p.reviewWarning=pending.length+unresolvedSettings.length+filmLocationReviewTargets(p).length+Number(p.continuityReview?.status==='manual');
   if(!issues.length&&!assetIssues.length)return;
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {

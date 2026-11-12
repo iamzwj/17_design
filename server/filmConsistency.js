@@ -6,7 +6,7 @@ export function filmSceneStyle(style) {
 }
 
 export function filmConsistencyPrompt(p, shot) {
-  const cast = (p.characters || []).map(c => ({id:c.id,name:c.name,identity:c.identity,voice:c.voice,outfits:(c.outfits || []).filter(o => (shot.outfitIds || []).includes(o.id))}));
+  const cast = (p.characters || []).map(c => ({id:c.id,name:c.name,identity:c.identity,voice:c.voice,outfits:(c.outfits || []).filter(o => shot.outfitByCharacter?.[c.id] ? shot.outfitByCharacter[c.id] === o.id : (shot.outfitIds || []).includes(o.id))}));
   const scene = (p.scenes || []).find(s => s.id === shot.sceneId);
   const location = p.locations?.find(item => item.id === scene?.locationId);
   return [
