@@ -1,3 +1,4 @@
+import { seedMarketingDocuments, prepareActivityContext } from './marketing.js'
 import { documentProgress } from './progress.js'
 import { processPagePool, VISION_LIMITS } from './pagePool.js'
 import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../../shared/knowledgeUpload.js'
@@ -28,7 +29,7 @@ const segmenter = new Intl.Segmenter('zh', { granularity: 'word' })
 function terms(text) { return [...new Set([...segmenter.segment(text.toLowerCase())].filter((x) => x.isWordLike).map((x) => x.segment))] }
 function similarity(a, b) { if (a.length !== b.length) return 0; return a.reduce((sum, value, i) => sum + value * b[i], 0) }
 
-export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, automaticVision = true, materialDir = fileURLToPath(new URL('../../public/material-library/', import.meta.url)) }) {
+export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, automaticVision = true, backgroundProcessing = true, materialDir = fileURLToPath(new URL('../../public/material-library/', import.meta.url)) }) {
   const directory = path.join(dataDir, 'knowledge'), originals = path.join(directory, 'originals')
   fs.mkdirSync(originals, { recursive: true })
   const visuals = path.join(directory, 'visuals'); fs.mkdirSync(visuals, { recursive: true })
@@ -47,12 +48,14 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     CREATE TABLE IF NOT EXISTS traces(id TEXT PRIMARY KEY,brand_id TEXT NOT NULL,json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS analyses(id TEXT PRIMARY KEY,json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS material_snapshots(id TEXT PRIMARY KEY,json TEXT NOT NULL);`)
-  const all = (table) => db.prepare(`SELECT json FROM ${table}`).all().map(parse)
-  const get = (table, key) => parse(db.prepare(`SELECT json FROM ${table} WHERE id=?`).get(key))
+  const statements = new Map()
+  const statement = (sql) => { if (!statements.has(sql)) statements.set(sql, db.prepare(sql)); return statements.get(sql) }
+  const all = (table) => statement(`SELECT json FROM ${table}`).all().map(parse)
+  const get = (table, key) => parse(statement(`SELECT json FROM ${table} WHERE id=?`).get(key))
   const assetVersion = (key) => get('versions', key) || get('material_snapshots', key)
   const put = (table, item, extra = {}) => {
     const columns = ['id', ...Object.keys(extra), 'json']
-    db.prepare(`INSERT OR REPLACE INTO ${table}(${columns.join(',')}) VALUES(${columns.map(() => '?').join(',')})`).run(item.id, ...Object.values(extra), JSON.stringify(item))
+    statement(`INSERT OR REPLACE INTO ${table}(${columns.join(',')}) VALUES(${columns.map(() => '?').join(',')})`).run(item.id, ...Object.values(extra), JSON.stringify(item))
     return item
   }
   const brandPut = (b) => put('brands', b)
@@ -255,8 +258,12 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (role === 'view' && found.level < 2) fail('图文候选仅供维护成员查看', 403)
     return analysis
   }
-  for (const job of all('jobs').filter((j) => j.status === 'running')) { job.status = 'queued'; jobPut(job) }
-  schedule()
+  if (backgroundProcessing) {
+    try { seedMarketingDocuments({ all, get, listUsers, isAdmin, id, now, docPut, versionPut, queue, transaction: (fn) => db.transaction(fn) }) }
+    catch (error) { console.error('Marketing knowledge import needs attention:', error.message) }
+  }
+  for (const job of all('jobs').filter((j) => backgroundProcessing && j.status === 'running')) { job.status = 'queued'; jobPut(job) }
+  if (backgroundProcessing) schedule()
   const route = (method, url, guards, handler) => app[method](`/api/knowledge${url}`, ...guards, async (req, res, next) => { try {
     if (!['get', 'head'].includes(method) && url !== '/search' && !isAdmin(req.user)) fail('知识库暂仅允许 zhangwj159 编辑，其他账号只能查看', 403)
     await handler(req, res)
@@ -569,6 +576,8 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   }
   route('post', '/search', auth, async (req, res) => res.json(await search(req.user, req.body.brandId, req.body.query, req.body.mode)))
   async function prepare(user, input, tool) {
+    const activity = input.activityContext || input.knowledge?.activityContext
+    if (activity && ['text', 'image'].includes(tool)) return prepareActivityContext({ user, input, tool, activity, all, get, access, chunksFor, search, prepare, tracePut, finish, id, now, clean, fail })
     let selection = input?.knowledge
     if (tool === 'compliance' && input?.complianceBrand) {
       const brandNames = { 'vanke-property': '万科物业', pulin: '朴邻', yanxuanjia: '研选家', 'xingfushe-live': '幸福社' }
@@ -669,7 +678,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     return result.buffer
   }
   function finish(traceId, patch) { const t = get('traces', traceId); if (t) tracePut({ ...t, ...patch }) }
-  function checkTrace(user, traceId) { const t = get('traces', traceId); if (!t || (t.userId !== user?.id && !isAdmin(user))) fail('调用记录不存在', 404); access(user, t.brandId); return t }
+  function checkTrace(user, traceId) { const t = get('traces', traceId); if (!t || (t.userId !== user?.id && !isAdmin(user))) fail('调用记录不存在', 404); access(user, t.brandId); for (const brandId of t.contextBrandIds || []) access(user, brandId); return t }
   route('get', '/traces', auth, (req, res) => { access(req.user, req.query.brandId); res.json({ traces: all('traces').filter((t) => t.brandId === req.query.brandId && (t.userId === req.user.id || isAdmin(req.user))).reverse().slice(0, 100) }) })
   route('get', '/traces/:id', auth, (req, res) => res.json({ trace: checkTrace(req.user, req.params.id) }))
   route('get', '/traces/:id/files/:versionId', auth, (req, res) => {

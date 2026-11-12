@@ -33,6 +33,7 @@ jobs:
           umask 077
           {
             printf '%s\n' 'PORT=8787'
+            printf '%s\n' "MARKETING_KNOWLEDGE_KEY=${{ secrets.MARKETING_KNOWLEDGE_KEY }}"
             printf '%s\n' 'DIEFA_DATA_DIR=/home/ubuntu/17_design/data'
             printf '%s\n' "GRSAI_BASE_URL=${{ secrets.GRSAI_BASE_URL }}"
             printf '%s\n' "GRSAI_API_KEY=${{ secrets.GRSAI_API_KEY }}"
@@ -180,6 +181,7 @@ jobs:
             sudo nginx -t
             sudo systemctl reload nginx
             sudo systemctl is-active --quiet nginx
+            ACTIVITY_LIVE_VERIFY=1 node --env-file=.env scripts/verify-activity.mjs
             # Nginx is healthy locally, but a host firewall can still reset
             # TLS clients before their request reaches it. Only change UFW
             # when it is explicitly enabled on this server.

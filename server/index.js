@@ -1367,7 +1367,7 @@ async function handleTextCompletion(req, res, next) {
       } catch (error) {
         // Gemini 3.1 Pro is the preferred reviewer. Preserve availability when
         // its provider explicitly reports temporary capacity exhaustion.
-        if (!/model load is too high/i.test(String(error?.message || ''))) throw error
+        if (!/model load is too high|timeout|timed out|aborted|429|502|503|504/i.test(String(error?.message || ''))) throw error
         return requestUpstream('/v1/chat/completions', { ...request, model: TEXT_REVIEW_FALLBACK_MODEL }, undefined, 90_000)
       }
     }

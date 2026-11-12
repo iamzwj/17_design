@@ -1,3 +1,5 @@
+import { ActivityHtmlResult, ActivityImageResults, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
+import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
 import AccentTheme from './AccentTheme.jsx'
 import { userError } from './userErrors.js'
@@ -84,9 +86,9 @@ const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 
 const MODULE_COPY = {
   strategy: {
-    eyebrow: 'NEW CHAT',
-    title: '有什么可以帮你的吗？',
-    subtitle: '告诉我你的想法、任务或问题，我会帮你梳理并完成它。',
+    eyebrow: 'ACTIVITY STRATEGY',
+    title: '让策略，落到每一次行动。',
+    subtitle: '选择活动方向与业务身份，结合营销知识库和属地条件完成创作。',
     placeholder: '告诉我你想做什么…',
     systemPrompt: '用清晰的中文回答。先直接给出核心结论，用 **粗体** 标出最重要的事实或数字。内容较多时使用简短小标题和列表分组；简单问题保持简洁。不要为了格式补充未经证实的信息。',
   },
@@ -467,8 +469,8 @@ function TextSources({ sources }) {
   const items = (sources || []).filter((source) => source?.url)
   if (!items.length) return null
   const visibleItems = expanded ? items : items.slice(0, 2)
-  return <div className="text-sources" aria-label="联网搜索来源">
-    <span>搜索来源</span>
+  return <div className="text-sources" aria-label="引用依据">
+    <span>引用依据</span>
     {visibleItems.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>)}
     {items.length > 2 && <button type="button" className="text-sources-toggle" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起' : `展开其余 ${items.length - 2} 条`}</button>}
   </div>
@@ -1404,8 +1406,11 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
 function TextStudio({ type, conversation, onSave }) {
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
+  const activityImages = useActivityImages(conversationId.current, type === 'strategy')
   const [runtime] = useState(() => textTaskRuntime(conversationId.current, validTextMessages(conversation?.messages)))
   const [messages, setMessages] = useState(() => runtime.messages.current)
+  const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(localStorage.getItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
+  useEffect(() => { if (type === 'strategy') localStorage.setItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext)) }, [activityContext, type])
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
@@ -1457,6 +1462,7 @@ function TextStudio({ type, conversation, onSave }) {
       messages: nextMessages,
       brand,
       webSearch,
+      ...(type === 'strategy' ? { activityContext } : {}),
       status: activeTasks.length ? 'running' : 'idle',
       runningStartedAt: activeTasks[0]?.startedAt || null,
       textTasks: activeTasks,
@@ -1477,9 +1483,13 @@ function TextStudio({ type, conversation, onSave }) {
       updateMessages(validTextMessages(conversation.messages))
       for (const task of conversation.textTasks) {
         startTask(task.id, task.startedAt)
-        void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then((result) => {
+        void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then(async (result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
             updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+          }
+          if (type === 'strategy' && conversation.activityContext?.format === 'content') {
+            const pages = activityContentPages(result.content)
+            await Promise.all(pages.map((page, index) => activityImages.create(page.prompt, { ...conversation.activityContext, format: 'image', pageTitle: `图文第${index + 1}页 · ${page.title}` }, `${task.id}-page-${index + 1}`)))
           }
         }).catch((error) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: userError(error.message), failedAt: new Date().toISOString() }])
@@ -1588,6 +1598,15 @@ function TextStudio({ type, conversation, onSave }) {
     const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
     const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
+    if (type === 'strategy' && activityContext.format === 'image') {
+      setInput(''); setAttachmentError('')
+      const nextMessages = [...messagesRef.current, { role: 'user', content }]
+      updateMessages(nextMessages); saveTaskState(nextMessages, { activate: true }); scrollToLatestResult()
+      const priorPlan = [...messagesRef.current].reverse().find(m => m.role === 'assistant')
+      const imageBrief = [content, priorPlan ? `当前对话方案参考：${activityVisibleText(priorPlan.content).slice(0, 6000)}` : ''].filter(Boolean).join('\n\n')
+      await activityImages.create(imageBrief, activityContext)
+      return
+    }
     const startedAt = new Date().toISOString()
     const requestId = crypto.randomUUID()
     startTask(requestId, startedAt)
@@ -1640,10 +1659,15 @@ function TextStudio({ type, conversation, onSave }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: content, ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
+      if (type === 'strategy' && activityContext.format === 'content') {
+        const pages = activityContentPages(result.content)
+        if (!pages.length) setAttachmentError('文案已生成，但配图脚本未返回有效结构。请让 AI 补充逐页配图脚本后重试。')
+        await Promise.all(pages.map((page, index) => activityImages.create(page.prompt, { ...activityContext, format: 'image', pageTitle: `图文第${index + 1}页 · ${page.title}` }, `${requestId}-page-${index + 1}`)))
+      }
       completed = true
     } catch (err) {
       if (needsImageUpload) {
@@ -1661,20 +1685,21 @@ function TextStudio({ type, conversation, onSave }) {
     }
   }
 
-  return <section className={`workspace text-workspace ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
+  return <section className={`workspace text-workspace ${type === 'strategy' ? 'activity-workspace' : ''} ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
     <div className="conversation" ref={conversationScrollRef}>
       {messages.length === 0 && runningRequests.length === 0 ? <div className="welcome text-welcome">
         <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
-        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>
+        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
-        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={message.content}/>}<TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
+        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={type === 'strategy' ? activityVisibleText(message.content) : message.content}/>}<ActivityHtmlResult content={message.content}/><TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
+      {type === 'strategy' && <ActivityImageResults records={activityImages.records}/>}
     </div>
-    <div className="composer-wrap text-composer-wrap"><div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
+    <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
       {type === 'compliance' && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
       {type === 'compliance' && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
       {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
@@ -1683,7 +1708,7 @@ function TextStudio({ type, conversation, onSave }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools"><span className="model-chip">Gemini 3.1 Pro</span><KnowledgeContext tool="text"/></div>}
+        </div> : <div className="text-tools"><span className="model-chip">{type === 'strategy' && activityContext.format === 'image' ? 'Image 2.5' : 'Gemini 3.1 Pro'}</span>{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
@@ -1703,13 +1728,13 @@ export default function App() {
   const [authState, setAuthState] = useState(() => getAuthToken() ? 'checking' : 'guest')
   const [user, setUser] = useState(null)
   const [loginPromptModule, setLoginPromptModule] = useState(null)
-  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'strategy' ? 'strategy' : localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
     if (active !== 'film') url.searchParams.delete('filmProject')
-    if (active === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
-    else if (url.searchParams.get('module') === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
-      for (const key of ['module', 'brand', 'document', 'version', 'material', 'filmProject']) url.searchParams.delete(key)
+    if (active === 'strategy' || active === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
+    else if (url.searchParams.get('module') === 'strategy' || url.searchParams.get('module') === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
+      for (const key of ['module', 'brand', 'document', 'version', 'material', 'filmProject', 'conversation']) url.searchParams.delete(key)
     }
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [active])
@@ -1755,7 +1780,10 @@ export default function App() {
       try { localStorage.setItem(savedKey, JSON.stringify(withoutVideoHistory)) } catch { /* Keep the cleaned list in memory if storage is unavailable. */ }
     }
     setConversations(withoutVideoHistory)
-    setActiveConversationId(null)
+    const linkedStrategy = new URLSearchParams(window.location.search).get('conversation')
+    const restoredStrategy = withoutVideoHistory.some(c => c.id === linkedStrategy && c.type === 'strategy' && !c.archived)
+    setActiveConversationId(restoredStrategy ? linkedStrategy : null)
+    if (restoredStrategy) setWorkspaceToken(value => value + 1)
   }, [user, authState])
 
   useEffect(() => {
@@ -1815,7 +1843,10 @@ export default function App() {
   function saveConversation(update) {
     const now = new Date().toISOString()
     const { activate, openNew, ...conversationUpdate } = update
-    if (activate) setActiveConversationId(update.id)
+    if (activate) {
+      setActiveConversationId(update.id)
+      if (update.type === 'strategy') { const url = new URL(window.location.href); url.searchParams.set('module', 'strategy'); url.searchParams.set('conversation', update.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
+    }
     if (openNew) setWorkspaceToken((value) => value + 1)
     setConversations((current) => {
       const existing = current.find((conversation) => conversation.id === update.id)
@@ -1827,6 +1858,7 @@ export default function App() {
   }
 
   function startNew(type = active) {
+    const url = new URL(window.location.href); url.searchParams.delete('conversation'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setFilmDeepLink(null)
     setArchiveViewOpen(false)
     setActive(type)
@@ -1835,7 +1867,6 @@ export default function App() {
   }
 
   function changeModule(type) {
-    if (type === 'strategy') { window.location.assign('/demos/activity-chat/'); return }
     if (!user && type !== 'more' && type !== 'skills' && type !== 'discover-skills' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
     startNew(type)
   }
@@ -1891,6 +1922,7 @@ export default function App() {
   }
 
   function selectConversation(conversation) {
+    if (conversation.type === 'strategy') { const url = new URL(window.location.href); url.searchParams.set('module', 'strategy'); url.searchParams.set('conversation', conversation.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
     setFilmDeepLink(null)
     setArchiveViewOpen(false)
     if (conversation.unreadComplete || conversation.messages?.some(isFailureMessage)) {
