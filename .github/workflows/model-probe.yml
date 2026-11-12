@@ -1,4 +1,4 @@
-name: Language model probe
+name: Anonymous film queue diagnosis
 on:
   push:
     branches: [diagnostic/model-probe]
@@ -17,48 +17,19 @@ jobs:
           chmod 600 ~/.ssh/probe
           ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/probe ubuntu@49.235.121.231 'cd /home/ubuntu/17_design && node --env-file=.env --input-type=module' <<'JS'
-          const models=['gpt-5.6-terra','gemini-3.1-pro','gpt-6-astra','gpt-5.5'];
-          for(let round=1;round<=2;round++) {
-            for(const model of models) {
-              const start=performance.now();
-              let first=null, output='', status=0;
-              try {
-                const r=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/chat/completions',{
-                  method:'POST',
-                  headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY,'Content-Type':'application/json'},
-                  body:JSON.stringify({model,stream:true,messages:[{role:'user',content:'请只回复：模型连接测试成功。'}]}),
-                  signal:AbortSignal.timeout(45000)
-                });
-                status=r.status;
-                if(!r.ok) throw Error('HTTP '+status);
-                const reader=r.body.getReader(), decoder=new TextDecoder();
-                let pending='';
-                while(true) {
-                  const {done,value}=await reader.read(); if(done)break;
-                  pending+=decoder.decode(value,{stream:true});
-                  const lines=pending.split('\n');pending=lines.pop();
-                  for(const line of lines) {
-                    if(!line.startsWith('data:'))continue;
-                    try {
-                      const data=JSON.parse(line.slice(5).trim());
-                      const chunk=data.choices?.[0]?.delta?.content;
-                      if(chunk){first??=(performance.now()-start)/1000;output+=chunk;}
-                    }catch{}
-                  }
-                }
-                console.log(JSON.stringify({round,model,status,firstContentSeconds:first,totalSeconds:+((performance.now()-start)/1000).toFixed(2),ok:output.includes('测试成功'),characters:output.length}));
-              } catch(error) {
-                console.log(JSON.stringify({round,model,status,ok:false,totalSeconds:+((performance.now()-start)/1000).toFixed(2),error:error.name}));
-              }
+          const fs=await import('node:fs');
+          const root='/home/ubuntu/17_design/data/films';
+          for(const id of fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x))) {
+            let p;try{p=JSON.parse(fs.readFileSync(root+'/'+id+'/project.json','utf8'));}catch{continue;}
+            if(!p.shots?.some(s=>!s.frame)||!['running','queued','failed','needs-input'].includes(p.status))continue;
+            console.log(JSON.stringify({model:p.imageModel,status:p.status,frames:p.shots.filter(s=>s.frame).length,total:p.shots.length}));
+            for(const t of (p.tasks||[]).filter(t=>t.kind==='frame'&&['running','failed','needs-input'].includes(t.status))) {
+              let upstream;
+              if(t.providerId)try {
+                const r=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/api/result?id='+encodeURIComponent(t.providerId),{headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY},signal:AbortSignal.timeout(12000)});
+                const d=await r.json();upstream={http:r.status,status:d.status};
+              }catch(e){upstream={error:e.name};}
+              console.log(JSON.stringify({status:t.status,providerStatus:t.providerStatus,elapsedMinutes:Math.round((Date.now()-Number(t.startedAt||Date.now()))/60000),upstream}));
             }
-          }
-          for (const model of models) {
-            const start=performance.now();
-            try {
-              const response=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model,stream:false,messages:[{role:'user',content:'请只回复：模型连接测试成功。'}]}),signal:AbortSignal.timeout(45000)});
-              const data=await response.json();
-              const message=String(data.choices?.[0]?.message?.content || data.error?.message || data.error || '').replaceAll(process.env.GRSAI_API_KEY,'[redacted]').slice(0,180);
-              console.log(JSON.stringify({mode:'json',model,status:response.status,seconds:+((performance.now()-start)/1000).toFixed(2),message}));
-            }catch(error){console.log(JSON.stringify({mode:'json',model,error:error.name}));}
           }
           JS
