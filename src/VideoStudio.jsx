@@ -31,7 +31,6 @@ const REFERENCE_MODES = {
 function taskStatus(task) {
   if (task.status === 'PENDING') return '等待视频服务响应…'
   if (task.status === 'RUNNING') return '正在生成视频…'
-  if (task.status === 'COMPLETED') return '视频已生成'
   return task.error || '视频生成失败'
 }
 
@@ -275,7 +274,7 @@ export default function VideoStudio() {
                 <small>{task.skillSnapshot?.title && `${task.skillSnapshot.title} · `}{task.model ? `${MODELS.find((item) => item.value === task.model)?.label || task.model} · ${REFERENCE_MODES[task.referenceMode]?.label || '纯文本'} · ${task.aspectRatio} · ${task.resolution} · ${task.durationSeconds === -1 ? '自动时长' : `${task.durationSeconds}秒`}` : '正在提交任务'}</small>
               </div>
               <div className="waterfall-task-actions video-task-actions">
-                <span className={task.status === 'FAILED' ? 'failed' : ACTIVE.has(task.status) ? 'running' : ''}>{taskStatus(task)}</span>
+                {task.status !== 'COMPLETED' && <span className={task.status === 'FAILED' ? 'failed' : ACTIVE.has(task.status) ? 'running' : ''}>{taskStatus(task)}</span>}
                 <button type="button" onClick={() => editTask(task)}>重新编辑</button>
               </div>
             </header>
