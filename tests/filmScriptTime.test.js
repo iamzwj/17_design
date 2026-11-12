@@ -87,7 +87,7 @@ test('invalid saved script still uses the configured intelligent fallback', asyn
     },
   });
   await agents.writer(p);
-  assert.deepEqual(models, ['gpt-5.6-terra', 'gemini-3.1-pro']);
+  assert.deepEqual(models, ['gpt-6.1-sol', 'gemini-3.1-pro']);
   assert.ok(p.script.scenes.length);
 });
 

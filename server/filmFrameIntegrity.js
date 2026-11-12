@@ -1,3 +1,4 @@
+import { LANGUAGE_MODELS } from './languageModels.js'
 import path from 'node:path';
 import sharp from 'sharp';
 import { filmScalePrompt } from './filmConsistency.js';
@@ -11,7 +12,7 @@ export async function checkFrameIntegrity(project, shot, kind, {root, api, check
   const text = '审核电影分镜是否是完整单幅画面。检查硬切拼接线、左右建筑或地面透视断裂、多视图拼版、人物肢体被拼接切断。正常柱子、门框、阴影不是拼接。人物与车辆同框时额外检查比例，先用脚底与轮胎接地点判断景深，再用车门、车顶、车轮及车型判断同景深尺度。考虑合理的近大远小、姿态、广角、遮挡和裁切。只有可见证据明确显示相对尺度失真、且镜头设定未要求夸张时才因比例 reject。看不清时使用 uncertain，并保留其他明确缺陷的判断。只返回JSON {status:"pass"|"reject"|"uncertain",summary:"具体可见依据"}。明显确定的缺陷用reject，看不清用uncertain。镜头设定：' + (kind === 'tail' ? shot.tailFramePrompt : shot.firstFramePrompt || shot.prompt || '');
   const content = [{type:'text',text},{type:'image_url',image_url:{url:'data:image/png;base64,'+data.toString('base64')}}];
   let result;
-  for (const model of ['gpt-5.6-terra','gemini-3.1-pro']) {
+  for (const model of LANGUAGE_MODELS) {
     try {
       const response = await api('/v1/chat/completions',{model,response_format:{type:'json_object'},messages:[{role:'user',content}]},30000);
       result = JSON.parse((response.choices?.[0]?.message?.content||'').replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import express from 'express'
+import { LANGUAGE_MODELS } from '../server/languageModels.js'
 import Database from 'better-sqlite3'
 import { installKnowledge } from '../server/knowledge/index.js'
 
@@ -39,7 +40,7 @@ try {
     if (!context.sources.some(r => /年终福利节/.test(r.title))) throw new Error(`${name}: 未引用去年同期年终方案`)
     if (context.sources.some(r => /春节营销/.test(r.title))) throw new Error(`${name}: 错把春节方案当跨年主参考`)
     let result, usedModel
-    for (const model of ['gemini-3.1-pro', 'gpt-5.6-terra']) {
+    for (const model of LANGUAGE_MODELS) {
       try {
         const response = await fetch(`${(process.env.GRSAI_BASE_URL || 'https://grsaiapi.com').replace(/\/$/, '')}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GRSAI_API_KEY}` }, body: JSON.stringify({ model, stream: false, messages: [{ role: 'system', content: `当前日期为${new Intl.DateTimeFormat('sv', { timeZone: 'Asia/Shanghai' }).format(new Date())}。\n${context.prompt}` }, { role: 'user', content: query }] }), signal: AbortSignal.timeout(90000) })
         if (!response.ok) throw new Error(`生成接口返回 ${response.status}`)
@@ -47,7 +48,7 @@ try {
         const content = data.choices?.[0]?.message?.content
         if (typeof content !== 'string' || content.trim().length < 150) throw new Error('真实模型未返回完整策略内容')
         result = content; usedModel = data.model || model; break
-      } catch (error) { if (model === 'gpt-5.6-terra') throw error }
+      } catch (error) { if (model === LANGUAGE_MODELS.at(-1)) throw error }
     }
     fs.writeFileSync(path.join(out, `${name}.json`), JSON.stringify({ query, model: usedModel, traceId: context.id, sources: context.sources, content: result }, null, 2), { mode: 0o600 })
     kb.finish(context.id, { status: 'succeeded', model: usedModel, validation: true })

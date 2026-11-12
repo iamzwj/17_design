@@ -33,7 +33,7 @@ test('PDF vector pages, DOCX embedded images and validated multimodal model hand
     assert.equal(embedded.length, 1); assert.match(embedded[0].source, /内嵌图片 1/); assert.match(embedded[0].context, /正式标志/)
     let captured
     const result = await analyzePage(png, '正式Logo禁止改色', { request: async (body) => { captured = body; return { model: VISION_MODEL, choices: [{ message: { content: JSON.stringify({ text: '规范', business: '墙面修缮', rules: ['禁止改色'], assets: [{ kind: 'prohibited', title: '禁用', description: '旧版', box: [1, 2, 900, 950] }] }) } }] } } })
-    assert.equal(captured.model, 'gemini-3.1-pro'); assert.ok(captured.messages[0].content[1].image_url.url.startsWith('data:image/png;base64,')); assert.equal(result.assets[0].kind, 'prohibited')
+    assert.equal(captured.model, 'gpt-6.1-sol'); assert.ok(captured.messages[0].content[1].image_url.url.startsWith('data:image/png;base64,')); assert.equal(result.assets[0].kind, 'prohibited')
     assert.throws(() => validateAnalysis({ text: '', rules: [], assets: [{ kind: 'logo', box: [900, 0, 100, 1000] }] }), /无效/)
     assert.throws(() => cropRectangle([-1, 0, 1000, 1000], 100, 100), /无效/)
     assert.deepEqual(cropRectangle([100, 200, 900, 800], 100, 100), { left: 10, top: 20, width: 80, height: 60 })

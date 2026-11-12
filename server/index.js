@@ -1,3 +1,4 @@
+import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './languageModels.js'
 import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
@@ -85,14 +86,9 @@ const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 const DEFAULT_IMAGE_QUALITY = 'high'
 const imageQualities = new Set(['low', 'medium', 'high', 'xhigh', 'max'])
 const extremeImageRatios = new Set(['1:3', '3:1'])
-const FESTIVAL_PROMPT_MODEL = 'gemini-3.1-pro'
-const FESTIVAL_PROMPT_FALLBACK_MODEL = 'gpt-6-astra'
-const FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL = 'gpt-5.5'
 const FESTIVAL_PROMPT_REASONING = 'high'
 const FESTIVAL_PRIMARY_IMAGE_MODEL = 'gpt-image-2.5'
 const FESTIVAL_IMAGE_QUALITY = 'high'
-const TEXT_REVIEW_MODEL = 'gemini-3.1-pro'
-const TEXT_REVIEW_FALLBACK_MODEL = 'gpt-5.6-terra'
 const FESTIVAL_DEFAULT_STYLE = 'color-ink'
 const festivalPosterStyles = Object.freeze({
   '3d-cartoon': {
@@ -479,7 +475,7 @@ app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
 const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
-const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText, models: [TEXT_REVIEW_MODEL, TEXT_REVIEW_FALLBACK_MODEL] }) })
+const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText }) })
 const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth, warmRecommendations: true })
 const localSkillRuntime = new Map()
 const waterfallSlotRuns = new Set()
@@ -633,6 +629,8 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
   }
   return data
 }
+
+const requestTextUpstream = (endpoint, body, timeout) => requestUpstream(endpoint, body, undefined, timeout)
 
 async function requestUpstreamResult(id, signal) {
   const response = await fetch(`${apiBase}/v1/api/result?id=${encodeURIComponent(id)}`, {
@@ -1149,23 +1147,10 @@ async function analyzeImageLayout(sources) {
     parts.push({ inline_data: { mime_type: image.mimeType, data: image.buffer.toString('base64') } })
   })
 
-  const response = await fetch(`${apiBase}/v1beta/models/gemini-3.1-pro:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.1 },
-    }),
-    signal: AbortSignal.timeout(180_000),
+  const data = await requestLanguageModel(requestTextUpstream, {
+    messages: [{ role: 'user', content: languageImageParts(parts) }],
   })
-  const raw = await response.text()
-  let data
-  try { data = JSON.parse(raw) } catch { data = { error: raw } }
-  if (!response.ok) {
-    const message = data?.error?.message || data?.error || `视觉服务返回 HTTP ${response.status}`
-    throw new Error(`图片视觉审核失败：${typeof message === 'string' ? message : JSON.stringify(message)}`)
-  }
-  const analysis = (data?.candidates?.[0]?.content?.parts || []).map((part) => part?.text).filter(Boolean).join('\n').trim()
+  const analysis = completionText(data)
   if (!analysis) throw new Error('图片视觉审核失败：视觉模型未返回有效结果')
   return analysis
 }
@@ -1352,41 +1337,27 @@ async function handleTextCompletion(req, res, next) {
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(webResult.sources, webResult.available) : '', context?.prompt].filter(Boolean).join('\n\n')
     if (context && combinedSystemPrompt.length > 18000) throw Object.assign(new Error('品牌规则与系统指令超过长度预算，请精简后重试'), { status: 400 })
     const upstreamRequest = {
-      model: TEXT_REVIEW_MODEL,
       stream: false,
       messages: [
         ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
         ...safeMessages,
       ],
     }
-    // Text replies should fail visibly instead of keeping a chat card in a
-    // running state for several minutes when the upstream stalls.
-    async function requestReviewCompletion(request) {
-      try {
-        return await requestUpstream('/v1/chat/completions', request, undefined, 90_000)
-      } catch (error) {
-        // Gemini 3.1 Pro is the preferred reviewer. Preserve availability when
-        // its provider explicitly reports temporary capacity exhaustion.
-        if (!/model load is too high|timeout|timed out|aborted|429|502|503|504/i.test(String(error?.message || ''))) throw error
-        return requestUpstream('/v1/chat/completions', { ...request, model: TEXT_REVIEW_FALLBACK_MODEL }, undefined, 90_000)
-      }
-    }
-
-    let data = await requestReviewCompletion(upstreamRequest)
+    let data = await requestLanguageModel(requestTextUpstream, upstreamRequest)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
     // field on the first completion. Retry once with an explicit answer request
     // so the UI never renders sources without a response.
     if (!content) {
-      data = await requestReviewCompletion({
+      data = await requestLanguageModel(requestTextUpstream, {
         ...upstreamRequest,
         messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
       })
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
-    if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model || TEXT_REVIEW_MODEL, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model || TEXT_REVIEW_MODEL })
+    if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
   } catch (error) {
     if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
@@ -1459,42 +1430,22 @@ async function buildFestivalPlans(festival, styleKey = FESTIVAL_DEFAULT_STYLE) {
     }
     return plans
   }
-  async function requestGeminiPlans() {
-    const response = await fetch(`${apiBase}/v1beta/models/${FESTIVAL_PROMPT_MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-      }),
-      signal: AbortSignal.timeout(100_000),
-    })
-    const raw = await response.text()
-    let data
-    try { data = JSON.parse(raw) } catch { data = { error: raw } }
-    if (!response.ok) throw new Error(data?.error?.message || data?.error || `GRS AI 返回 HTTP ${response.status}`)
-    const content = (data?.candidates?.[0]?.content?.parts || []).map((part) => part?.text).filter(Boolean).join('\n')
-    return validatePlans(parseFestivalPlans(content))
-  }
-  async function requestPlans(model, timeoutMs) {
-    const completion = await requestUpstream('/v1/chat/completions', {
-      model,
-      reasoning_effort: FESTIVAL_PROMPT_REASONING,
-      stream: false,
-      response_format: { type: 'json_object' },
-      messages,
-    }, undefined, timeoutMs)
-    return validatePlans(parseFestivalPlans(completionText(completion)))
-  }
-  try {
-    return { plans: await requestGeminiPlans(), model: FESTIVAL_PROMPT_MODEL }
-  } catch (primaryError) {
+  let lastError
+  for (const model of LANGUAGE_MODELS) {
     try {
-      return { plans: await requestPlans(FESTIVAL_PROMPT_FALLBACK_MODEL, 120_000), model: FESTIVAL_PROMPT_FALLBACK_MODEL, primaryError: String(primaryError?.message || primaryError) }
-    } catch (fallbackError) {
-      return { plans: await requestPlans(FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL, 150_000), model: FESTIVAL_PROMPT_SECOND_FALLBACK_MODEL, primaryError: String(primaryError?.message || primaryError), fallbackError: String(fallbackError?.message || fallbackError) }
+      const completion = await requestTextUpstream('/v1/chat/completions', {
+        model,
+        reasoning_effort: FESTIVAL_PROMPT_REASONING,
+        stream: false,
+        response_format: { type: 'json_object' },
+        messages,
+      }, 90_000)
+      return { plans: validatePlans(parseFestivalPlans(completionText(completion))), model: completion.model || model }
+    } catch (error) {
+      lastError = error
     }
   }
+  throw lastError
 }
 
 async function requestFestivalImage(prompt, references, model) {
@@ -1563,7 +1514,7 @@ async function runFestivalPosterPlanningTask(taskId) {
   try {
     updateFestivalPosterTask(taskId, { phase: 'planning', message: '正在规划两套节日场景' })
     const planning = await buildFestivalPlans(task.festival, task.style)
-    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，正在自动开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== FESTIVAL_PROMPT_MODEL })
+    updateFestivalPosterTask(taskId, { status: 'planned', phase: 'planned', message: '两套提示词已生成，正在自动开始生图', plans: planning.plans, promptModel: planning.model, promptModelFallback: planning.model !== LANGUAGE_MODELS[0] })
     beginFestivalPosterImageGeneration(taskId, planning.plans)
   } catch (error) {
     updateFestivalPosterTask(taskId, { status: 'failed', phase: 'failed', error: festivalPosterPlanningErrorMessage(error), completedAt: new Date().toISOString() })
@@ -1602,8 +1553,8 @@ async function runFestivalPosterImageTask(taskId) {
       festival: task.festival,
       style: normalizedStyle,
       styleLabel: festivalPosterStyles[normalizedStyle].label,
-      promptModel: task.promptModel || FESTIVAL_PROMPT_MODEL,
-      promptModelLabel: `GRS AI · ${task.promptModel || FESTIVAL_PROMPT_MODEL} · 高质量`,
+      promptModel: task.promptModel || LANGUAGE_MODELS[0],
+      promptModelLabel: `GRS AI · ${task.promptModel || LANGUAGE_MODELS[0]} · 高质量`,
       imageModelLabel: 'GPT Image 2.5 · high',
       posters,
     }
@@ -2064,7 +2015,7 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
 
 installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async (story) => {
   let lastError;
-  for (const model of ['gemini-3.1-pro', 'gpt-5.6-terra']) {
+  for (const model of LANGUAGE_MODELS) {
     try {
       const result = await requestUpstream('/v1/chat/completions', { model, response_format: { type: 'json_object' }, messages: [
         { role: 'system', content: '你是影视分镜和剪辑导演。先把故事中不可省略的关键事件、每句出声对白及必要人物反应拆为按时间排列的 beats，每个beat有唯一id、description、dialogue（没有对白填空字符串，原话逐字保留）。不可把多个不同地点或因果事件合并成一个beat，重复搬运可用蒙太奇但保留路径、寒冷与出汗细节、结尾情绪。分别为紧凑、正常、缓慢三版编排完整短片，每版必须逐项覆盖所有beat，给每个beat分配现实可表演的整数秒数。考虑人物进入画面、反应、对白语速、动作起落、走位、转场及余韵，动作和对白仅在能实际同时发生时并行。紧凑不是快进，三版同一句对白必须使用相同自然语速。包含对白的每一事件，紧凑版分场秒数不得少于正常版。每秒最多说三个汉字，还要给必要停顿留时间。通过减少无对白的空镜和重复动作调整节奏，不得加快说话。必须叙事完整、因果清晰、空间位置和动作衔接合理，不得压缩为预告片或省略关键情节，不得为缩短时长牺牲正常对白、必要反应或转场。复杂动作、两句交互对白及重要反应需要充足时间。每版给具体分场依据，不能按固定比例换算。只返回JSON：{beats:[{id,description,dialogue}],options:[{pace:"compact",segments:[{beatId,seconds}],reason},{pace:"normal",segments:[{beatId,seconds}],reason},{pace:"slow",segments:[{beatId,seconds}],reason}]}。每版按事件顺序列全所有beat，三个版本时长递增，范围15至600秒。' },

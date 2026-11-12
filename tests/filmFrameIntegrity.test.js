@@ -14,8 +14,8 @@ test('unavailable visual providers record uncertainty without blocking productio
  const shot={id:'s',revision:1,frame:{file:'frame.png'}};
  const p={id:'p'};
  const calls=[];
- await checkFrameIntegrity(p,shot,'frame',{root,api:async()=>{calls.push(1);throw Error('timeout');},check(){},save(){},event(){},applyCommand(){throw Error('Unexpected edit');}});
- assert.equal(calls.length,2);
+ await checkFrameIntegrity(p,shot,'frame',{root,api:async(_endpoint,{model})=>{calls.push(model);throw Error('timeout');},check(){},save(){},event(){},applyCommand(){throw Error('Unexpected edit');}});
+ assert.deepEqual(calls,['gpt-6.1-sol','gemini-3.1-pro','gpt-6.1-terra','gpt-5.6-sol','gpt-5.6-terra']);
  assert.equal(shot.frameIntegrity.status,'uncertain');
  await checkFrameIntegrity(p,shot,'frame',{root,api:async()=>{throw Error('Should reuse uncertainty');}});
 });

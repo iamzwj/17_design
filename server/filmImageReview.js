@@ -1,10 +1,11 @@
+import { LANGUAGE_MODELS } from './languageModels.js'
 /** Try independent vision providers and validate evidence before accepting a review. */
 export async function reviewFilmImages(api, parts) {
   const failures = [];
   const content = parts.map(part => part.text ? {type:'text',text:part.text} : {
     type:'image_url',image_url:{url:`data:${part.inline_data.mime_type};base64,${part.inline_data.data}`},
   });
-  for (const model of ['gpt-5.6-terra', 'gemini-3.1-pro']) {
+  for (const model of LANGUAGE_MODELS) {
     try {
       const result = await api('/v1/chat/completions', {
         model, response_format:{type:'json_object'},

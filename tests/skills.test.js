@@ -84,15 +84,15 @@ test('AI tasks persist input before response, deduplicate, keep results private,
 test('Skill model fallback handles primary timeout and invalid output, while preserving real AI output', async () => {
   for (const first of ['timeout', 'invalid']) {
     const seen = []
-    const complete = createSkillCompletion({ models: ['primary', 'fallback'], text: (data) => data.content, request: async (_url, body) => {
+    const complete = createSkillCompletion({ text: (data) => data.content, request: async (_url, body) => {
       seen.push(body.model)
-      if (body.model === 'primary') { if (first === 'timeout') throw new Error('timeout'); return { content: 'invalid JSON' } }
-      return { content: rawSkill, model: 'fallback' }
+      if (body.model === 'gpt-6.1-sol') { if (first === 'timeout') throw new Error('timeout'); return { content: 'invalid JSON' } }
+      return { content: rawSkill, model: 'gemini-3.1-pro' }
     } })
     const result = await complete([], 'generate')
-    assert.deepEqual(seen, ['primary', 'fallback']); assert.equal(result.model, 'fallback'); assert.equal(result.content, rawSkill)
+    assert.deepEqual(seen, ['gpt-6.1-sol', 'gemini-3.1-pro']); assert.equal(result.model, 'gemini-3.1-pro'); assert.equal(result.content, rawSkill)
   }
-  const unavailable = createSkillCompletion({ models: ['primary', 'fallback'], text: () => '', request: async () => { throw new Error('unavailable') } })
+  const unavailable = createSkillCompletion({ text: () => '', request: async () => { throw new Error('unavailable') } })
   await assert.rejects(unavailable([], 'generate'), /unavailable/)
   assert.throws(() => validateSkillMarkdown('---\nname: Bad Name\ndescription: bad\n---\nbody'))
   assert.throws(() => normalizeSkillResult('guide', '{"questions":[1]}'))

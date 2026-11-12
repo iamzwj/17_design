@@ -1,3 +1,4 @@
+import { languageImageParts, requestLanguageModel } from './languageModels.js'
 import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
 import { filmConsistencyPrompt, filmScalePrompt, filmSceneStyle } from './filmConsistency.js';
@@ -203,8 +204,7 @@ async function plan(p) {
   check(p);
   p.stage = "plan";
   activity(p, p.revision ? `revision:${p.revision}` : "plan:start", p.revision ? "导演正在调整受影响镜头，保留其他素材" : "导演正在编写故事节奏、角色设定与分镜");
-  const d = await api("/v1/chat/completions", {
-    model: "gemini-3.1-pro",
+  const d = await requestLanguageModel(api, {
     messages: [
       {
         role: "system",
@@ -260,8 +260,7 @@ async function revise(p) {
   check(p);
   p.stage = "plan";
   activity(p, p.revision ? `revision:${p.revision}` : "plan:start", p.revision ? "导演正在调整受影响镜头，保留其他素材" : "导演正在编写故事节奏、角色设定与分镜");
-  const d = await api("/v1/chat/completions", {
-    model: "gemini-3.1-pro",
+  const d = await requestLanguageModel(api, {
     messages: [
       {
         role: "system",
@@ -850,8 +849,8 @@ async function referenceAssets(p, onlyResource) {
       const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
       try {
         const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否体现设计要求明确列出的时段，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
-        const response=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}]}],generationConfig:{temperature:0.1}});
-        const raw=(response.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
+        const response=await requestLanguageModel(api,{response_format:{type:'json_object'},messages:[{role:'user',content:languageImageParts([{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}])}]});
+        const raw=response.choices?.[0]?.message?.content||'';const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
         save(p);if(r.revision===version)r.assetReview={...review,file};finishTask(p,t,{...review,file});
       }catch(e){if(r.revision===version)r.assetReview={file,status:'review',confidence:'low',summary:'设定图自动检查未完成，需人工核对：'+e.message};finishTask(p,t,r.assetReview);}
       save(p);
@@ -941,7 +940,7 @@ async function directorReview(p) {
   if(!issues.length&&!assetIssues.length)return;
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {
-    const d=await api('/v1/chat/completions',{model:'gemini-3.1-pro',response_format:{type:'json_object'},messages:[{role:'system',content:'根据质检证据作导演决策。只返回{decision:"accept"|"repair"|"manual",reason,repairs:[{id,action:"frame"|"video"|"image",prompt}]}。证据不足或审美偏好不能当作确定错误；可accept附人工建议。明确人物/服装/场景错误可修复，每项最多自动修复两次，锁定资产必须manual。修复prompt第一部分必须明确时间，保留未出问题的要求。不得无限重复同一提示词。'},{role:'user',content:JSON.stringify(t.input)}]});
+    const d=await requestLanguageModel(api,{response_format:{type:'json_object'},messages:[{role:'system',content:'根据质检证据作导演决策。只返回{decision:"accept"|"repair"|"manual",reason,repairs:[{id,action:"frame"|"video"|"image",prompt}]}。证据不足或审美偏好不能当作确定错误；可accept附人工建议。明确人物/服装/场景错误可修复，每项最多自动修复两次，锁定资产必须manual。修复prompt第一部分必须明确时间，保留未出问题的要求。不得无限重复同一提示词。'},{role:'user',content:JSON.stringify(t.input)}]});
     const raw=d.choices?.[0]?.message?.content||'';const decision=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
     if(!['accept','repair','manual'].includes(decision.decision))throw Error('导演审核决策无效');
     finishTask(p,t,decision);event(p,'director',id,decision.reason||'已完成导演审核',{type:'decision'});
@@ -1006,7 +1005,7 @@ async function recoverFailure(p,error) {
   const r=[...p.resources,...p.shots].find(r=>r.id===t.resourceId);
   if(!r || r.locked || (r.failureRepairs||0)>=1 || t.providerStatus!=='failed')return false;
   try {
-    const response=await api('/v1/chat/completions',{model:'gemini-3.1-pro',response_format:{type:'json_object'},messages:[{role:'system',content:'分析这次生成明确失败的原因，返回{decision:"repair"|"manual",reason,prompt}。只在能通过优化提示词修复时repair，保留用户需求，镜头提示词先写时间；不能重复原词盲目重试。'},{role:'user',content:JSON.stringify({error:error.message,prompt:r.prompt,model:t.input.model})}]});
+    const response=await requestLanguageModel(api,{response_format:{type:'json_object'},messages:[{role:'system',content:'分析这次生成明确失败的原因，返回{decision:"repair"|"manual",reason,prompt}。只在能通过优化提示词修复时repair，保留用户需求，镜头提示词先写时间；不能重复原词盲目重试。'},{role:'user',content:JSON.stringify({error:error.message,prompt:r.prompt,model:t.input.model})}]});
     const d=JSON.parse(response.choices[0].message.content.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
     if(d.decision!=='repair'||typeof d.prompt!=='string'||d.prompt===r.prompt)return false;
     applyCommand(p,{id:'failure-repair:'+t.id,type:'edit',body:{id:r.id,patch:{prompt:d.prompt}}});r.failureRepairs=(r.failureRepairs||0)+1;event(p,'director',t.id,d.reason||'已分析失败原因并调整生成输入',{type:'recovery'});p.status='queued';save(p);return true;
