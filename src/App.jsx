@@ -1,3 +1,4 @@
+import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
@@ -1663,6 +1664,7 @@ function TextStudio({ type, conversation, onSave }) {
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
+      if (type === 'strategy') saveTaskState(completedMessages)
       if (type === 'strategy' && activityContext.format === 'content') {
         const pages = activityContentPages(result.content)
         if (!pages.length) setAttachmentError('文案已生成，但配图脚本未返回有效结构。请让 AI 补充逐页配图脚本后重试。')
@@ -1748,6 +1750,7 @@ export default function App() {
   })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
+  const [historyReady, setHistoryReady] = useState(null)
   const [activeConversationId, setActiveConversationId] = useState(null)
   const [workspaceToken, setWorkspaceToken] = useState(0)
   const [filmDeepLink, setFilmDeepLink] = useState(() => localPreviewParams.get('module') === 'film' ? localPreviewParams.get('filmProject') : null)
@@ -1779,11 +1782,22 @@ export default function App() {
     if (withoutVideoHistory.length !== loaded.length) {
       try { localStorage.setItem(savedKey, JSON.stringify(withoutVideoHistory)) } catch { /* Keep the cleaned list in memory if storage is unavailable. */ }
     }
-    setConversations(withoutVideoHistory)
-    const linkedStrategy = new URLSearchParams(window.location.search).get('conversation')
-    const restoredStrategy = withoutVideoHistory.some(c => c.id === linkedStrategy && c.type === 'strategy' && !c.archived)
-    setActiveConversationId(restoredStrategy ? linkedStrategy : null)
-    if (restoredStrategy) setWorkspaceToken(value => value + 1)
+    let current = true
+    readActivityHistory(savedKey).catch(() => undefined).then(savedActivity => {
+      if (!current) return
+      const restored = savedActivity
+        ? [...withoutVideoHistory.filter(item => item.type !== 'strategy'), ...savedActivity]
+        : withoutVideoHistory
+      setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
+      const url = new URL(window.location.href)
+      const linkedStrategy = url.searchParams.get('conversation')
+      const record = url.searchParams.get('module') === 'strategy' &&
+        restored.find(c => c.id === linkedStrategy && c.type === 'strategy' && !c.archived && !c.deleted)
+      setActiveConversationId(record ? record.id : null)
+      if (record) setWorkspaceToken(value => value + 1)
+      setHistoryReady(savedKey)
+    })
+    return () => { current = false }
   }, [user, authState])
 
   useEffect(() => {
@@ -1798,13 +1812,14 @@ export default function App() {
     setConversations((current) => {
       const next = transform(current)
       if (next === current) return current
+      void saveActivityHistory(conversationStorageKey, next).catch(() => {})
       try { localStorage.setItem(conversationStorageKey, JSON.stringify(next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
   }
 
   useEffect(() => {
-    if (!user || authState !== 'authenticated') return
+    if (!user || authState !== 'authenticated' || historyReady !== conversationStorageKey) return
     let live = true
     const pending = id => pendingArchives.current.get(id) === conversationStorageKey
     const sync = () => {
@@ -1831,7 +1846,7 @@ export default function App() {
     syncArchives()
     const timer = setInterval(() => { sync(); syncArchives() }, 15000)
     return () => { live = false; clearInterval(timer) }
-  }, [user, authState, conversationStorageKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, authState, conversationStorageKey, historyReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function recordFilm(project) {
     updateConversations((current) => mergeFilmHistory(current, [{
@@ -1843,7 +1858,7 @@ export default function App() {
   function saveConversation(update) {
     const now = new Date().toISOString()
     const { activate, openNew, ...conversationUpdate } = update
-    if (activate) {
+    if (activate && activeWorkspace.current === workspaceToken) {
       setActiveConversationId(update.id)
       if (update.type === 'strategy') { const url = new URL(window.location.href); url.searchParams.set('module', 'strategy'); url.searchParams.set('conversation', update.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
     }
@@ -1852,6 +1867,7 @@ export default function App() {
       const existing = current.find((conversation) => conversation.id === update.id)
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
       const next = [record, ...current.filter((conversation) => conversation.id !== update.id)].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      if (update.type === 'strategy') void saveActivityHistory(conversationStorageKey, next).catch(() => {})
       try { localStorage.setItem(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
@@ -2054,7 +2070,7 @@ export default function App() {
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
-      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
