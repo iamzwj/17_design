@@ -4,6 +4,12 @@
 .compact .activity-actions{margin-bottom:10px}.compact .activity-actions button{padding:8px 10px;font-size:11px}.compact .activity-actions svg{width:14px;height:14px}
 
 .activity-answer { display: grid; gap: 14px; min-width: 0; }
+.activity-answer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+  min-width: 0;
+}
 .activity-answer-card {
   min-width: 0;
   padding: clamp(14px, 2.4vw, 24px);
@@ -12,19 +18,17 @@
   background: var(--dp-panel-solid);
 }
 .activity-answer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--dp-rule);
+  margin: 0 0 14px;
   color: var(--dp-ink);
-  font-size: var(--dp-typography-small);
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
-.assistant-turn .activity-answer-header .message-copy-button {
-  position: static;
-  flex: 0 0 34px;
+.assistant-turn .activity-answer-layout > .message-copy-button {
+  position: sticky;
+  top: 0;
+  right: auto;
+  align-self: start;
   width: 34px;
   height: 34px;
   opacity: 1;
@@ -38,5 +42,7 @@
   font-size: var(--dp-typography-small);
 }
 .text-answer .activity-answer-notes .answer-plain { color: var(--dp-secondary); }
-.text-answer .activity-answer-notes .answer-plain p { font-size: var(--dp-typography-small); }
+.text-answer .activity-answer-notes .answer-plain { gap: 6px; }
+.text-answer .activity-answer-notes .answer-plain :is(p, h3) { font-size: var(--dp-typography-small); }
+.text-answer .activity-answer-notes .answer-plain :is(h3, strong) { color: inherit; }
 .activity-answer > :is(.text-sources, .activity-html-result) { margin: 0; }

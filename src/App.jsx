@@ -467,16 +467,16 @@ function AnswerText({ content }) {
 }
 
 export function ActivityAnswer({ content, sources }) {
-  const { before, answer, after } = splitActivityAnswer(activityVisibleText(content))
+  const { before, title, answer, after } = splitActivityAnswer(activityVisibleText(content))
   return <div className="activity-answer">
     {before && <div className="activity-answer-notes"><AnswerText content={before}/></div>}
-    {answer && <section className="activity-answer-card" aria-label="正式答案">
-      <header className="activity-answer-header">
-        <b>正式答案</b>
-        <MessageCopyButton content={answer} copyLabel="复制正式答案"/>
-      </header>
-      <AnswerText content={answer}/>
-    </section>}
+    {(title || answer) && <div className="activity-answer-layout">
+      <section className="activity-answer-card" aria-label={title || '正式答案'}>
+        {title && <h3 className="activity-answer-header">{title}</h3>}
+        {answer && <AnswerText content={answer}/>}
+      </section>
+      <MessageCopyButton content={[title, answer].filter(Boolean).join('\n\n')} copyLabel="复制正式答案"/>
+    </div>}
     {after && <section className="activity-answer-notes" aria-label="建议与说明">
       <h3>建议与说明</h3>
       <AnswerText content={after}/>
