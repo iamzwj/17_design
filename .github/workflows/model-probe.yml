@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   probe:
-    if: "!startsWith(github.event.head_commit.message, 'Monitor') && !startsWith(github.event.head_commit.message, 'Reduced')"
+    if: "startsWith(github.event.head_commit.message, 'Diagnose actual')"
     runs-on: ubuntu-latest
     steps:
       - name: Probe production model channel
