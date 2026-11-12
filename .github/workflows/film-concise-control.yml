@@ -1,4 +1,4 @@
-name: Image 2 concise prompt actual shot test
+name: Image 2.5 concise prompt actual shot test
 on:
   push:
     branches: [diagnostic/model-probe]
@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   probe:
-    if: "startsWith(github.event.head_commit.message, 'Concise')"
+    if: "startsWith(github.event.head_commit.message, 'Image25Concise')"
     runs-on: ubuntu-latest
     steps:
       - name: Probe production model channel
@@ -41,7 +41,8 @@ jobs:
            }catch(e){record.error=e.detail||e.message;save();log({phase:'submission_error',label,http:e.http,category:category(record.error)});}return record;
           }
           const actual={resourceId:original.resourceId,requestBody:structuredClone(original.requestBody)};
+          actual.requestBody.model='gpt-image-2.5';
           actual.requestBody.prompt='白天，冬季腊月二十八。电影写实，单幅画面。机位在住户家内，朝敞开的入户门和楼道拍摄。45岁女性穿厚羽绒服站在门内；青年男性穿单薄工装，刚转身来到门槛外，准备沿楼道离开。年货箱已搬进家中，放在门内附近，不挡通道。室内中性暖光，楼道有白天自然光。人物身份、服装及门口空间布局与参考图一致，保持真实比例和连续透视。只表现这一瞬间，不拼图、不生成多视图。';
           log({phase:'comparison',model:actual.requestBody.model,refs:actual.requestBody.images.length,originalPromptCharacters:original.requestBody.prompt.length,newPromptCharacters:actual.requestBody.prompt.length,sameReferences:JSON.stringify(actual.requestBody.images)===JSON.stringify(original.requestBody.images)});
-          await run('image2-concise-fourrefs',actual);
+          await run('image25-concise-fourrefs',actual);
           JS
