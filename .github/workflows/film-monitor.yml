@@ -18,9 +18,10 @@ jobs:
           chmod 600 ~/.ssh/probe
           ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/probe ubuntu@49.235.121.231 'cd /home/ubuntu/17_design && node --env-file=.env --input-type=module' <<'JS'
-          import fs from 'node:fs';
+          import fs from 'node:fs';import {publicEncrypt,constants} from 'node:crypto';
           const file='/home/ubuntu/17_design/data/diagnostics/image25-actual/image25-concise-fourrefs.json';
           if(!fs.existsSync(file)){console.log(JSON.stringify({phase:'image25_concise',started:false}));process.exit(0);}
           const x=JSON.parse(fs.readFileSync(file,'utf8'));
           console.log(JSON.stringify({phase:'image25_concise',ageSeconds:Math.round((Date.now()-x.startedAt)/1000),status:x.result?.status,accepted:!!x.providerId,model:x.requestBody?.model,refs:x.requestBody?.images?.length}));
+          if(x.result?.status==='succeeded'&&x.result?.results?.[0]?.url){const encrypted=publicEncrypt({key:"-----BEGIN PUBLIC KEY-----\nMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAoCFiod49K6A9QxKKxils\noDg7rUi+hrM/a/IYRzO60cLICtDCZnqMc7o+hisL7GlYvOcs3kl62CciHnMy6UWz\ndsiZbVZ3NZM3ozqa5RXjUW4u48Ik+xDPo1j9serZmYZbgxMM6teTq+mZAey/Pnd7\nbMNhlsfimLv43bwwYfn9rQIixHvY8NABbcXs6DOSb75JVVCqSTYWn49MLnReX58s\noUATi1wpW/VDuvYUJpM8lFISfktPbg1qyCOUICt7Gf1EVdz4QZRn+b9ir6daa/lp\nuz8FXMx41R0oKnU9gzv1vOUjZqRH3JPHDNe007uvZs83AsnvlkzNxVA+aLmqfC6+\niCm7zVUdKFtS8gLG+sBHSq6Qs55FXAdh0YLLMURoIMFg1uFlz/Hsm4E+1Wwon9nZ\ns2XBYQbo6QHY0H2GP3RDlWVOpkN6bg+KMzwqtPozBFVelGs024eu1hvsIAnegNBE\nZwcBsrUEoLDjZWMn3mdG1Jbo6Rochy7pJjgAXJFcyugjAgMBAAE=\n-----END PUBLIC KEY-----\n",padding:constants.RSA_PKCS1_OAEP_PADDING,oaepHash:'sha256'},Buffer.from(x.result.results[0].url));console.log(JSON.stringify({phase:'authorized_private_result',encryptedUrl:encrypted.toString('base64')}));}
           JS
