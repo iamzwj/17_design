@@ -1,0 +1,20 @@
+name: Benchmark Image Models
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/image-latency-benchmark]
+    paths: ['.github/workflows/benchmark-image-latency.yml', 'scripts/benchmark-image-latency.mjs', 'scripts/fixtures/image-latency/**']
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Time both GRSAI models
+        env:
+          GRSAI_API_KEY: ${{ secrets.GRSAI_API_KEY }}
+        run: node scripts/benchmark-image-latency.mjs
