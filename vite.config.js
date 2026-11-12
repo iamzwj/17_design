@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
   plugins: [react()],
@@ -8,6 +9,7 @@ export default defineConfig({
     // received the prior HTML can then still load its CSS/JS while the next
     // build is being written, instead of falling back to an unstyled page.
     emptyOutDir: false,
+    rollupOptions: { input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), activity: fileURLToPath(new URL('./demos/activity-chat/index.html', import.meta.url)) } },
   },
   server: {
     host: '0.0.0.0',

@@ -34,7 +34,7 @@ import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, I
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
-  { id: 'strategy', label: '新聊天', caption: '洞察与方案生成', icon: 'spark' },
+  { id: 'strategy', label: '活动策略', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
   { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
@@ -46,6 +46,7 @@ const MODULES = [
 const KNOWLEDGE_SECTIONS = [
   { id: 'brand-knowledge', label: '团队品牌知识库' },
   { id: 'assets', label: '素材库' },
+  { id: 'marketing-activities', label: '营销活动' },
 ]
 
 const WORKSPACE_TITLES = {
@@ -54,6 +55,7 @@ const WORKSPACE_TITLES = {
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
   'brand-knowledge': ['KNOWLEDGE BASE', '团队品牌知识库'],
+  'marketing-activities': ['KNOWLEDGE BASE', '营销活动'],
   assets: ['ASSET LIBRARY', '素材库'],
   'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
   'marketing-strategy': ['KNOWLEDGE BASE', '营销策略'],
@@ -1833,6 +1835,7 @@ export default function App() {
   }
 
   function changeModule(type) {
+    if (type === 'strategy') { window.location.assign('/demos/activity-chat/'); return }
     if (!user && type !== 'more' && type !== 'skills' && type !== 'discover-skills' && type !== 'compliance' && !KNOWLEDGE_SECTIONS.some((item) => item.id === type)) { setPendingImageMode(null); openLogin(type); return }
     startNew(type)
   }
@@ -2009,6 +2012,8 @@ export default function App() {
         ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'discover-skills'
         ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+      : active === 'marketing-activities'
+        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销活动" onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
         ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'

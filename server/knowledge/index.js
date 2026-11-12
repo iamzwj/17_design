@@ -63,6 +63,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   const chunksFor = (versionId) => db.prepare('SELECT json FROM chunks WHERE version_id=?').all(versionId).map(parse)
   if (!all('groups').length) for (let i = 1; i <= 3; i++) put('groups', { id: `group-${i}`, name: `第${i}组`, members: [] })
   if (!all('brands').length) for (const name of ['万物云', '万科物业', '朴邻', '研选家', '住这儿']) brandPut({ id: id(), name, grants: {}, createdAt: now() })
+  if (!all('brands').some((b) => b.name === '营销活动')) brandPut({ id: 'marketing-activities', name: '营销活动', grants: {}, createdAt: now() })
   const isAdmin = (user) => user?.email?.toLowerCase() === ADMIN
   function level(user, brand) {
     if (!user || !brand) return 0
