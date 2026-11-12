@@ -12,3 +12,10 @@ export function readAccentTheme() {
   const saved = localStorage.getItem(ACCENT_STORAGE_KEY)
   return ACCENT_THEMES.find(({ id }) => id === saved)?.id ?? 'blue'
 }
+
+export function applyAccentTheme(id) {
+  const theme = ACCENT_THEMES.find((entry) => entry.id === id) ?? ACCENT_THEMES[0]
+  const root = document.documentElement
+  root.dataset.accent = theme.id
+  root.style.setProperty('--user-message-fill', theme.swatch)
+}

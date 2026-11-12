@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ACCENT_STORAGE_KEY, ACCENT_THEMES, readAccentTheme } from './accentThemes.js'
+import { ACCENT_STORAGE_KEY, ACCENT_THEMES, applyAccentTheme, readAccentTheme } from './accentThemes.js'
 import './accentTheme.css'
 
 export default function AccentTheme() {
   const [accent, setAccent] = useState(readAccentTheme)
 
   useEffect(() => {
-    document.documentElement.dataset.accent = accent
+    applyAccentTheme(accent)
     localStorage.setItem(ACCENT_STORAGE_KEY, accent)
   }, [accent])
 
