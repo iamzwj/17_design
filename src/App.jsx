@@ -1,3 +1,4 @@
+import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
@@ -415,7 +416,7 @@ async function copyToClipboard(text) {
   textarea.remove()
 }
 
-function MessageCopyButton({ content, label = false }) {
+function MessageCopyButton({ content, label = false, copyLabel = '复制全文' }) {
   const [copied, setCopied] = useState(false)
 
   async function copyMessage() {
@@ -426,8 +427,8 @@ function MessageCopyButton({ content, label = false }) {
     } catch { /* Clipboard permission can be unavailable in embedded browsers. */ }
   }
 
-  return <button className={`message-copy-button ${label ? 'with-label' : ''} ${copied ? 'is-copied' : ''}`} type="button" onClick={copyMessage} aria-label={copied ? '已复制全文' : '复制全文'} title={copied ? '已复制' : '复制全文'}>
-    <Icon name={copied ? 'check' : 'copy'} size={14}/>{label && <span>{copied ? '已复制' : '复制全文'}</span>}
+  return <button className={`message-copy-button ${label ? 'with-label' : ''} ${copied ? 'is-copied' : ''}`} type="button" onClick={copyMessage} aria-label={copied ? '已复制' : copyLabel} title={copied ? '已复制' : copyLabel}>
+    <Icon name={copied ? 'check' : 'copy'} size={14}/>{label && <span>{copied ? '已复制' : copyLabel}</span>}
   </button>
 }
 
@@ -463,6 +464,26 @@ function AnswerText({ content }) {
     if (bullet) return <p className="answer-bullet" key={index}><i>•</i><span>{inline(bullet[1])}</span></p>
     return <p key={index}>{inline(line)}</p>
   })}</div>
+}
+
+export function ActivityAnswer({ content, sources }) {
+  const { before, answer, after } = splitActivityAnswer(activityVisibleText(content))
+  return <div className="activity-answer">
+    {before && <div className="activity-answer-notes"><AnswerText content={before}/></div>}
+    {answer && <section className="activity-answer-card" aria-label="正式答案">
+      <header className="activity-answer-header">
+        <b>正式答案</b>
+        <MessageCopyButton content={answer} copyLabel="复制正式答案"/>
+      </header>
+      <AnswerText content={answer}/>
+    </section>}
+    {after && <section className="activity-answer-notes" aria-label="建议与说明">
+      <h3>建议与说明</h3>
+      <AnswerText content={after}/>
+    </section>}
+    <ActivityHtmlResult content={content}/>
+    <TextSources sources={sources}/>
+  </div>
 }
 
 function TextSources({ sources }) {
@@ -1659,7 +1680,7 @@ function TextStudio({ type, conversation, onSave }) {
         const text = [item.content, imageInstruction, ...textFiles.map((file) => `\n\n--- 文件：${file.name} ---\n${file.content}`)].join('')
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
-      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : copy.systemPrompt
+      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS].filter(Boolean).join('\n\n')
       const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
@@ -1694,7 +1715,17 @@ function TextStudio({ type, conversation, onSave }) {
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
-        return message.role === 'user' ? <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/> : message.role === 'error' ? <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div> : <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}{type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={type === 'strategy' ? activityVisibleText(message.content) : message.content}/>}<ActivityHtmlResult content={message.content}/><TextSources sources={message.sources}/><MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/></div>
+        if (message.role === 'user') return <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/>
+        if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
+        return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
+          {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
+          {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
+            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={message.content}/>}
+            <ActivityHtmlResult content={message.content}/>
+            <TextSources sources={message.sources}/>
+            <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>
+          </>}
+        </div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         <div className="conversation-tail-space" aria-hidden="true"/>
