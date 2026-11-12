@@ -90,6 +90,11 @@ test('brand knowledge permissions, version publishing, index changes, images and
     assert.equal(failed.versions[0].status, 'failed')
     assert.equal((await call(`/documents/${bad.data.document.id}/retry`, {})).status, 202)
     await new Promise((r) => setTimeout(r, 100));
+    const disposable = (await call('/brands', { name: '删除测试', grants: {} })).data.brand
+    assert.equal((await call('/brands/' + disposable.id, {}, 'viewer', 'DELETE')).status, 403)
+    assert.equal((await call('/brands/' + disposable.id, {}, 'admin', 'DELETE')).status, 200)
+    assert.ok(!(await call('/bootstrap')).data.brands.some((b) => b.id === disposable.id))
+    assert.equal((await call('/documents?brandId=' + disposable.id)).status, 403)
     await kb.close()
     const app2 = express(); app2.use(express.json())
     kb = installKnowledge(app2, { dataDir, requireAuth, requireAdmin, listUsers: () => users, embed })

@@ -66,7 +66,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   if (!all('brands').some((b) => b.name === '营销活动')) brandPut({ id: 'marketing-activities', name: '营销活动', grants: {}, createdAt: now() })
   const isAdmin = (user) => user?.email?.toLowerCase() === ADMIN
   function level(user, brand) {
-    if (!user || !brand) return 0
+    if (!user || !brand || brand.deletedAt) return 0
     if (isAdmin(user)) return 3
     // Temporary owner-only maintenance; preserve grants for a future reopening.
     return 1
@@ -271,6 +271,18 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (!brand) fail('品牌不存在', 404)
     const grants = Object.fromEntries(all('groups').map((g) => [g.id, roles[req.body.grants?.[g.id]] ? req.body.grants[g.id] : 'none']))
     res.json({ brand: brandPut({ ...brand, name, grants }) })
+  })
+  route('delete', '/brands/:id', admin, (req, res) => {
+    const brand = get('brands', req.params.id)
+    if (!brand) fail('品牌不存在', 404)
+    db.transaction(() => {
+      const deletedAt = brand.deletedAt || now()
+      brandPut({ ...brand, deletedAt })
+      for (const doc of all('documents').filter((item) => item.brandId === brand.id && !item.deletedAt)) {
+        docPut({ ...doc, deletedAt, publishedVersionId: null })
+      }
+    })()
+    res.json({ ok: true })
   })
   route('post', '/groups', admin, (req, res) => {
     const group = get('groups', req.body.id); if (!group) fail('请选择三个组之一')
