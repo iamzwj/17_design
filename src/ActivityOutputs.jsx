@@ -41,6 +41,28 @@ export function useActivityImages(conversationId, enabled) {
   return { records, create: async (prompt, context, recordId) => { const existing = recordId && read(key).find(r => r.id === recordId); if (existing) { if (['submitting', 'running'].includes(existing.status)) await execute(existing); return }; const record = { id: recordId || crypto.randomUUID(), prompt, context: { ...context }, status: 'submitting', createdAt: Date.now() }; write(rows => [...rows, record]); await execute(record) } }
 }
 
+export function groupActivityImages(messages, records) {
+  const byMessage = new Map()
+  const unmatched = []
+  for (const record of records) {
+    let index = messages.findIndex(message =>
+      message.activityImageId === record.id ||
+      (message.role === 'assistant' && message.taskId && record.id.startsWith(`${message.taskId}-page-`)),
+    )
+    if (index === -1 && !record.context.pageTitle) {
+      // Old image messages did not store a task ID. Match their prompt once
+      // in submission order so repeated prompts each get their own result.
+      index = messages.findIndex((message, position) => message.role === 'user' &&
+        !message.activityImageId && !byMessage.has(position) &&
+        (record.prompt === message.content || record.prompt.startsWith(`${message.content}\n\n当前对话方案参考：`)),
+      )
+    }
+    if (index === -1) unmatched.push(record)
+    else byMessage.set(index, [...(byMessage.get(index) || []), record])
+  }
+  return { byMessage, unmatched }
+}
+
 export function ActivityImageResults({ records }) {
   if (!records.length) return null
   return <div className="activity-image-results">{records.map(r => <article key={r.id}><header><b>{r.context.pageTitle || '活动图片'}</b><span>{r.context.identity || '按需求创作'} · {r.context.scope || '未指定属地'}</span></header>{['running', 'submitting'].includes(r.status) ? <p role="status">正在生成图片，切换模块后可回来查看…</p> : r.status === 'failed' ? <p role="alert">{r.error}</p> : r.urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={r.prompt}/></a>)}</article>)}</div>

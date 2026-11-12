@@ -1,6 +1,6 @@
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
-import { ActivityHtmlResult, ActivityImageResults, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
+import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
 import AccentTheme from './AccentTheme.jsx'
@@ -12,7 +12,7 @@ import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
@@ -1622,11 +1622,12 @@ function TextStudio({ type, conversation, onSave }) {
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
     if (type === 'strategy' && activityContext.format === 'image') {
       setInput(''); setAttachmentError('')
-      const nextMessages = [...messagesRef.current, { role: 'user', content }]
+      const activityImageId = crypto.randomUUID()
+      const nextMessages = [...messagesRef.current, { role: 'user', content, activityImageId }]
       updateMessages(nextMessages); saveTaskState(nextMessages, { activate: true }); scrollToLatestResult()
       const priorPlan = [...messagesRef.current].reverse().find(m => m.role === 'assistant')
       const imageBrief = [content, priorPlan ? `当前对话方案参考：${activityVisibleText(priorPlan.content).slice(0, 6000)}` : ''].filter(Boolean).join('\n\n')
-      await activityImages.create(imageBrief, activityContext)
+      await activityImages.create(imageBrief, activityContext, activityImageId)
       return
     }
     const startedAt = new Date().toISOString()
@@ -1708,14 +1709,20 @@ function TextStudio({ type, conversation, onSave }) {
     }
   }
 
+  const activityImageGroups = type === 'strategy' ? groupActivityImages(messages, activityImages.records) : null
+
   return <section className={`workspace text-workspace ${type === 'strategy' ? 'activity-workspace' : ''} ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
     <div className="conversation" ref={conversationScrollRef}>
-      {messages.length === 0 && runningRequests.length === 0 ? <div className="welcome text-welcome">
+      {messages.length === 0 && runningRequests.length === 0 && !activityImageGroups?.unmatched.length ? <div className="welcome text-welcome">
         <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
-        if (message.role === 'user') return <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage} key={index}/>
+        const imageRecords = activityImageGroups?.byMessage.get(index)
+        if (message.role === 'user') return <Fragment key={index}>
+          <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage}/>
+          {imageRecords && <ActivityImageResults records={imageRecords}/>}
+        </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
@@ -1725,12 +1732,13 @@ function TextStudio({ type, conversation, onSave }) {
             <TextSources sources={message.sources}/>
             <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>
           </>}
+          {imageRecords && <ActivityImageResults records={imageRecords}/>}
         </div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
+        {activityImageGroups?.unmatched.length > 0 && <ActivityImageResults records={activityImageGroups.unmatched}/>}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
-      {type === 'strategy' && <ActivityImageResults records={activityImages.records}/>}
     </div>
     <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
       {type === 'compliance' && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
