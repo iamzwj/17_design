@@ -1,0 +1,47 @@
+name: Image 2 concise prompt actual shot test
+on:
+  push:
+    branches: [diagnostic/model-probe]
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: "startsWith(github.event.head_commit.message, 'Concise')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe production model channel
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/probe
+          chmod 600 ~/.ssh/probe
+          ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/probe ubuntu@49.235.121.231 'cd /home/ubuntu/17_design && node --env-file=.env --input-type=module' <<'JS'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          const root='/home/ubuntu/17_design/data/films';
+          const base=(process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'');
+          const dir='/home/ubuntu/17_design/data/diagnostics/image25-actual';fs.mkdirSync(dir,{recursive:true,mode:0o700});
+          const category=e=>{const s=typeof e==='string'?e:JSON.stringify(e||'');return /rate.?limit|429|concurr|too many/i.test(s)?'rate_limit':/timeout|timed.out|超时/i.test(s)?'timeout':/download|fetch|403|expired|签名|下载/i.test(s)?'reference_fetch':/content|policy|safety|moderation|审核/i.test(s)?'moderation':/image|reference|图片|参考/i.test(s)?'reference_other':s?'other':null;};
+          const log=x=>console.log(JSON.stringify(x));
+          const original=JSON.parse(fs.readFileSync(path.join(dir,'image2-same-fourrefs.json'),'utf8'));
+          const id=original.projectId;
+          const links=await import(pathToFileURL('/home/ubuntu/17_design/server/filmLinks.js'));
+          async function api(endpoint,body){const r=await fetch(base+endpoint,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(180000)});const raw=await r.json();const d=raw.data||raw;if(!r.ok||(d.error&&!d.id&&!d.status)){const e=Error('provider error');e.detail=d;e.http=r.status;throw e;}return d;}
+          async function run(label,task,mode='original'){
+           const file=path.join(dir,label+'.json');if(fs.existsSync(file)){log({phase:'existing_probe',label});return JSON.parse(fs.readFileSync(file,'utf8'));}
+           const body=structuredClone(task.requestBody);
+           if(mode==='fresh')body.images=(body.images||[]).map(u=>{const url=new URL(u);return links.filmAssetLink(root,id,url.pathname.split('/').pop(),url.origin)});
+           const record={label,projectId:id,resourceId:task.resourceId,requestBody:body,startedAt:Date.now(),mode};
+           const save=()=>fs.writeFileSync(file,JSON.stringify(record,null,2),{mode:0o600});save();
+           try{const d=await api('/v1/api/generate',{...body,replyType:'async'});record.providerId=d.id;record.submission=d;save();log({phase:'submitted',label,refs:body.images?.length,seconds:(Date.now()-record.startedAt)/1000,accepted:!!d.id});if(!d.id)return record;
+           for(let n=0;n<80;n++){await new Promise(r=>setTimeout(r,7500));try{const d=await api('/v1/api/result?id='+encodeURIComponent(record.providerId));record.result=d;record.checkedAt=Date.now();save();if(n%8===0||['succeeded','failed'].includes(d.status))log({phase:'poll',label,status:d.status,seconds:Math.round((Date.now()-record.startedAt)/1000),errorCategory:category(d.error)});if(['succeeded','failed'].includes(d.status))return record;}catch(e){record.queryError=e.detail||e.message;save();log({phase:'query_error',label,category:category(record.queryError)});}}
+           }catch(e){record.error=e.detail||e.message;save();log({phase:'submission_error',label,http:e.http,category:category(record.error)});}return record;
+          }
+          const actual={resourceId:original.resourceId,requestBody:structuredClone(original.requestBody)};
+          actual.requestBody.prompt='白天，冬季腊月二十八。电影写实，单幅画面。机位在住户家内，朝敞开的入户门和楼道拍摄。45岁女性穿厚羽绒服站在门内；青年男性穿单薄工装，刚转身来到门槛外，准备沿楼道离开。年货箱已搬进家中，放在门内附近，不挡通道。室内中性暖光，楼道有白天自然光。人物身份、服装及门口空间布局与参考图一致，保持真实比例和连续透视。只表现这一瞬间，不拼图、不生成多视图。';
+          log({phase:'comparison',model:actual.requestBody.model,refs:actual.requestBody.images.length,originalPromptCharacters:original.requestBody.prompt.length,newPromptCharacters:actual.requestBody.prompt.length,sameReferences:JSON.stringify(actual.requestBody.images)===JSON.stringify(original.requestBody.images)});
+          await run('image2-concise-fourrefs',actual);
+          JS
