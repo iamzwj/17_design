@@ -27,9 +27,14 @@ jobs:
               let upstream;
               if(t.providerId)try {
                 const r=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/api/result?id='+encodeURIComponent(t.providerId),{headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY},signal:AbortSignal.timeout(12000)});
-                const d=await r.json();upstream={http:r.status,status:d.status};
+                const d=await r.json();upstream={http:r.status,status:d.status,category: /rate.?limit|429|concurr|too many/i.test(JSON.stringify(d.error||''))?'rate_limit':/timeout/i.test(JSON.stringify(d.error||''))?'timeout':/image|reference|url|download/i.test(JSON.stringify(d.error||''))?'reference':d.error?'other':null};
               }catch(e){upstream={error:e.name};}
-              console.log(JSON.stringify({status:t.status,providerStatus:t.providerStatus,elapsedMinutes:Math.round((Date.now()-Number(t.startedAt||Date.now()))/60000),upstream}));
+              const refs=t.requestBody?.images||[];
+              const referenceSizes=refs.map(url=>{
+                try {const file=new URL(url).pathname.split('/').pop();return fs.statSync(root+'/'+id+'/'+file).size;}catch{return null;}
+              });
+              console.log(JSON.stringify({status:t.status,providerStatus:t.providerStatus,referenceCount:refs.length,referenceSizes,promptCharacters:t.requestBody?.prompt?.length,localErrorCategory:/rate.?limit|429|concurr|too many/i.test(t.error||'')?'rate_limit':/timeout|超时/i.test(t.error||'')?'timeout':t.error?'other':null,upstream}));
+
             }
           }
           JS
