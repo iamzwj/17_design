@@ -17,24 +17,36 @@ jobs:
           chmod 600 ~/.ssh/probe
           ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/probe ubuntu@49.235.121.231 'cd /home/ubuntu/17_design && node --env-file=.env --input-type=module' <<'JS'
-          const fs=await import('node:fs');
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {pathToFileURL} from 'node:url';
           const root='/home/ubuntu/17_design/data/films';
-          for(const id of fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x))) {
-            let p;try{p=JSON.parse(fs.readFileSync(root+'/'+id+'/project.json','utf8'));}catch{continue;}
-            if(!p.shots?.some(s=>!s.frame)||!['running','queued','failed','needs-input'].includes(p.status))continue;
-            console.log(JSON.stringify({model:p.imageModel,status:p.status,frames:p.shots.filter(s=>s.frame).length,total:p.shots.length}));
-            for(const t of (p.tasks||[]).filter(t=>t.kind==='frame'&&['running','failed','needs-input'].includes(t.status))) {
-              let upstream;
-              if(t.providerId)try {
-                const r=await fetch((process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'')+'/v1/api/result?id='+encodeURIComponent(t.providerId),{headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY},signal:AbortSignal.timeout(12000)});
-                const d=await r.json();upstream={http:r.status,status:d.status,category: /rate.?limit|429|concurr|too many/i.test(JSON.stringify(d.error||''))?'rate_limit':/timeout/i.test(JSON.stringify(d.error||''))?'timeout':/image|reference|url|download/i.test(JSON.stringify(d.error||''))?'reference':d.error?'other':null};
-              }catch(e){upstream={error:e.name};}
-              const refs=t.requestBody?.images||[];
-              const referenceSizes=refs.map(url=>{
-                try {const file=new URL(url).pathname.split('/').pop();return fs.statSync(root+'/'+id+'/'+file).size;}catch{return null;}
-              });
-              console.log(JSON.stringify({status:t.status,providerStatus:t.providerStatus,referenceCount:refs.length,referenceSizes,promptCharacters:t.requestBody?.prompt?.length,localErrorCategory:/rate.?limit|429|concurr|too many/i.test(t.error||'')?'rate_limit':/timeout|超时/i.test(t.error||'')?'timeout':t.error?'other':null,upstream}));
-
-            }
+          const base=(process.env.GRSAI_BASE_URL||'https://grsaiapi.com').replace(/\/$/,'');
+          const dir='/home/ubuntu/17_design/data/diagnostics/image25-actual';fs.mkdirSync(dir,{recursive:true,mode:0o700});
+          const category=e=>{const s=typeof e==='string'?e:JSON.stringify(e||'');return /rate.?limit|429|concurr|too many/i.test(s)?'rate_limit':/timeout|timed.out|超时/i.test(s)?'timeout':/download|fetch|403|expired|签名|下载/i.test(s)?'reference_fetch':/content|policy|safety|moderation|审核/i.test(s)?'moderation':/image|reference|图片|参考/i.test(s)?'reference_other':s?'other':null;};
+          const log=x=>console.log(JSON.stringify(x));
+          const projects=fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x)).flatMap(id=>{try{return [{id,p:JSON.parse(fs.readFileSync(path.join(root,id,'project.json'),'utf8'))}];}catch{return []}}).filter(({p})=>p.imageModel==='gpt-image-2.5'&&p.shots?.length===10&&p.tasks?.some(t=>t.kind==='frame'&&t.requestBody));
+          projects.sort((a,b)=>Math.max(...b.p.tasks.map(t=>t.startedAt||0))-Math.max(...a.p.tasks.map(t=>t.startedAt||0)));
+          if(!projects.length)throw Error('No matching actual project');
+          const {id,p}=projects[0];const tasks=p.tasks.filter(t=>t.kind==='frame'&&t.requestBody).sort((a,b)=>(a.requestBody.images?.length||0)-(b.requestBody.images?.length||0));
+          log({phase:'original',count:tasks.length,activeProjects:projects.length,referenceCounts:tasks.map(t=>t.requestBody.images?.length||0)});
+          for(const t of tasks)log({phase:'original_error',refs:t.requestBody.images?.length,errorCategory:category(t.error),hasFailedId:!!t.failedProviderId,hasId:!!t.providerId});
+          const links=await import(pathToFileURL('/home/ubuntu/17_design/server/filmLinks.js'));
+          log({phase:'config',referenceTtlSeconds:links.FILM_REFERENCE_TTL_SECONDS});
+          const exact=tasks[tasks.length-1];
+          for(const u of exact.requestBody.images||[]){const started=Date.now();try{const r=await fetch(u,{signal:AbortSignal.timeout(30000)});const b=await r.arrayBuffer();log({phase:'reference_fetch',http:r.status,bytes:b.byteLength,milliseconds:Date.now()-started,expired:new URL(u).searchParams.get('expires')<Date.now()/1000});}catch(e){log({phase:'reference_fetch',error:e.name,milliseconds:Date.now()-started})}}
+          async function api(endpoint,body){const r=await fetch(base+endpoint,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+process.env.GRSAI_API_KEY,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(180000)});const raw=await r.json();const d=raw.data||raw;if(!r.ok||(d.error&&!d.id&&!d.status)){const e=Error('provider error');e.detail=d;e.http=r.status;throw e;}return d;}
+          async function run(label,task,mode='original'){
+           const file=path.join(dir,label+'.json');if(fs.existsSync(file)){log({phase:'existing_probe',label});return JSON.parse(fs.readFileSync(file,'utf8'));}
+           const body=structuredClone(task.requestBody);
+           if(mode==='fresh')body.images=(body.images||[]).map(u=>{const url=new URL(u);return links.filmAssetLink(root,id,url.pathname.split('/').pop(),url.origin)});
+           const record={label,projectId:id,resourceId:task.resourceId,requestBody:body,startedAt:Date.now(),mode};
+           const save=()=>fs.writeFileSync(file,JSON.stringify(record,null,2),{mode:0o600});save();
+           try{const d=await api('/v1/api/generate',{...body,replyType:'async'});record.providerId=d.id;record.submission=d;save();log({phase:'submitted',label,refs:body.images?.length,seconds:(Date.now()-record.startedAt)/1000,accepted:!!d.id});if(!d.id)return record;
+           for(let n=0;n<80;n++){await new Promise(r=>setTimeout(r,7500));try{const d=await api('/v1/api/result?id='+encodeURIComponent(record.providerId));record.result=d;record.checkedAt=Date.now();save();if(n%8===0||['succeeded','failed'].includes(d.status))log({phase:'poll',label,status:d.status,seconds:Math.round((Date.now()-record.startedAt)/1000),errorCategory:category(d.error)});if(['succeeded','failed'].includes(d.status))return record;}catch(e){record.queryError=e.detail||e.message;save();log({phase:'query_error',label,category:category(record.queryError)});}}
+           }catch(e){record.error=e.detail||e.message;save();log({phase:'submission_error',label,http:e.http,category:category(record.error)});}return record;
           }
+          const first=await run('serial-fourrefs-original',exact);
+          if(first.result?.status==='succeeded'){log({phase:'single_succeeded_next_batch',batch:10});await Promise.all(tasks.slice(0,10).map((t,i)=>run('parallel-'+i,t,'fresh')));}
+          else {log({phase:'single_not_succeeded_next_fresh'});await run('serial-fourrefs-fresh',exact,'fresh');}
           JS
