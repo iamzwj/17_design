@@ -128,7 +128,7 @@ async function generate(p,slot,key,body,file) {
         throw Object.assign(Error('生成提交未确认：' + error.message), { code: 'INPUT' });
       }
       if(!response.id)throw Object.assign(Error('生成服务未返回任务编号，禁止重复扣费提交'),{code:'INPUT'});
-      t.providerId=response.id;t.submitting=false;
+      t.providerId=response.id;t.submittedAt=Date.now();t.submitting=false;
       if(slot.revision===version || (!slot.revision&&version===1)){slot[key+'Task']=response.id;slot[key+'Submitting']=false;}
       save(p);
     }
@@ -152,6 +152,11 @@ async function generate(p,slot,key,body,file) {
         continue;
       }
       t.providerStatus=result.status;t.updatedAt=Date.now();
+      if (key !== 'video' && t.providerId &&
+          !['succeeded', 'failed'].includes(result.status) &&
+          Date.now() - (t.submittedAt || t.startedAt || Date.now()) > 30 * 60 * 1000) {
+        throw Object.assign(Error('供应商生图超过30分钟仍未完成，已停止持续等待并保留原任务编号。可重试查询，或更换生图模型重新生成。'), {code:'INPUT'});
+      }
       if((slot.revision||1)===version){slot[key+'Status']=result.status;slot[key+'CheckedAt']=Date.now();}save(p);
       if (result.status === 'failed') {
         t.failedProviderId = t.providerId;
