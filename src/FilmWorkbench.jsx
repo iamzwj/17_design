@@ -66,12 +66,35 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
   async function send(type,body={}) {if(submitting.current)return false;submitting.current=true;setBusy(true);setNotice('');try{const result=await request('/'+p.id+'/commands',{type,body});if(result.project)onProject(result.project);setNotice('操作已保存，后台将在安全点应用；已完成结果会保留。');return true;}catch(e){setNotice(userError(e.message));return false;}finally{submitting.current=false;setBusy(false);}}
   function chooseStage(value){setStage(value);setSelected('');setPanel('editor');}
   function chooseTask(id){const task=p.tasks?.find(t=>t.id===id);const resource=p.resources?.find(r=>r.id===(task?.resourceId||id));if(resource){setStage(resource.category);setSelected(resource.id);}else if(p.shots?.some(s=>s.id===(task?.resourceId||id))){setStage('storyboard');setSelected(task?.resourceId||id);}else if(task?.stage){setStage(stages.some(s=>s.id===task.stage)?task.stage:'script');}setPanel('editor');}
+  const blockedSettings = p.status === 'needs-input' && p.stage === 'assets' && p.referenceWorkflow
+    ? (p.resources || []).filter(r => ['face','wardrobe','environment'].includes(r.type) &&
+      (!r.output || r.stale || (r.approvedVersion !== r.revision &&
+        (r.assetReview?.version !== r.revision || r.assetReview?.file !== r.output.file || r.assetReview?.status === 'repair'))))
+    : [];
+  const needsSettings = blockedSettings.length > 0;
+  const firstSetting = blockedSettings.find(r => r.output) || blockedSettings[0];
+  function openBlockedSetting(resource) {
+    chooseTask(resource.id);
+    requestAnimationFrame(() => {
+      const card = document.getElementById('film-asset-' + resource.id);
+      card?.scrollIntoView({block:'nearest'});
+      card?.focus({preventScroll:true});
+    });
+  }
   const events=(p.events||[]).filter(e=>!['dispatch','started'].includes(e.type));
-  return <div className="film-workbench"><header className="fw-control"><div><h2>{filmTaskName(p).replace(/^一键成片 · /, "")}</h2><p>{p.duration == null ? "时长自动" : `${p.duration} 秒`} · {p.ratio} · {p.settings?.style||'电影写实'}{p.status!=='succeeded'&&` · ${phaseLabel}`}</p></div><div className="fw-control-actions"><span className={`fw-state ${p.status}`}>{labels[p.status]||p.status}</span>{p.status!=='succeeded'&&<b>{complete} / {stages.length} 阶段</b>}{!p.awaitingCharacters&&(p.schedulingPaused||['paused','cancelled','failed','needs-input','review'].includes(p.status)?<button className="film-primary" disabled={busy} onClick={()=>send('resume',{all:false})}>继续自动制作</button>:p.status!=='succeeded'&&<button disabled={busy} onClick={()=>send('pause')}>暂停新任务</button>)}{p.output&&<button className="film-primary" onClick={onDownload}>下载成片</button>}{p.output && p.replacementReady && <button className="film-primary" disabled={busy || Boolean(p.replacement)} onClick={()=>send('export-replacement')}>替换新素材并重新合成</button>}{!['output','media'].includes(stage)&&<button disabled={busy} onClick={()=>send('stage-pause',{stage,paused:!p.pausedStages?.[stage]})}>{p.pausedStages?.[stage]?'恢复当前阶段':'暂停当前阶段'}</button>}<button aria-expanded={settings} onClick={()=>setSettings(!settings)}>项目设置</button></div></header>
+  return <div className="film-workbench"><header className="fw-control"><div><h2>{filmTaskName(p).replace(/^一键成片 · /, "")}</h2><p>{p.duration == null ? "时长自动" : `${p.duration} 秒`} · {p.ratio} · {p.settings?.style||'电影写实'}{p.status!=='succeeded'&&` · ${phaseLabel}`}</p></div><div className="fw-control-actions"><span className={`fw-state ${p.status}`}>{labels[p.status]||p.status}</span>{p.status!=='succeeded'&&<b>{complete} / {stages.length} 阶段</b>}{!p.awaitingCharacters&&(p.schedulingPaused||['paused','cancelled','failed','needs-input','review'].includes(p.status)?<button className="film-primary" disabled={busy} onClick={()=>needsSettings ? openBlockedSetting(firstSetting) : send('resume',{all:false})}>{needsSettings?'查看待处理设定图':'继续自动制作'}</button>:p.status!=='succeeded'&&<button disabled={busy} onClick={()=>send('pause')}>暂停新任务</button>)}{p.output&&<button className="film-primary" onClick={onDownload}>下载成片</button>}{p.output && p.replacementReady && <button className="film-primary" disabled={busy || Boolean(p.replacement)} onClick={()=>send('export-replacement')}>替换新素材并重新合成</button>}{!['output','media'].includes(stage)&&<button disabled={busy} onClick={()=>send('stage-pause',{stage,paused:!p.pausedStages?.[stage]})}>{p.pausedStages?.[stage]?'恢复当前阶段':'暂停当前阶段'}</button>}<button aria-expanded={settings} onClick={()=>setSettings(!settings)}>项目设置</button></div></header>
 
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
     {settings&&<ProjectSettings project={p} send={send}/>}
-    {p.error && <p className="fw-caption" role="status">{userError(p.error)}</p>}
+    {needsSettings && <section className="fw-notice" aria-label="待处理设定图">
+      <strong>处理设定图后继续制作</strong>
+      <div className="fw-actions">{[...blockedSettings].sort((a,b)=>Number(Boolean(b.output))-Number(Boolean(a.output))).map(resource =>
+        <button key={resource.id} type="button" onClick={()=>openBlockedSetting(resource)}>
+          {resource.name} · {resource.output ? '查看审核' : '等待生成'}
+        </button>
+      )}</div>
+    </section>}
+    {p.error && !needsSettings && <p className="fw-caption" role="status">{userError(p.error)}</p>}
     {notice && <div className="fw-notice" role="status">{notice}</div>}
     {p.pendingChanges?.length>0&&<p className="fw-caption">{p.pendingChanges.length} 项操作已保存，正在等待执行器应用。外部已提交任务不会被当作已取消。</p>}
     <div className="fw-mobile-tabs"><button className={panel==='conversation'?'active':''} onClick={()=>setPanel('conversation')}>制作记录</button><button className={panel==='editor'?'active':''} onClick={()=>setPanel('editor')}>成果与编辑</button></div>

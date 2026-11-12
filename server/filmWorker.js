@@ -757,7 +757,7 @@ async function reviewLocationGroup(p, location) {
   event(p,'director','location-review:'+location.id,location.name+' · '+review.summary,{type:'decision'});
   const target = group.slice(1).find(resource => resource.id === review.targetId);
   const attempts = target?.qualityRepairAttempts || 0;
-  if (review.status === 'repair' && target && !target.locked && !target.paused && !p.pausedStages?.[target.category] &&
+  if (review.status === 'repair' && target && target.assetReview?.status !== 'manual' && !target.locked && !target.paused && !p.pausedStages?.[target.category] &&
       attempts < 2 && typeof review.correction === 'string' && review.correction.trim()) {
     applyCommand(p,{id:'location-repair:'+taskId(target.id,'image',target.revision),type:'regenerate',body:{id:target.id}});
     target.qualityRepairAttempts = attempts + 1;
@@ -811,7 +811,7 @@ async function referenceAssets(p, onlyResource) {
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
-        if(!r.output || (approvedSetting(r) && (!r.locationId || r.assetReview?.locationPolicy===1)))return;
+        if(!r.output || (approvedSetting(r) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual')))return;
         if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file ||
           (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
         const review=r.assetReview;
