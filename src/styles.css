@@ -309,6 +309,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 :root[data-theme='dark'] .task-elapsed { color: rgba(206,201,214,.52); }
 :root[data-theme='dark'] .message-copy-button { background: rgb(18 19 23 / .94); border-color: rgba(255,255,255,.14); color: var(--dp-secondary); box-shadow: 0 4px 12px rgba(0,0,0,.22); }
 :root[data-theme='dark'] .message-copy-button:hover, :root[data-theme='dark'] .message-copy-button:focus-visible { background: rgba(69,69,69,.98); color: var(--dp-highlight); border-color: rgb(var(--theme-blue-rgb) / .5); }
+:root[data-theme='dark'] .message-copy-button:hover:not(:focus-visible) { background: transparent; }
 :root[data-theme='dark'] .task-elapsed.live { color: rgba(206,201,214,.62); }
 :root[data-theme='dark'] .answer-layout { color: var(--dp-secondary); }
 :root[data-theme='dark'] .answer-plain { color: var(--dp-secondary); }
