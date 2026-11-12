@@ -20,7 +20,7 @@ jobs:
           ssh -i ~/.ssh/probe ubuntu@49.235.121.231 'cd /home/ubuntu/17_design && node --env-file=.env --input-type=module' <<'JS'
           import fs from 'node:fs';
           const file='/home/ubuntu/17_design/data/diagnostics/image25-actual/image25-concise-fourrefs.json';
-          if(!fs.existsSync(file)){console.log(JSON.stringify({phase:'image2',started:false}));process.exit(0);}
+          if(!fs.existsSync(file)){console.log(JSON.stringify({phase:'image25_concise',started:false}));process.exit(0);}
           const x=JSON.parse(fs.readFileSync(file,'utf8'));
-          console.log(JSON.stringify({phase:'image2',ageSeconds:Math.round((Date.now()-x.startedAt)/1000),status:x.result?.status,accepted:!!x.providerId,model:x.requestBody?.model,refs:x.requestBody?.images?.length}));
+          console.log(JSON.stringify({phase:'image25_concise',ageSeconds:Math.round((Date.now()-x.startedAt)/1000),status:x.result?.status,accepted:!!x.providerId,model:x.requestBody?.model,refs:x.requestBody?.images?.length}));
           JS

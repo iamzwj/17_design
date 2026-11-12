@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   probe:
-    if: "startsWith(github.event.head_commit.message, 'Image2')"
+    if: "startsWith(github.event.head_commit.message, 'Image2 test')"
     runs-on: ubuntu-latest
     steps:
       - name: Probe production model channel
