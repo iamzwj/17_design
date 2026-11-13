@@ -1,4 +1,4 @@
-import { LANGUAGE_MODELS } from './languageModels.js'
+import { availableLanguageModels, requestAvailableLanguageModel } from './languageModels.js'
 import sharp from 'sharp'
 /** Try independent vision providers and validate evidence before accepting a review. */
 export async function reviewFilmImages(api, parts) {
@@ -10,9 +10,9 @@ export async function reviewFilmImages(api, parts) {
       .flatten({background:'#ffffff'}).jpeg({quality:85}).toBuffer();
     return {type:'image_url',image_url:{url:`data:image/jpeg;base64,${image.toString('base64')}`}};
   }));
-  for (const model of LANGUAGE_MODELS) {
+  for (const model of availableLanguageModels()) {
     try {
-      const result = await api('/v1/chat/completions', {
+      const result = await requestAvailableLanguageModel(api, '/v1/chat/completions', {
         model, response_format:{type:'json_object'},
         messages:[{role:'user',content}],
       }, 60000);
