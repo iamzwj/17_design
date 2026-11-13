@@ -432,7 +432,6 @@
 .fw-asset-grid[data-independent-columns] { display: block; position: relative; }
 .fw-asset-grid[data-independent-columns] > article { position: absolute; margin: 0; box-sizing: border-box; }
 
-/* Adaptive widths and independent columns for all production result cards. */
+/* Consistent fixed card widths and independent columns for all production results. */
 .fw-asset-grid[data-independent-columns], .film-workbench .fw-storyboard-grid[data-independent-columns], .fw-library-grid[data-independent-columns] { display: block; position: relative; width: 100%; max-width: none; }
 [data-independent-columns] > article { position: absolute; margin: 0; min-width: 0; box-sizing: border-box; align-content: start; }
-.fw-resource-cards { grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)); }

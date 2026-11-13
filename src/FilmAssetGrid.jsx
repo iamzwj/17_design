@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react'
 
 // Keep each column independent without remounting cards or resetting open details.
-export default function FilmAssetGrid({ children, className = 'fw-asset-grid', minCardWidth = 300 }) {
+export default function FilmAssetGrid({ children, className = 'fw-asset-grid', cardWidth = 290 }) {
   const root = useRef(null)
   useLayoutEffect(() => {
     const grid = root.current
@@ -11,8 +11,8 @@ export default function FilmAssetGrid({ children, className = 'fw-asset-grid', m
       frame = 0
       const gap = window.innerWidth <= 600 ? 12 : 16
       if (!grid.clientWidth) return
-      const columns = Math.max(1, Math.floor((grid.clientWidth + gap) / (minCardWidth + gap)))
-      const width = (grid.clientWidth - gap * (columns - 1)) / columns
+      const columns = Math.max(1, Math.floor((grid.clientWidth + gap) / (cardWidth + gap)))
+      const width = Math.min(cardWidth, grid.clientWidth)
       const heights = Array(columns).fill(0)
       const cards = Array.from(grid.children)
       for (const card of cards) card.style.width = `${width}px`
@@ -31,6 +31,6 @@ export default function FilmAssetGrid({ children, className = 'fw-asset-grid', m
     for (const card of grid.children) observer.observe(card)
     layout()
     return () => { observer.disconnect(); if (frame) cancelAnimationFrame(frame) }
-  }, [children, minCardWidth])
+  }, [children, cardWidth])
   return <div className={className} data-independent-columns ref={root}>{children}</div>
 }
