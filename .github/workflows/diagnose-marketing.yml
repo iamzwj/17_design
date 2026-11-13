@@ -20,44 +20,10 @@ jobs:
           if [ -n "$MARKETING_KEY" ]; then echo IMPORT_SECRET_PRESENT; else echo IMPORT_SECRET_MISSING; fi
           ssh ubuntu@49.235.121.231 python3 - <<'PY'
           import sqlite3,json,pathlib
-          env={}
-          for line in pathlib.Path('/home/ubuntu/17_design/.env').read_text().splitlines():
-              if '=' in line:
-                  k,v=line.split('=',1);env[k]=v
-          print('SERVER_IMPORT_KEY_PRESENT',bool(env.get('MARKETING_KNOWLEDGE_KEY')))
-          db=sqlite3.connect('file:/home/ubuntu/17_design/data/knowledge/knowledge.sqlite?mode=ro',uri=True)
-          brands=[json.loads(r[0]) for r in db.execute('select json from brands')]
-          for brand in brands:
-              if brand.get('name')!='营销活动':continue
-              print('MARKETING_BRAND',brand['id'])
-              docs=[json.loads(r[0]) for r in db.execute('select json from documents where brand_id=?',(brand['id'],))]
-              print('DOCUMENT_COUNT',len(docs))
-              for d in docs:
-                  print('DOCUMENT',json.dumps({k:d.get(k) for k in ['id','deletedAt','publishedVersionId','latestVersionId']},ensure_ascii=False))
-
-          import subprocess
-          script = r'''
-          import fs from 'node:fs';
-          import os from 'node:os';
-          import path from 'node:path';
-          import Database from 'better-sqlite3';
-          import { installKnowledge } from './server/knowledge/index.js';
-          const temp=fs.mkdtempSync(path.join(os.tmpdir(),'marketing-read-'));
-          fs.mkdirSync(path.join(temp,'knowledge'));
-          const db=new Database('/home/ubuntu/17_design/data/knowledge/knowledge.sqlite',{readonly:true});
-          await db.backup(path.join(temp,'knowledge','knowledge.sqlite'));db.close();
-          const routes=new Map();
-          const app={}; for(const method of ['get','post','put','patch','delete'])app[method]=(url,...handlers)=>routes.set(method+url,handlers.at(-1));
-          const admin={id:'diagnostic-admin',email:'zhangwj159'};
-          const kb=installKnowledge(app,{dataDir:temp,requireAuth:()=>{},requireAdmin:()=>{},listUsers:()=>[admin],automaticVision:false,backgroundProcessing:false,embed:async()=>[]});
-          for(const user of [admin,{id:'diagnostic-normal-a',email:'ordinary-a@example.invalid'},{id:'diagnostic-normal-b',email:'ordinary-b@example.invalid'}]){
-            for(const endpoint of ['/bootstrap','/documents']){
-              await routes.get('get/api/knowledge'+endpoint)({user,query:{brandId:'marketing-activities'}},{json:d=>console.log('ACCOUNT_ACCESS',user.id,endpoint,JSON.stringify(endpoint==='/bootstrap'?d.brands.filter(b=>b.name==='营销活动').map(b=>({id:b.id,permission:b.permission})): {count:d.documents.length,published:d.documents.filter(x=>x.publishedVersionId).length}))},e=>{throw e});
-            }
-          }
-          fs.rmSync(temp,{recursive:true,force:true});process.exit(0);
-          '''
-          r=subprocess.run(['node','--input-type=module','-e',script],cwd='/home/ubuntu/17_design',text=True,capture_output=True)
-          print(r.stdout);print(r.stderr[:1200]);print('PROBE_EXIT',r.returncode)
-          PY
+          root=pathlib.Path('/home/ubuntu/17_design/data/films')
+          files=sorted(root.glob('*/project.json'),key=lambda f:f.stat().st_mtime,reverse=True)
+          for index,f in enumerate(files[:8]):
+              p=json.loads(f.read_text());shots=p.get('shots',[])
+              print('PROJECT_STATS',json.dumps({'recencyRank':index+1,'shots':len(shots),'targetDuration':p.get('duration'),'autoDuration':p.get('autoDuration'),'scriptScenes':len((p.get('script') or {}).get('scenes',[])),'totalShotSeconds':sum(s.get('duration',0) for s in shots),'durations':[s.get('duration') for s in shots],'splitCount':sum(bool(s.get('splitFrom')) for s in shots),'dialogueLengths':[len(s.get('dialogue') or '') for s in shots],'uniqueActions':len(set(s.get('action','') for s in shots))},ensure_ascii=False))
+                    PY
           ssh ubuntu@49.235.121.231 'journalctl -u 17design.service -n 1500 --no-pager | grep -i "Marketing knowledge" | tail -8' || true
