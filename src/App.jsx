@@ -51,7 +51,7 @@ const MODULES = [
 const KNOWLEDGE_SECTIONS = [
   { id: 'brand-knowledge', label: '团队品牌知识库' },
   { id: 'assets', label: '素材库' },
-  { id: 'marketing-activities', label: '营销活动' },
+  { id: 'marketing-activities', label: '营销知识库' },
 ]
 
 const WORKSPACE_TITLES = {
@@ -60,7 +60,7 @@ const WORKSPACE_TITLES = {
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
   'brand-knowledge': ['KNOWLEDGE BASE', '团队品牌知识库'],
-  'marketing-activities': ['KNOWLEDGE BASE', '营销活动'],
+  'marketing-activities': ['KNOWLEDGE BASE', '营销知识库'],
   assets: ['ASSET LIBRARY', '素材库'],
   'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
   'marketing-strategy': ['KNOWLEDGE BASE', '营销策略'],
@@ -2125,7 +2125,7 @@ export default function App() {
       : active === 'discover-skills'
         ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'marketing-activities'
-        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销活动" onLogin={() => openLogin('marketing-activities')}/>
+        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销知识库" spaceId="marketing-activities" onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
         ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'

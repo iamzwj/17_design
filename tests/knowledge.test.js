@@ -23,10 +23,12 @@ test('brand knowledge permissions, version publishing, index changes, images and
   try {
     assert.equal((await call('/bootstrap', undefined, '')).status, 401)
     const boot = (await call('/bootstrap')).data, brandId = boot.brands[0].id
-    assert.ok(!boot.brands.some((b) => ['万物云', '住这儿'].includes(b.name)))
+    assert.ok(!boot.brands.some((b) => ['万物云', '住这儿', '营销知识库'].includes(b.name)))
     const storedBrands = kb.db.prepare('SELECT json FROM brands').all().map((r) => JSON.parse(r.json))
     assert.ok(storedBrands.some((b) => b.name === '万物云'))
     assert.ok(storedBrands.some((b) => b.name === '住这儿'))
+    await call('/brands', { name: '营销知识库', grants: {} })
+    assert.ok(!(await call('/bootstrap')).data.brands.some((b) => b.name === '营销知识库'))
     assert.equal(boot.groups.length, 3)
     assert.equal((await call('/bootstrap', undefined, 'outsider')).data.brands.length, boot.brands.length)
     await call('/groups', { id: 'group-1', name: '维护组', members: ['editor'] }); await call('/groups', { id: 'group-2', name: '查看组', members: ['viewer'] })

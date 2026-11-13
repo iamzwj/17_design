@@ -18,7 +18,7 @@ import { analyzePage, extractPages, cropRectangle, VISION_MODEL } from './vision
 const ADMIN = 'zhangwj159@onewo.com'
 const roles = { view: 1, edit: 2, publish: 3 }
 // Temporarily omit these spaces from all brand pickers; preserve their documents and history.
-const hiddenBrandNames = new Set(['万物云', '住这儿'])
+const hiddenBrandNames = new Set(['万物云', '住这儿', '营销知识库'])
 const kinds = new Set(['document', 'rule', 'logo', 'palette', 'original', 'style'])
 const now = () => new Date().toISOString()
 const id = () => randomUUID()
