@@ -1,0 +1,39 @@
+name: Test Maizi Gemini Flash
+on:
+  push:
+    branches: [test/maizi-gemini-flash]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test model availability and structured tasks
+        env:
+          MAIZI_API_KEY: ${{ secrets.MAIZI_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os,json,time,urllib.request,urllib.error
+          key=os.environ['MAIZI_API_KEY']
+          def call(path,body=None):
+              start=time.monotonic()
+              req=urllib.request.Request('https://api.maizitech.ai/v1/'+path,data=json.dumps(body).encode() if body else None,headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=100) as r: data=json.load(r)
+                  return {'seconds':round(time.monotonic()-start,2),'data':data}
+              except Exception as e:
+                  detail=e.read().decode()[:1200] if isinstance(e,urllib.error.HTTPError) else str(e)
+                  return {'seconds':round(time.monotonic()-start,2),'error':detail.replace(key,'[REDACTED]')}
+          models=call('models')
+          if 'data' in models:
+              print('GEMINI_MODELS',json.dumps([m['id'] for m in models['data'].get('data',[]) if 'gemini' in m.get('id','').lower()],ensure_ascii=False))
+          else: print('MODEL_LIST',json.dumps(models,ensure_ascii=False))
+          prompts=[
+              '只回答数字。17个车位，已有9辆车，先开走3辆再驶入5辆，剩余多少空位？',
+              '仅返回JSON对象。把以下事实整理成characters和shots数组。角色小林穿蓝色物业制服。镜头1白天在小区门口问候业主，4秒。镜头2夜晚在同一门口检查照明，6秒。每镜包含id,time,duration,characterIds,outfit,action。不得增加人物，保留时段，总时长10秒。',
+              '请写一段80字以内的社区积分宣传文案。云朵是万科物业回馈业主的专属积分。不能虚构兑换规则、有效期、现金价值，也不能承诺任何商品。'
+          ]
+          for i,prompt in enumerate(prompts):
+              result=call('chat/completions',{'model':'gemini-3.7-flash','messages':[{'role':'user','content':prompt}],'max_tokens':1500})
+              print('CASE',i+1,json.dumps(result,ensure_ascii=False).replace(key,'[REDACTED]'))
+          PY
