@@ -103,12 +103,8 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
           <span>{p.shots.filter(shot => shot.video).length}/{p.shots.length}</span><span>视频</span>
         </> : p.pausedStages?.[s.id]?'已暂停':s.complete?'已完成':s.total?`${s.done}/${s.total}`:s.active?'进行中':'等待'}</small></button>)}<div className="fw-stage-library"><button type="button" className={stage==='media'?'active':''} onClick={()=>chooseStage('media')}>
           <b>全部素材</b><small>{mediaCount} 个文件</small></button><button type="button" ref={timelineTrigger} data-fw-timeline-trigger aria-expanded={Boolean(timelineOpen)} aria-controls={timelineOpen === null ? undefined : "fw-timeline-panel"} className={timelineOpen?"active":""} onClick={()=>setTimelineOpen(open=>!open)}><b>剪辑时间线</b><small>{timelineOpen?'已展开':'查看轨道'}</small></button></div></nav>
-      <section className="fw-conversation" aria-label="Agent协作工作过程"><header className="fw-panel-heading"><h3>制片过程</h3></header><div className="fw-current-tasks" aria-live="polite">{['running','queued','pausing'].includes(p.status) && (() => {
-        const running = (p.tasks || []).filter(task => task.status === 'running');
-        const jobs = p.activeJobs?.length ? p.activeJobs : running.map(task => ({ id: task.id, message: task.input?.name || task.name || task.stage }));
-        return jobs.length ? <><b>正在进行</b>{jobs.map(job => <button type="button" key={job.id} onClick={() => chooseTask(job.id)}>{job.message}</button>)}</> : <b>正在进行 · {stages.find(item => item.id === p.stage)?.label || p.stage || '准备制作'}</b>;
-      })()}</div><div className="fw-feed" ref={feed}><FilmActivity events={events} project={p} history details={false} limit={limit} onMore={()=>setLimit(limit+80)} onSelect={chooseTask}/>
-        {(p.activeJobs||[]).length>0&&<details className="fw-live-tasks"><summary>{p.activeJobs.length} 项正在制作中</summary>{p.activeJobs.map(job=><button key={job.id} onClick={()=>chooseTask(job.id)}>{job.message}</button>)}</details>}</div>
+      <section className="fw-conversation" aria-label="Agent协作工作过程"><header className="fw-panel-heading"><h3>制片过程</h3></header><div className="fw-feed" ref={feed}><FilmActivity events={events} project={p} history details={false} limit={limit} onMore={()=>setLimit(limit+80)} onSelect={chooseTask}/>
+}</div>
       </section>
       <div className="fw-inspector-scroll"><aside className="fw-inspector" aria-label="成果预览与编辑"><header className="fw-panel-heading"><h3>{stage==='media'?'全部素材':stages.find(s=>s.id===stage)?.label||'成果'} · 预览与编辑</h3>{stage==='media'&&<small>图片 · 视频 · 音频</small>}</header><div className="fw-inspector-body"><FilmEditor project={p} stage={stage} selected={selected} onSelect={id=>stage==='media'?chooseTask(id):setSelected(id)} send={send} request={request} notice={setNotice} onOpenTimeline={()=>setTimelineOpen(true)}/></div></aside></div>
     </div>

@@ -419,3 +419,7 @@
   line-height: 1.4;
   white-space: normal;
 }
+
+.fw-activity-row.is-running > div { border-left: 2px solid var(--fw-accent); padding: 12px; border-radius: 0 8px 8px 0; background: var(--fw-soft); }
+.fw-activity-row.is-running > div::before { background: var(--fw-accent); top: 18px; }
+.fw-activity-row.is-running header, .fw-activity-row.is-running p { color: var(--fw-accent); }

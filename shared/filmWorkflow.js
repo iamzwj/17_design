@@ -1,4 +1,4 @@
-export const FILM_AGENT_NAMES={director:'AI 总导演',writer:'编剧 Agent',character:'角色 Agent',scene:'场景 Agent',storyboard:'分镜 Agent',visual:'视觉 Agent',quality:'质检 Agent',audio:'声音服务',editor:'剪辑服务',user:'你'};
+export const FILM_AGENT_NAMES={director:'AI 总导演',writer:'编剧助手',character:'角色助手',scene:'场景助手',storyboard:'分镜助手',visual:'视觉助手',quality:'质检助手',audio:'声音服务',editor:'剪辑服务',user:'你'};
 export const WORKFLOW_STAGES=[['script','剧本'],['characters','角色'],['scenes','场景'],['storyboard','分镜'],['images','图片'],['videos','视频'],['audio','音频'],['editing','剪辑'],['output','成片']];
 export function workflowStages(p) {
   const resources=p.resources||[],shots=p.shots||[];
