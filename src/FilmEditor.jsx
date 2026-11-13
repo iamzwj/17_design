@@ -5,8 +5,32 @@ import FilmStoryboard from './FilmStoryboard.jsx';
 import FilmMediaLibrary from './FilmMediaLibrary.jsx';
 import {useEffect,useState} from 'react';
 import ComposerSelect from './ComposerSelect.jsx';
+import { Icon } from './icons.jsx';
 import FilmMedia from './FilmMedia.jsx';
 import {filmUpload} from './filmUpload.js';
+function CopyOriginalStory({ text }) {
+  const [status, setStatus] = useState('')
+  useEffect(() => {
+    if (!status) return
+    const timer = setTimeout(() => setStatus(''), 2500)
+    return () => clearTimeout(timer)
+  }, [status])
+  async function copy(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(text)
+      setStatus('已复制')
+    } catch {
+      setStatus('复制失败，请重试')
+    }
+  }
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+    <button type="button" disabled={!text} aria-label="复制原始故事 / 剧本" title={status || '复制原始故事 / 剧本'} onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', padding: 6 }}><Icon name={status === '已复制' ? 'check' : 'copy'} size={16}/></button>
+    <small role="status">{status}</small>
+  </span>
+}
+
 export default function FilmEditor({project:p,stage,selected,onSelect,send,request,notice,onOpenTimeline}) {
   const options=stage==='characters'||stage==='scenes'?(p.resources||[]).filter(r=>r.category===stage):stage==='images'?[...(p.resources||[]),...(p.shots||[])]:p.shots||[];
   const item=options.find(r=>r.id===selected)||options[0];
@@ -65,10 +89,10 @@ function ScriptEditor({project:p,send}) {
   const key='film-script-draft:'+p.id+':'+(p.scriptRevision||1);
   const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||p.script;}catch{return p.script;}});
   useEffect(()=>{if(draft)localStorage.setItem(key,JSON.stringify(draft));},[key,draft]);
-  if(!p.script && (p.legacy || p.plan))return <div className="fw-editor-form fw-legacy-script"><h3>原始剧本与镜头脚本</h3><p className="fw-caption">此任务在升级前创建。原始内容和已有分镜均保留，不会因查看剧本重新生成素材。</p><h4>原始故事 / 剧本</h4><div className="fw-script-body">{p.story||'该旧任务未保存原始正文'}</div><details><summary>故事梗概</summary><p>{p.plan?.summary}</p></details><h4>已有镜头脚本（{p.shots?.length||0}）</h4>{p.shots?.map((shot,i)=><details key={shot.id} open><summary>镜头 {i+1} · {shot.time||'时间见镜头描述'} · {shot.duration}秒</summary><div className="fw-script-body"><ShotScript text={shot.prompt}/></div>{shot.dialogue&&<p>对白：{shot.dialogue}</p>}</details>)}</div>;
+  if(!p.script && (p.legacy || p.plan))return <div className="fw-editor-form fw-legacy-script"><h3>原始剧本与镜头脚本</h3><p className="fw-caption">此任务在升级前创建。原始内容和已有分镜均保留，不会因查看剧本重新生成素材。</p><h4>原始故事 / 剧本<CopyOriginalStory text={p.story || ''}/></h4><div className="fw-script-body">{p.story||'该旧任务未保存原始正文'}</div><details><summary>故事梗概</summary><p>{p.plan?.summary}</p></details><h4>已有镜头脚本（{p.shots?.length||0}）</h4>{p.shots?.map((shot,i)=><details key={shot.id} open><summary>镜头 {i+1} · {shot.time||'时间见镜头描述'} · {shot.duration}秒</summary><div className="fw-script-body"><ShotScript text={shot.prompt}/></div>{shot.dialogue&&<p>对白：{shot.dialogue}</p>}</details>)}</div>;
   if(!p.script)return <div className="fw-empty"><h3>{['failed','needs-input','paused'].includes(p.status)?'剧本尚未完成':'编剧正在编写剧本'}</h3><p>{p.error||'可以在中间查看真实任务进度，剧本生成后会自动显示正文。'}</p></div>;
   const updateScene=(i,key,value)=>setDraft(d=>({...d,scenes:d.scenes.map((s,n)=>n===i?{...s,[key]:value}:s)}));
-  return <div className="fw-editor-form"><details><summary>查看原始故事 / 剧本</summary><div className="fw-script-body fw-original-story" role="region" aria-label="原始故事 / 剧本">{p.story||'未保存原始正文'}</div></details><h3>剧本 <small>版本 {p.scriptRevision||1}</small></h3><label>故事梗概<textarea disabled={p.scriptLocked} value={draft.summary||''} onChange={e=>setDraft({...draft,summary:e.target.value})}/></label>{draft.scenes.map((s,i)=><details key={s.id} open={i===0}><summary>场次 {i+1} · {s.time} · {s.location}</summary><label>时间<input disabled={p.scriptLocked} value={s.time} onChange={e=>updateScene(i,'time',e.target.value)}/></label><label>剧情与动作<textarea disabled={p.scriptLocked} value={s.action||''} onChange={e=>updateScene(i,'action',e.target.value)}/></label><label>旁白<textarea disabled={p.scriptLocked} value={s.narration||''} onChange={e=>updateScene(i,'narration',e.target.value)}/></label><p>{(s.dialogue||[]).map(d=>`${d.character}：${d.text}`).join('\n')}</p></details>)}<div className="fw-actions"><button onClick={()=>send('script-lock',{locked:!p.scriptLocked})}>{p.scriptLocked?'解锁剧本':'锁定剧本'}</button><button className="film-primary" disabled={p.scriptLocked} onClick={()=>send('script',{script:draft})}>保存剧本并续跑</button></div><small>整部剧本修改会重新分析角色、场景和分镜；有锁定资产时需先解锁。局部改动请直接选择对应任务。</small>{p.scriptHistory?.length>0&&<details><summary>剧本历史（{p.scriptHistory.length}）</summary>{p.scriptHistory.map((h,i)=><button key={i} disabled={p.scriptLocked} onClick={()=>send('script',{script:h.script})}>恢复剧本版本 {i+1}</button>)}</details>}</div>;
+  return <div className="fw-editor-form"><details><summary>查看原始故事 / 剧本<CopyOriginalStory text={p.story || ''}/></summary><div className="fw-script-body fw-original-story" role="region" aria-label="原始故事 / 剧本">{p.story||'未保存原始正文'}</div></details><h3>剧本 <small>版本 {p.scriptRevision||1}</small></h3><label>故事梗概<textarea disabled={p.scriptLocked} value={draft.summary||''} onChange={e=>setDraft({...draft,summary:e.target.value})}/></label>{draft.scenes.map((s,i)=><details key={s.id} open={i===0}><summary>场次 {i+1} · {s.time} · {s.location}</summary><label>时间<input disabled={p.scriptLocked} value={s.time} onChange={e=>updateScene(i,'time',e.target.value)}/></label><label>剧情与动作<textarea disabled={p.scriptLocked} value={s.action||''} onChange={e=>updateScene(i,'action',e.target.value)}/></label><label>旁白<textarea disabled={p.scriptLocked} value={s.narration||''} onChange={e=>updateScene(i,'narration',e.target.value)}/></label><p>{(s.dialogue||[]).map(d=>`${d.character}：${d.text}`).join('\n')}</p></details>)}<div className="fw-actions"><button onClick={()=>send('script-lock',{locked:!p.scriptLocked})}>{p.scriptLocked?'解锁剧本':'锁定剧本'}</button><button className="film-primary" disabled={p.scriptLocked} onClick={()=>send('script',{script:draft})}>保存剧本并续跑</button></div><small>整部剧本修改会重新分析角色、场景和分镜；有锁定资产时需先解锁。局部改动请直接选择对应任务。</small>{p.scriptHistory?.length>0&&<details><summary>剧本历史（{p.scriptHistory.length}）</summary>{p.scriptHistory.map((h,i)=><button key={i} disabled={p.scriptLocked} onClick={()=>send('script',{script:h.script})}>恢复剧本版本 {i+1}</button>)}</details>}</div>;
 }
 function ResourceEditor({item:r,project:p,stage,send,request,notice,hideMedia=false,hideHeading=false,hideTopActions=false}) {
   const shot=(p.shots||[]).some(s=>s.id===r.id),key=`film-edit:${p.id}:${r.id}:${r.revision}`;
