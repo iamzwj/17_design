@@ -427,3 +427,7 @@
 /* Each resource card grows independently when its details are expanded. */
 .fw-asset-grid { align-items: start; }
 .fw-asset-grid > article { align-self: start; align-content: start; }
+
+/* Card columns have independent vertical flow, including expanded details. */
+.fw-asset-grid[data-independent-columns] { display: block; position: relative; }
+.fw-asset-grid[data-independent-columns] > article { position: absolute; margin: 0; box-sizing: border-box; }
