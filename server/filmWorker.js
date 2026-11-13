@@ -689,7 +689,8 @@ function approvedSetting(resource) {
 
 function usableSetting(resource) {
   return approvedSetting(resource) || Boolean(resource?.output && !resource.stale &&
-    resource.assetReview?.status !== 'repair' && resource.assetReview?.version === resource.revision && resource.assetReview.file === resource.output.file);
+    (resource.assetReview?.status !== 'repair' || resource.locked ||
+      (resource.qualityRepairAttempts ?? Number(Boolean(resource.qualityRetryUsed))) >= 2) && resource.assetReview?.version === resource.revision && resource.assetReview.file === resource.output.file);
 }
 
 async function reviewSetting(p, resource, references) {
@@ -820,7 +821,11 @@ async function referenceAssets(p, onlyResource) {
           (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
         const review=r.assetReview;
         const attempts = r.qualityRepairAttempts ?? Number(Boolean(r.qualityRetryUsed));
-        if(review?.version!==r.revision || review.status!=='repair' || r.locked || attempts>=2)return;
+        if(review?.version!==r.revision || review.status!=='repair')return;
+        if(r.locked || attempts>=2) {
+          event(p,'director',r.id,'保留当前设定图继续制作：'+review.summary,{type:'decision'});
+          return;
+        }
         const correction = (typeof review.correction === 'string' && review.correction.trim()) ||
           '修复审核确认的问题：'+review.summary;
         if(p.schedulingPaused || p.pausedStages?.images || p.pausedStages?.[r.category] || r.paused)return;
@@ -934,10 +939,14 @@ async function produceShots(p) {
 async function directorReview(p) {
   const pending=p.shots.filter(s=>s.video && s.review?.status!=='pass' && s.manualApprovedVersion!==s.revision);
   const unresolvedSettings=(p.resources||[]).filter(r=>r.output&&!r.stale&&r.assetReview&&r.assetReview.status!=='pass');
-  const assetIssues=p.referenceWorkflow?[]:unresolvedSettings.filter(r=>!settingChecks[r.type]);
-  const issues=p.editorialWorkflow ? pending.filter(s=>s.review?.issues?.some(issue=>issue.confidence==='high' && issue.evidence)) : pending;
+  const assetIssues=p.referenceWorkflow?[]:unresolvedSettings.filter(r=>!settingChecks[r.type] && !r.locked && !r.paused && (r.repairAttempts||0)<2);
+  const repairable=pending.filter(s=>!s.locked && !s.paused && (s.repairAttempts||0)<2);
+  const issues=p.editorialWorkflow ? repairable.filter(s=>s.review?.issues?.some(issue=>issue.confidence==='high' && issue.evidence)) : repairable;
   p.reviewWarning=pending.length+unresolvedSettings.length+filmLocationReviewTargets(p).length+Number(p.continuityReview?.status==='manual');
-  if(!issues.length&&!assetIssues.length)return;
+  if(!issues.length&&!assetIssues.length){
+    if(p.reviewWarning)event(p,'director','quality-handoff','审核意见已保留，使用当前成果继续剪辑。',{type:'decision'});
+    return;
+  }
   const id=taskId('review-'+issues.map(s=>s.id+'-'+s.revision).join('-'),'director'),t=beginTask(p,id,'quality','director',{name:'导演审核与有限修复',assetIssues:assetIssues.map(r=>({id:r.id,locked:r.locked,prompt:r.prompt,review:r.assetReview})),issues:issues.map(s=>({id:s.id,locked:s.locked,attempts:s.repairAttempts||0,prompt:s.prompt,review:s.review}))});save(p);
   try {
     const d=await requestLanguageModel(api,{response_format:{type:'json_object'},messages:[{role:'system',content:'根据质检证据作导演决策。只返回{decision:"accept"|"repair"|"manual",reason,repairs:[{id,action:"frame"|"video"|"image",prompt}]}。证据不足或审美偏好不能当作确定错误；可accept附人工建议。明确人物/服装/场景错误可修复，每项最多自动修复两次，锁定资产必须manual。修复prompt第一部分必须明确时间，保留未出问题的要求。不得无限重复同一提示词。'},{role:'user',content:JSON.stringify(t.input)}]});
@@ -948,10 +957,11 @@ async function directorReview(p) {
       let repaired=false;
       if(!Array.isArray(decision.repairs)||!decision.repairs.length)throw Error('未给出可执行修复计划');
       for(const fix of decision.repairs) {
-        const shot=issues.find(s=>s.id===fix.id)||assetIssues.find(r=>r.id===fix.id);if(!shot||shot.locked||(shot.repairAttempts||0)>=2||!['frame','video','image'].includes(fix.action)||typeof fix.prompt!=='string')continue;
+        const shot=issues.find(s=>s.id===fix.id)||assetIssues.find(r=>r.id===fix.id);if(!shot||shot.locked||(shot.repairAttempts||0)>=2||!['frame','video','image'].includes(fix.action)||typeof fix.prompt!=='string'||!fix.prompt.trim()||fix.prompt===shot.prompt)continue;
         if(fix.action==='video'){applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'regenerate',body:{id:shot.id,videoOnly:true}});shot.prompt=fix.prompt;}else applyCommand(p,{id:`repair:${id}:${shot.id}`,type:'edit',body:{id:shot.id,patch:{prompt:fix.prompt}}});shot.repairAttempts=(shot.repairAttempts||0)+1;repaired=true;
       }
       if(repaired)p.status='queued';
+      else event(p,'director',id,'保留当前镜头，继续剪辑。',{type:'decision'});
     }
     save(p);
   }catch(e){finishTask(p,t,null,e);save(p);}
@@ -1085,8 +1095,31 @@ const runReplacement = stage(async p => {
 },true);
 // Each project owns one asynchronous execution. Waiting for a provider in one
 // project must not block another project, or start a second writer for itself.
+function reviewBlockedProject(p) {
+  if(p.schedulingPaused || p.automaticReviewResumed)return false;
+  if(p.awaitingCharacters && p.status==='review' && p.characterMode!=='custom')return true;
+  if(p.status==='needs-input' && p.stage==='assets' && /^设定图仍需处理：/.test(p.error||'')) {
+    return !p.pausedStages?.images && !p.resources.some(r=>
+      settingChecks[r.type] && (r.paused || r.stale || p.pausedStages?.[r.category]));
+  }
+  return p.status==='failed' && p.shots.some(s=>/^分镜画面审核未通过：/.test(s.videoError||''));
+}
+
+function resumeReviewBlockedProject(p) {
+  if(!reviewBlockedProject(p))return;
+  if(p.awaitingCharacters) {
+    p.awaitingCharacters=false;
+    p.characterMode='automatic';
+  }
+  for(const shot of p.shots) {
+    if(/^分镜画面审核未通过：/.test(shot.videoError||''))shot.videoError=null;
+  }
+  p.automaticReviewResumed=true;
+  p.status='queued';
+  p.error=null;
+}
 const dispatch = createFilmDispatcher(async p => {
-  drainFilmCommands(root,p);save(p);
+  drainFilmCommands(root,p);resumeReviewBlockedProject(p);save(p);
   if(p.schedulingPaused){await recoverDetached(p);p.status='paused';save(p);return;}
   if(!['queued','running'].includes(p.status)){await recoverDetached(p);return;}
   if(p.replacement)await runReplacement({id:p.id});
@@ -1095,7 +1128,7 @@ const dispatch = createFilmDispatcher(async p => {
 while(true) {
   try {
     const projects=fs.readdirSync(root).filter(x=>/^[a-f0-9-]{36}$/.test(x)).flatMap(id=>{try{return [read(id)];}catch{return [];}});
-    dispatch(projects,p=>pendingCommands(root,p).length>0);
+    dispatch(projects,p=>pendingCommands(root,p).length>0 || reviewBlockedProject(p));
     await sleep(1500);
   }catch(e){console.error('Film worker:',e.message);await sleep(3000);}
 }

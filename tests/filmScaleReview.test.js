@@ -35,8 +35,15 @@ test('visible scale distortion repairs only the affected shot and respects the r
   assert.match(commands[0].body.patch.tailFramePrompt, /两人在厢式车旁搬货.*人高过厢式车车顶/);
   assert.equal(commands[0].body.patch.firstFramePrompt, undefined);
   shot.revision++;
-  await assert.rejects(checkFrameIntegrity(project, shot, 'tail', dependencies));
-  assert.equal(commands.length, 1);
+  await assert.rejects(checkFrameIntegrity(project, shot, 'tail', dependencies), {code:'PAUSED'});
+  assert.equal(commands.length, 2);
+  shot.revision++;
+  await checkFrameIntegrity(project, shot, 'tail', dependencies);
+  await checkFrameIntegrity(project, shot, 'tail', dependencies);
+  assert.equal(commands.length, 2);
+  assert.equal(shot.tailIntegrity.deferred, true);
+  assert.equal(shot.tailIntegrity.status, 'reject');
+  assert.equal(shot.tail.file, 'tail.png');
 });
 
 test('a frame approved under the old policy is rechecked and uncertainty is recorded without regeneration', async t => {

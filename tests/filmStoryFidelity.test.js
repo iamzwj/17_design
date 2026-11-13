@@ -7,3 +7,30 @@ test('video prompts resolve real cast, wardrobe and location instead of opaque I
 test('continuity cache follows source and shot meaning, not just unchanged revision numbers',()=>{const p=project();p.shots=[shot()];const key=filmContinuityKey(p);p.shots[0].dialogue='我也过去帮你';assert.notEqual(filmContinuityKey(p),key);p.shots=[shot()];p.story+='结尾必须保持新人接力。';assert.notEqual(filmContinuityKey(p),key);});
 test('the continuity reviewer receives the original script and records semantic contradictions without stopping production',async()=>{const p=project();p.storyboardReady=true;p.shots=[shot()];let input,system;const agents=createFilmAgents({save:()=>{},check:()=>{},api:async(_url,body)=>{input=JSON.parse(body.messages[1].content);system=body.messages[0].content;return {choices:[{message:{content:JSON.stringify({status:'manual',reason:'结尾改成师父再次帮助新人，丢掉传承',issues:[{shotId:'s1',type:'剧情',evidence:'原稿要求新人成为导师'}]})}}]};}});await agents.continuity(p);assert.equal(input.sourceStory,p.story);assert.match(system,/逐项对照/);assert.notEqual(p.status,'needs-input');assert.equal(p.continuityReview.status,'manual');assert.match(p.continuityReview.reason,/传承/);});
 test('writer input retains the full source and explicit identity/time/dialogue constraints',async()=>{const p=project();delete p.script;let input,system;const agents=createFilmAgents({save:()=>{},check:()=>{},api:async(_url,body)=>{input=JSON.parse(body.messages[1].content);system=body.messages[0].content;return {choices:[{message:{content:JSON.stringify({summary:'传承',scenes:[{id:'a',time:'白天'}]})}}]};}});await agents.writer(p);assert.equal(input.sourceStory,p.story);assert.match(system,/旁白和内心独白/);assert.match(system,/因果顺序/);assert.ok(p.script);});
+
+test('director revises an unresolved shot twice, then keeps the current version', async () => {
+  const p = project();
+  p.storyboardReady = true;
+  p.shots = normalizeShots([shot()], p);
+  let calls = 0;
+  const agents = createFilmAgents({
+    save() {}, check() {},
+    async api() {
+      calls++;
+      return {choices:[{message:{content:JSON.stringify({
+        status:'manual', reason:'缺少传承画面',
+        repairs:[{id:'s1', patch:{prompt:'早晨；补足传承画面 '+calls}}],
+      })}}]};
+    },
+  });
+  for(let attempt=0;attempt<3;attempt++){
+    p.needsRerun=false;
+    p.status='running';
+    await agents.continuity(p);
+  }
+  assert.equal(calls,3);
+  assert.equal(p.shots[0].continuityRepairAttempts,2);
+  assert.match(p.shots[0].prompt,/画面 2$/);
+  assert.equal(p.needsRerun,false);
+  assert.equal(p.status,'running');
+});

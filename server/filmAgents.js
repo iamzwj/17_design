@@ -149,7 +149,7 @@ export function createFilmAgents({api,save,check}) {
   const director=async p=>{if(p.directorPlan)return;await run(p,'director-plan','director','script','制定制作目标与协作计划。返回{title,goal,style,continuityRules:[字符串],handoffs:[{agent,goal}]}。title根据梗概拟5-12字片名。',{story:p.story,duration:p.duration,style:p.settings.style,brandContext:p.context?.prompt||'',skill:p.context?.skill||''},r=>{if(typeof r.title!=='string'||!Array.isArray(r.handoffs))throw Error('导演计划结构无效');},r=>{p.directorPlan=r;p.title=r.title;});};
   const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。旁白必须确定全片唯一叙述者，第一人称绑定原稿中“我”的角色身份、性别、年龄和声线，不默认男声。返回{narrator:{characterName,gender,age,voice},summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。id使用唯一英文字母或数字；time以白天、夜晚、清晨或具体钟点开头，年代及相对时间放在其后，例如“白天；三个月前”“傍晚；现在”，不得删掉原故事时间信息。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{normalizeFilmScript(r);},r=>{p.script=normalizeFilmScript(r);});};
   const castingGuidance = '依据原稿和已有角色设定确定人物背景。原稿或场次明确发生在中国且当地角色未指定其他背景时，将其设定为中国人物，并在 facePrompt 中明确写出“中国人”、年龄和可辨认的个人特征。用户明确指定的人物背景和参考身份优先。故事地点不明确时，不因原稿使用中文而推断人物背景。';
-  const characters=async p=>{if(p.characters||!p.script)return;await run(p,'characters','character','characters','识别所有实际出镜角色，画外音不算出镜，身份和服装分开，保持唯一 ID。返回{characters:[{id,name,identity:{storyRole,gender,age,face,hair,hairColor,skinTone,height,build,proportions,temperament,features,lookChanges},facePrompt,outfits:[{id,name,prompt,clothes,shoes,materials,colors,accessories,personalItems}]}]}。facePrompt是一张正面、45度、90度同一人面部特写三视图设定图的提示词。outfit是独立全身正侧背穿搭服饰设定，不替换身份。' + castingGuidance,{script:p.script,style:p.settings.style},r=>{if(!Array.isArray(r.characters)||new Set(r.characters.map(c=>c?.id)).size!==r.characters.length||r.characters.some(c=>!c||!validId(c.id)||!c.name||!c.facePrompt||!Array.isArray(c.outfits)||!c.outfits.length||new Set(c.outfits.map(o=>o?.id)).size!==c.outfits.length||c.outfits.some(o=>!o||!validId(o.id)||!o.prompt)))throw Error('角色设定无效');},r=>{
+  const characters=async p=>{if(p.characters||!p.script)return;await run(p,'characters','character','characters','仅提取原稿明确指定造型的主要角色，或必须跨镜头保持同一身份的角色。介绍片中的一次性业主、工作人员、店员、手部和群像直接写在各自分镜里，不单独建档；画外音不算出镜。没有需要独立设定的角色时返回 characters:[]。身份和服装分开，保持唯一 ID。返回{characters:[{id,name,identity:{storyRole,gender,age,face,hair,hairColor,skinTone,height,build,proportions,temperament,features,lookChanges},facePrompt,outfits:[{id,name,prompt,clothes,shoes,materials,colors,accessories,personalItems}]}]}。facePrompt是一张正面、45度、90度同一人面部特写三视图设定图的提示词。outfit是独立全身正侧背穿搭服饰设定，不替换身份。' + castingGuidance,{script:p.script,style:p.settings.style},r=>{if(!Array.isArray(r.characters)||new Set(r.characters.map(c=>c?.id)).size!==r.characters.length||r.characters.some(c=>!c||!validId(c.id)||!c.name||!c.facePrompt||!Array.isArray(c.outfits)||!c.outfits.length||new Set(c.outfits.map(o=>o?.id)).size!==c.outfits.length||c.outfits.some(o=>!o||!validId(o.id)||!o.prompt)))throw Error('角色设定无效');},r=>{
       p.characters=r.characters;
       for(const c of r.characters){p.resources.push({id:`${c.id}-face`,sourceId:c.id,name:`${c.name} · 面部三视图`,category:'characters',type:'face',agent:'character',attributes:c.identity,prompt:`同一人物面部特写三视图：正面、45°、90°；保持身份、年龄、肤色、发型、发际线和五官比例一致；中性光线、保留可辨认的面部特征、简洁背景，不加装饰文字或背景人物。${c.facePrompt}`,revision:p.scriptRevision||1,history:[]});for(const o of c.outfits)p.resources.push({id:`${c.id}-look-${o.id}`,sourceId:c.id,outfitId:o.id,name:`${c.name} · ${o.name}`,category:'characters',type:'wardrobe',agent:'character',dependencies:[`${c.id}-face`],attributes:o,prompt:`独立穿搭设定图，保持参考图面部身份：全身正面、侧面、背面，展示服装版型材质、鞋履、配饰和随身物品。${o.prompt}`,revision:p.scriptRevision||1,history:[]});}
     });};
@@ -191,7 +191,7 @@ export function createFilmAgents({api,save,check}) {
       plan => validateFilmLocations(plan, p.scenes),
       plan => applyFilmLocations(p, plan));
   };
-  const storyboard=async p=>{if(p.storyboardReady||!p.characters||!p.scenes)return;await run(p,'storyboard','storyboard','storyboard','自动分镜。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。原稿第一人称叙述作为画外旁白写入videoPrompt的声音要求；dialogue只放明确出声的人物对白，并说明谁对谁说；无对白时返回空字符串。所有镜头沿用script.narrator身份和声线，在videoPrompt中逐镜明确旁白性别、年龄、音色及画外音方式。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。' + (p.editorialWorkflow ? '作为总导演一次统筹全片分镜和声音。每镜写明新增的叙事信息（storyBeat）和接到下镜的动作。审查相邻镜头，压缩重复起手、重复往返和重复反应。多次重复动作集中用一次短组接，保留关键因果。指定每镜声音落点和预计取用秒数（editDuration），生成秒数可含动作余量。每个角色用 outfitByCharacter 对象明确绑定服装 ID。只有动作终点必须精确命中时才写 requiresTailFrame:true 和尾帧描述。' : ''),{script:p.script,characters:p.characters,scenes:p.scenes,duration:p.duration,ratio:p.ratio,style:p.settings.style,resourceVersions:p.resources.filter(r=>r.output&&!r.stale).map(r=>({id:r.id,version:r.approvedVersion||r.revision}))},r=>normalizeShots(r.shots,p),r=>{p.shots=normalizeShots(r.shots,p);if(p.autoDuration)p.duration=p.shots.reduce((sum,shot)=>sum+shot.duration,0);p.storyboardReady=true;p.plan={title:p.title,summary:p.script.summary};});};
+  const storyboard=async p=>{if(p.storyboardReady||!p.characters||!p.scenes)return;await run(p,'storyboard','storyboard','storyboard','自动分镜。未建档的临时出镜人物直接描述在画面和动作提示词中，characterIds 只填已建档角色，允许为空。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。原稿第一人称叙述作为画外旁白写入videoPrompt的声音要求；dialogue只放明确出声的人物对白，并说明谁对谁说；无对白时返回空字符串。所有镜头沿用script.narrator身份和声线，在videoPrompt中逐镜明确旁白性别、年龄、音色及画外音方式。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。' + (p.editorialWorkflow ? '作为总导演一次统筹全片分镜和声音。每镜写明新增的叙事信息（storyBeat）和接到下镜的动作。审查相邻镜头，压缩重复起手、重复往返和重复反应。多次重复动作集中用一次短组接，保留关键因果。指定每镜声音落点和预计取用秒数（editDuration），生成秒数可含动作余量。每个角色用 outfitByCharacter 对象明确绑定服装 ID。只有动作终点必须精确命中时才写 requiresTailFrame:true 和尾帧描述。' : ''),{script:p.script,characters:p.characters,scenes:p.scenes,duration:p.duration,ratio:p.ratio,style:p.settings.style,resourceVersions:p.resources.filter(r=>r.output&&!r.stale).map(r=>({id:r.id,version:r.approvedVersion||r.revision}))},r=>normalizeShots(r.shots,p),r=>{p.shots=normalizeShots(r.shots,p);if(p.autoDuration)p.duration=p.shots.reduce((sum,shot)=>sum+shot.duration,0);p.storyboardReady=true;p.plan={title:p.title,summary:p.script.summary};});};
   const revise=async p=>{
     if(!p.revisionRequest)return;const request=p.revisionRequest;const id=taskId('revision-'+request.at,'director');
     const t=beginTask(p,id,'storyboard','director',{name:'分析局部修改影响',text:request.text});save(p);
@@ -206,7 +206,37 @@ export function createFilmAgents({api,save,check}) {
   const continuity=async p=>{
     if(!p.storyboardReady)return;
     const key=filmContinuityKey(p);if(p.continuityChecked===key)return;
-    await run(p,key,'director','storyboard','审核剧本、角色身份、服装版本、场景与镜头交接连续性。逐镜核对物体数量与位置、人物持物、门与车尾门开闭、进入方向与区域连接路径，只允许原稿有依据的状态变化。必须将sourceStory原稿与改写剧本及全部镜头逐项对照，检查是否丢掉关键事件、颠倒人物关系或因果、混淆时间阶段、错配对白说话人、漏掉原稿结尾；再审核角色身份、服装版本、场景与镜头交接连续性。不能只因镜头之间一致就认定忠实原稿；存在明确剧情偏离必须manual，说明原稿证据与对应镜头。返回{status:"pass"|"manual",reason,issues:[{shotId,type,evidence}]}。只报告可确认的冲突，不把审美偏好当作错误；证据不充分则说明限制。锁定成果不能擅自修改。',{script:p.script,characters:p.characters,scenes:p.scenes,shots:p.shots},r=>{if(!['pass','manual'].includes(r.status)||typeof r.reason!=='string')throw Error('连续性审核结构无效');},r=>{p.continuityReview=r;p.continuityChecked=key;event(p,'director',taskId(key,'director'),r.reason,{type:'decision'});});
+    const eligible = new Set(p.shots.filter(shot => !shot.locked && !shot.paused && (shot.continuityRepairAttempts || 0) < 2).map(shot => shot.id));
+    try {
+    await run(p,key,'director','storyboard','审核剧本、角色身份、服装版本、场景与镜头交接连续性。逐镜核对物体数量与位置、人物持物、门与车尾门开闭、进入方向与区域连接路径，只允许原稿有依据的状态变化。必须将sourceStory原稿与改写剧本及全部镜头逐项对照，检查是否丢掉关键事件、颠倒人物关系或因果、混淆时间阶段、错配对白说话人、漏掉原稿结尾；再审核角色身份、服装版本、场景与镜头交接连续性。不能只因镜头之间一致就认定忠实原稿；有明确剧情偏离时说明原稿证据与对应镜头，并给出修正。返回{status:"pass"|"manual",reason,issues:[{shotId,type,evidence}],repairs:[{id,patch:{prompt,firstFramePrompt,tailFramePrompt,dialogue}}]}。只修可修改的镜头，保留其余内容。三个提示词有修改时必须以该镜头时间开头，不改变时长、角色、场景或镜头数量。只报告可确认的冲突。',{script:p.script,characters:p.characters,scenes:p.scenes,shots:p.shots,repairableShotIds:[...eligible]},r=>{if(!['pass','manual'].includes(r.status)||typeof r.reason!=='string')throw Error('连续性审核结构无效');},r=>{
+      p.continuityReview=r;
+      p.continuityChecked=key;
+      event(p,'director',taskId(key,'director'),r.reason,{type:'decision'});
+      if(r.status==='pass')return;
+      const repaired=new Set();
+      for(const fix of Array.isArray(r.repairs) ? r.repairs : []) {
+        if(!eligible.has(fix?.id) || repaired.has(fix.id))continue;
+        const shot=p.shots.find(item=>item.id===fix.id);
+        const patch={};
+        for(const field of ['prompt','firstFramePrompt','tailFramePrompt','dialogue']){
+          const value=fix.patch?.[field];
+          if(typeof value==='string' && value!==shot[field] &&
+            (field==='dialogue' || timePrefix(value)) && (field!=='tailFramePrompt' || shot.tailFramePrompt))patch[field]=value;
+        }
+        if(!Object.keys(patch).length)continue;
+        if(patch.prompt && !patch.firstFramePrompt)patch.firstFramePrompt=shot.firstFramePrompt;
+        applyCommand(p,{id:'continuity-repair:'+key+':'+shot.id,type:'edit',body:{id:shot.id,patch}});
+        shot.continuityRepairAttempts=(shot.continuityRepairAttempts||0)+1;
+        repaired.add(shot.id);
+      }
+      if(!repaired.size)event(p,'director',taskId(key,'director'),'保留连续性审核意见，使用当前分镜继续制作。',{type:'decision'});
+    });
+    }catch(error){
+      check(p);
+      p.continuityReview={status:'manual',reason:'连续性审核暂未完成，使用当前分镜继续制作。'};
+      p.continuityChecked=key;
+      event(p,'director',taskId(key,'director'),p.continuityReview.reason,{type:'decision'});
+    }
   };
   return {director,writer,characters,scenes,storyboard,continuity,revise};
 }
