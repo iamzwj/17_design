@@ -51,13 +51,13 @@ export default function ComposerSelect({ label, value, options, onChange, disabl
   function move(event) {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
     event.preventDefault()
-    const buttons = [...menu.current.querySelectorAll('[role="option"]')]
+    const buttons = [...menu.current.querySelectorAll('[role="option"]:not(:disabled)')]
     const index = buttons.indexOf(document.activeElement)
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
     buttons[next]?.focus()
   }
   const menuContent = <div className={`composer-select-menu ${portal ? "film-floating-menu" : ""}`} ref={menu}>
-      <div className="composer-select-options" role="listbox" aria-label={label} onKeyDown={move}>{options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false); trigger.current?.focus() }}><span>{option.label}</span>{option.value === value && <Icon name="check" size={13}/>}</button>)}</div>
+      <div className="composer-select-options" role="listbox" aria-label={label} onKeyDown={move}>{options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} aria-disabled={option.disabled || undefined} onClick={() => { onChange(option.value); setOpen(false); trigger.current?.focus() }}><span>{option.label}</span>{option.status && <small className="composer-option-status">{option.status}</small>}{option.value === value && <Icon name="check" size={13}/>}</button>)}</div>
       {footer && <div className="composer-select-footer">{footer}</div>}
     </div>
   return <div className={`composer-select ${className}`} ref={root}>

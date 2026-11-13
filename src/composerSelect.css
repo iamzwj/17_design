@@ -20,3 +20,6 @@
 :root[data-theme='dark'] .composer-select-options button:hover, :root[data-theme='dark'] .composer-select-options button:focus-visible, :root[data-theme='dark'] .composer-select-options button[aria-selected='true'] { background: var(--theme-selected-surface); color: var(--dp-highlight); }
 :root[data-theme='dark'] .composer-select-footer { border-color: var(--dp-rule); color: var(--dp-secondary); }
 @media(max-width:520px) { .composer-select-menu { max-width: min(270px,calc(100vw - 40px)); }.composer-tools .tool-group { flex: 1; }.composer-tools { gap: 8px; align-items: flex-end; }.composer-select-trigger { max-width: 175px; } }
+
+.composer-select-options button:disabled { color: var(--muted); cursor: not-allowed; background: transparent; }
+.composer-option-status { margin-left: auto; flex-shrink: 0; font-size: 11px; font-weight: 400; color: var(--muted); }

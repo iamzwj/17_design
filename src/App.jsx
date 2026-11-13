@@ -1442,16 +1442,17 @@ function TextStudio({ type, conversation, onSave }) {
     const refresh = async () => {
       try {
         const result = await fetchTextModels(controller.signal)
-        if (!controller.signal.aborted) setTextModels(result.models)
+        if (!controller.signal.aborted) setTextModels(result.allModels || result.models)
       } catch {
-        if (!controller.signal.aborted) setTextModels([])
+        if (!controller.signal.aborted) setTextModels(current => current ?? [])
       }
     }
     void refresh()
     const timer = setInterval(refresh, 60_000)
     return () => { controller.abort(); clearInterval(timer) }
   }, [usesTextModel])
-  const availableTextModels = textModels || []
+  const allTextModels = textModels || []
+  const availableTextModels = allTextModels.filter(model => !model.disabled)
   const textModel = availableTextModels.some(({ value }) => value === selectedTextModel)
     ? selectedTextModel
     : availableTextModels[0]?.value || ''
@@ -1773,7 +1774,7 @@ function TextStudio({ type, conversation, onSave }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={availableTextModels} onChange={setSelectedTextModel} disabled={!textModel} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
+        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 

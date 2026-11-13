@@ -17,7 +17,10 @@ export function startTextModelHealth({ dataDir, complete, readText }) {
 
   async function check() {
     const day = dayKey()
-    if (running || snapshot?.day === day) return
+    // Retry failed probes instead of freezing a transient outage for the whole day.
+    const completeSnapshot = snapshot?.available?.length === models.length
+    const retryAfter = completeSnapshot ? 24 * 60 * 60_000 : 60_000
+    if (running || (snapshot?.day === day && Date.now() - Date.parse(snapshot.checkedAt) < retryAfter)) return
     running = true
     try {
       const results = await Promise.all(models.map(async ({ value }) => {
@@ -44,6 +47,7 @@ export function startTextModelHealth({ dataDir, complete, readText }) {
   setInterval(check, 60_000).unref()
   return () => ({
     models: models.filter(({ value }) => snapshot?.available?.includes(value)),
+    allModels: models.map(model => ({ ...model, disabled: !snapshot?.available?.includes(model.value), status: snapshot?.available?.includes(model.value) ? '' : '维护中' })),
     checkedAt: snapshot?.checkedAt || null,
   })
 }
