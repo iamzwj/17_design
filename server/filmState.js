@@ -225,7 +225,7 @@ export function applyCommand(p,c) {
     requireTarget();const sourceId=target.sourceId;
     if(!sourceId || !p.characters?.some(c=>c.id===sourceId))throw Error('角色不存在');
     const outfitId='outfit-'+c.id.slice(0,8),id=`${sourceId}-look-${outfitId}`;
-    p.resources.push({id,sourceId,outfitId,category:'characters',type:'wardrobe',agent:'character',dependencies:[`${sourceId}-face`],name:body.name||'新服装',prompt:body.prompt||'保持同一人物面部身份，生成独立全身正侧背穿搭设定',revision:1,history:[]});
+    p.resources.push({id,sourceId,outfitId,category:'characters',type:'wardrobe',agent:'character',dependencies:[`${sourceId}-face`],name:body.name||'新服装',prompt:body.prompt||'保持同一人物面部身份，展示全身穿搭',revision:1,history:[]});
     p.characters.find(c=>c.id===sourceId).outfits.push({id:outfitId,name:body.name||'新服装',prompt:body.prompt||''});p.status=p.schedulingPaused?'paused':'queued';
   }
   else if(type==='script') {

@@ -684,6 +684,7 @@ async function render(p) {
   save(p);
 }
 const agents=createFilmAgents({api,save,check});
+const characterSheetLayout = '生成一张横版角色设定图，按两行三列排版。上排从左到右为同一角色的正面、45°、90°面部特写；下排从左到右为同一角色穿同一套服装的全身正面、侧面、背面，头到鞋完整可见。六格的年龄、五官、发型和肤色一致，统一背景与照明。即使服装描述里提到独立穿搭图，也按这张六格图出图。';
 const settingChecks = {
   face: '一张图有正面、45°、90°面部特写，三处五官、脸型、发际线和肤色属于同一人；有原始参考时核对身份',
   wardrobe: '与参考面部图同一身份，并严格比较视觉媒介与质感：真人照片面部搭配卡通、绘画、插画或游戏角色身体是明确风格错误，必须repair；同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
@@ -712,7 +713,9 @@ async function reviewSetting(p, resource, references) {
   const lightingCheck = lightingPeriods?.length
     ? '。只审核这些时段：'+lightingPeriods.join('、')+'。画出未列出的时段视为可修正错误'
     : '';
-  const settingCheck = p.editorialWorkflow && resource.type === 'wardrobe'
+  const settingCheck = resource.type === 'wardrobe' && resource.characterSheetRevision === revision
+    ? settingChecks.wardrobe + '。同一张图分两行三列，上排是正面、45°、90°面部特写，下排是全身正面、侧面、背面；六格为同一角色'
+    : p.editorialWorkflow && resource.type === 'wardrobe'
     ? settingChecks.wardrobe.replace('同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
       '画面只出现一个穿着指定服装的人，从头到脚完整可见，脸、服装、鞋履和配饰清楚，无多视图拼版')
     : settingChecks[resource.type];
@@ -794,9 +797,14 @@ async function referenceAssets(p, onlyResource) {
       const dependencies=(r.dependencies||[]).map(id=>p.resources.find(x=>x.id===id));
       if(dependencies.some(dep=>strict || settingChecks[dep?.type] ? !usableSetting(dep) : !dep?.output || dep.stale))return;
       const references=r.characterReference?[r.characterReference]:dependencies.map(dep=>dep.output);
+      const characterSheet=r.type==='wardrobe';
       const landscape=r.type==='environment';
       while(true) {
         if(!r.output) {
+          const existingTask = p.tasks.find(t => t.id === taskId(r.id, 'image', r.revision));
+          if (characterSheet && !r.imageTask && !r.imageSubmitting && !existingTask?.providerId && !existingTask?.submitting) {
+            r.characterSheetRevision = r.revision;
+          }
           const correction = r.reviewCorrection;
           const previous = correction && landscape
             ? r.history?.findLast(item => item.version === r.revision - 1)?.value.output
@@ -806,7 +814,8 @@ async function referenceAssets(p, onlyResource) {
             ? p.imageModel.startsWith('nano-') ? 'gpt-image-2.5' : 'nano-banana-2.1'
             : p.imageModel;
           const nano = model.startsWith('nano-');
-          const aspectRatio = nano ? (landscape ? '16:9' : '1:1') : (landscape ? '1536x1024' : '1024x1024');
+          const wide = landscape || characterSheet;
+          const aspectRatio = nano ? (wide ? '16:9' : '1:1') : (wide ? '1536x1024' : '1024x1024');
           const guide = references.length && landscape
             ? '以共同地点参考图为建筑与空间依据，固定地标、门岗、道路和材质；仅改变本区域观察位置与光照。'
             : references.length
@@ -815,12 +824,9 @@ async function referenceAssets(p, onlyResource) {
           const repair = previous
             ? '第一张是待修的上一版场景图。保留已经符合要求的布局、材质和光照，只修改以下明确缺陷：'+correction
             : correction;
-          const castGuide = p.editorialWorkflow && r.type === 'wardrobe'
-            ? '输出一张从头到脚的定妆参考，只出现一个人物，脸部可辨认、指定服装和配饰完整可见。忽略设定中关于正侧背拼版的排版描述。'
-            : '';
           await generate(p,r,'image',{
             model,
-            prompt:[castGuide,landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt].filter(Boolean).join('；'),
+            prompt:[landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt,characterSheet && characterSheetLayout].filter(Boolean).join('；'),
             images:[...(previous ? [previous] : []),...references].map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
