@@ -21,7 +21,7 @@ import { isIP } from 'node:net'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
-import { installAuth } from './auth.js'
+import { installAuth, REGISTRATION_WHITELIST } from './auth.js'
 import { installTextTasks } from './textTasks.js'
 import { startTextModelHealth } from './textModelHealth.js'
 import { installSkills } from './skills.js'
@@ -2033,7 +2033,16 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
     createdAt: record.createdAt,
   })))
   const images = [...waterfallImages, ...directImages].sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt))
-  res.json({ users: listUsers(), images })
+  const users = listUsers()
+  const dayKey = (value) => { const date = new Date(value); return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date) : '' }
+  const today = dayKey(Date.now())
+  const month = today.slice(0, 7)
+  const active = (predicate) => new Set(images.filter((image) => image.userId && predicate(dayKey(image.createdAt))).map((image) => image.userId)).size
+  const dailyActive = active((day) => day === today)
+  const monthlyActive = active((day) => day.startsWith(month))
+  const totalActive = active(() => true)
+  const weeklyAverage = Array.from({ length: 7 }, (_, offset) => active((day) => day === dayKey(Date.now() - offset * 86400000))).reduce((sum, count) => sum + count, 0) / 7
+  res.json({ users, images, metrics: { dailyActive, monthlyActive, totalActive, weeklyAverage, registeredUsers: users.length, totalImages: images.length, whitelistCount: REGISTRATION_WHITELIST.size, registrationRate: REGISTRATION_WHITELIST.size ? users.filter((user) => REGISTRATION_WHITELIST.has(user.email)).length / REGISTRATION_WHITELIST.size * 100 : null, usageRate: users.length ? totalActive / users.length * 100 : null } })
 })
 
 installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async (story) => {

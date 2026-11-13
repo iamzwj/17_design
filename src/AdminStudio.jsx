@@ -53,13 +53,23 @@ export default function AdminStudio() {
   }, [overview])
 
   const users = overview?.users || []
-  const imageCount = overview?.images?.length || 0
+  const metrics = overview?.metrics || {}
+  const number = (value) => value == null ? '—' : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 }).format(value)
+  const cards = [
+    ['日活跃量', number(metrics.dailyActive)], ['月活跃量', number(metrics.monthlyActive)],
+    ['总活跃量', number(metrics.totalActive)], ['周日均活', number(metrics.weeklyAverage)],
+    ['白名单人数', number(metrics.whitelistCount)], ['注册用户', number(metrics.registeredUsers ?? users.length)],
+    ['总生图数量', number(metrics.totalImages)], ['注册率', metrics.registrationRate == null ? '—' : `${metrics.registrationRate.toFixed(2)}%`],
+    ['使用率', metrics.usageRate == null ? '—' : `${metrics.usageRate.toFixed(2)}%`],
+  ]
 
   return <section className="workspace admin-workspace">
     <div className="admin-page">
-      <header className="admin-heading"><div><span>ADMINISTRATION</span><h1>后台管理</h1><p>查看已注册账号、剩余积分和生成图片记录。</p></div><button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? '加载中…' : '刷新数据'}</button></header>
+      <header className="admin-heading"><div><span>ADMINISTRATION</span><h1>后台管理</h1><p>用户活跃、注册与图片生成数据概览。</p></div><button type="button" onClick={() => void refresh()} disabled={loading}>{loading ? '加载中…' : '刷新数据'}</button></header>
       {error ? <div className="admin-error" role="alert">{error}</div> : loading && !overview ? <div className="admin-loading"><i/><span>正在加载后台数据…</span></div> : <>
-        <div className="admin-summary"><div><span>注册用户</span><b>{users.length}</b></div><div><span>生成图片</span><b>{imageCount}</b></div></div>
+        <div className="admin-summary">{cards.map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
+        <p className="admin-metric-note">活跃指生成过图片的用户；周日均活为近 7 天平均值，日期按北京时间统计。使用率为活跃用户占注册用户比例。注册率为白名单中已注册用户比例。</p>
+        <h2 className="admin-users-heading">用户与生成记录 <span>{users.length} 位用户</span></h2>
         <section className="admin-user-list">{users.map((user) => {
           const images = imagesByUser.get(user.id) || []
           const expanded = expandedUsers.has(user.id)

@@ -22,7 +22,7 @@ const DAILY_CREDIT_OVERRIDES = new Map([
   ['zhangwj159@onewo.com', 999],
   ['yem15@onewo.com', 999],
 ])
-const REGISTRATION_WHITELIST = new Set([
+export const REGISTRATION_WHITELIST = new Set([
   'caoyh21@onewo.com', 'chenj529@onewo.com', 'chent05@onewo.com', 'huangpd01@onewo.com', 'shenxx09@onewo.com', 'tangf16@onewo.com', 'wangyc48@onewo.com',
   'zhoumt10@onewo.com', 'chenjl76@onewo.com', 'cheny453@onewo.com',
   'helg03@onewo.com', 'huangjq59@onewo.com', 'ligy70@onewo.com',

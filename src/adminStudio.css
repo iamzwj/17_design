@@ -9,3 +9,19 @@
 .admin-user-toggle:hover b { color: var(--accent); }
 .admin-user-toggle:focus-visible, .admin-modal-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 :root[data-theme='dark'] .admin-user-toggle:hover b { color: var(--dp-highlight); }
+
+/* Overview: four activity cards followed by five account metrics. */
+.admin-workspace { padding: 32px 36px 48px; }
+.admin-summary { grid-template-columns: repeat(20,minmax(0,1fr)); gap: 24px; margin: 18px 0 20px; }
+.admin-summary > div { grid-column: span 4; min-height: 154px; padding: 28px 30px; border: 1px solid var(--line, #d9d9df); border-radius: 16px; background: var(--dp-panel); box-shadow: none; gap: 16px; }
+.admin-summary > div:nth-child(-n+4) { grid-column: span 5; margin-bottom: 42px; }
+.admin-summary span { font-size: 20px; font-weight: 400; }
+.admin-summary b { font-size: clamp(30px,3vw,46px); font-weight: 500; letter-spacing: -.035em; }
+.admin-metric-note { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0 0 38px; }
+.admin-users-heading { display: flex; align-items: center; gap: 14px; font-size: 20px; font-weight: 500; margin: 0 0 18px; }
+.admin-users-heading span { color: var(--muted); font-size: 13px; font-weight: 400; }
+:root[data-theme='dark'] .admin-summary > div { background: #0e0e10; border-color: #2b2b30; }
+:root[data-theme='dark'] .admin-summary b { color: #fafafa; }
+:root[data-theme='dark'] .admin-summary span { color: #a1a1aa; }
+@media(max-width:1100px) { .admin-summary { gap: 14px; } .admin-summary > div { padding: 22px 18px; } .admin-summary span { font-size: 16px; } }
+@media(max-width:720px) { .admin-workspace { padding: 20px 16px; } .admin-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .admin-summary > div,.admin-summary > div:nth-child(-n+4) { grid-column: auto; margin-bottom: 0; min-height: 125px; } .admin-summary > div:last-child { grid-column: 1 / -1; } }
