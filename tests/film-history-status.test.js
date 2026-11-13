@@ -11,9 +11,9 @@ test('film history returns real production status for sidebar animation', () => 
   const app={get:(url,...handlers)=>routes.set(url,handlers.at(-1)),post:()=>{}};
   try {
     installFilms(app,{dataDir:dir,requireAuth:()=>{},worker:false});
-    const root=path.join(dir,'films','test-project');fs.mkdirSync(root,{recursive:true});
+    const root=path.join(dir,'films','11111111-1111-4111-8111-111111111111');fs.mkdirSync(root,{recursive:true});
     for(const status of ['running','queued','succeeded','failed']) {
-      fs.writeFileSync(path.join(root,'project.json'),JSON.stringify({id:'test-project',title:'测试',userId:'owner',createdAt:Date.now(),status}));
+      fs.writeFileSync(path.join(root,'project.json'),JSON.stringify({id:'11111111-1111-4111-8111-111111111111',title:'测试',userId:'owner',createdAt:Date.now(),status}));
       let response;routes.get('/api/films/history')({user:{id:'owner'}},{json:value=>response=value});
       assert.equal(response.projects[0].status,status);
     }
