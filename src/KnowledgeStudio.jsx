@@ -189,7 +189,7 @@ export default function KnowledgeStudio({ user, onLogin, spaceName = '', spaceId
   }
 
   function updateChunk(index, patch) { setDraft((d) => ({ ...d, chunks: d.chunks.map((c, i) => i === index ? { ...c, ...patch } : c) })) }
-  if (!user) return <section className="kb-page"><div className="kb-empty"><Icon name="lock" size={36}/><h1>{spaceName || '团队品牌知识库'}</h1><p>登录后查阅和维护已授权资料，只有已发布内容参与检索。</p><button className="kb-primary" onClick={onLogin}>登录知识库</button></div></section>
+  if (!user) return <section className="kb-page"><div className="kb-empty"><Icon name="lock" size={36}/><h1>{spaceName || '品牌规范'}</h1><p>登录后查阅和维护已授权资料，只有已发布内容参与检索。</p><button className="kb-primary" onClick={onLogin}>登录知识库</button></div></section>
   return <section className="kb-page">
     <header className="kb-heading"><div><h1>{spaceName || '品牌知识库'}</h1>{spaceName && <p>集中管理营销策划、执行方案与结案复盘。按活动属性、适用时间和业务检索已发布资料。</p>}</div>{canEdit && <div className="kb-actions">{!spaceId && <button disabled={busy} onClick={() => { setLinkMaterials(true); setSelected(null) }}><Icon name="library" size={16}/>关联素材库</button>}<button disabled={busy} onClick={() => uploadRef.current.click()}><Icon name="upload" size={16}/>上传文件</button><button className="kb-primary" onClick={() => { setDraft({ ...empty, brandId }); setDraftDoc(null); setSelected(null) }}><Icon name="plus" size={16}/>新建文字</button><input ref={uploadRef} type="file" multiple hidden accept={KNOWLEDGE_FILE_EXTENSIONS.join(',')} onChange={(e) => { void upload(e.target.files); e.target.value = '' }}/></div>}</header>
     {error && <div className="kb-alert" role="alert">{error}<button aria-label="关闭提示" onClick={() => setError('')}>×</button></div>}{notice && <div className="kb-notice" role="status">{notice}</div>}

@@ -49,7 +49,7 @@ const MODULES = [
 ]
 
 const KNOWLEDGE_SECTIONS = [
-  { id: 'brand-knowledge', label: '团队品牌知识库' },
+  { id: 'brand-knowledge', label: '品牌规范' },
   { id: 'assets', label: '素材库' },
   { id: 'marketing-activities', label: '营销知识库' },
 ]
@@ -59,7 +59,7 @@ const WORKSPACE_TITLES = {
   content: ['CONTENT CREATION', '朴邻节日节气海报'],
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
-  'brand-knowledge': ['KNOWLEDGE BASE', '团队品牌知识库'],
+  'brand-knowledge': ['KNOWLEDGE BASE', '品牌规范'],
   'marketing-activities': ['KNOWLEDGE BASE', '营销知识库'],
   assets: ['ASSET LIBRARY', '素材库'],
   'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
