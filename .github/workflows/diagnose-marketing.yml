@@ -34,5 +34,30 @@ jobs:
               print('DOCUMENT_COUNT',len(docs))
               for d in docs:
                   print('DOCUMENT',json.dumps({k:d.get(k) for k in ['id','deletedAt','publishedVersionId','latestVersionId']},ensure_ascii=False))
+
+          import subprocess
+          script = r'''
+          import fs from 'node:fs';
+          import os from 'node:os';
+          import path from 'node:path';
+          import Database from 'better-sqlite3';
+          import { installKnowledge } from './server/knowledge/index.js';
+          const temp=fs.mkdtempSync(path.join(os.tmpdir(),'marketing-read-'));
+          fs.mkdirSync(path.join(temp,'knowledge'));
+          const db=new Database('/home/ubuntu/17_design/data/knowledge/knowledge.sqlite',{readonly:true});
+          await db.backup(path.join(temp,'knowledge','knowledge.sqlite'));db.close();
+          const routes=new Map();
+          const app={}; for(const method of ['get','post','put','patch','delete'])app[method]=(url,...handlers)=>routes.set(method+url,handlers.at(-1));
+          const admin={id:'diagnostic-admin',email:'zhangwj159'};
+          const kb=installKnowledge(app,{dataDir:temp,requireAuth:()=>{},requireAdmin:()=>{},listUsers:()=>[admin],automaticVision:false,backgroundProcessing:false,embed:async()=>[]});
+          for(const user of [admin,{id:'diagnostic-normal-a',email:'ordinary-a@example.invalid'},{id:'diagnostic-normal-b',email:'ordinary-b@example.invalid'}]){
+            for(const endpoint of ['/bootstrap','/documents']){
+              await routes.get('get/api/knowledge'+endpoint)({user,query:{brandId:'marketing-activities'}},{json:d=>console.log('ACCOUNT_ACCESS',user.id,endpoint,JSON.stringify(endpoint==='/bootstrap'?d.brands.filter(b=>b.name==='营销活动').map(b=>({id:b.id,permission:b.permission})): {count:d.documents.length,published:d.documents.filter(x=>x.publishedVersionId).length}))},e=>{throw e});
+            }
+          }
+          fs.rmSync(temp,{recursive:true,force:true});process.exit(0);
+          '''
+          r=subprocess.run(['node','--input-type=module','-e',script],cwd='/home/ubuntu/17_design',text=True,capture_output=True)
+          print(r.stdout);print(r.stderr[:1200]);print('PROBE_EXIT',r.returncode)
           PY
           ssh ubuntu@49.235.121.231 'journalctl -u 17design.service -n 1500 --no-pager | grep -i "Marketing knowledge" | tail -8' || true
