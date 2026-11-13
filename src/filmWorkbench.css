@@ -381,3 +381,41 @@
   .film-workbench .fw-inspector { height: 100%; max-height: none; min-height: 0; box-sizing: border-box; align-self: stretch; border: 1px solid var(--fw-border); border-radius: 12px; overflow: hidden; }
   .film-workbench .fw-inspector-body { flex: 1 1 0; min-height: 0; overflow: auto; }
 }
+
+/* Keep asset card controls aligned, including cards with reference uploads. */
+.fw-asset-grid > article {
+  display: flex;
+  flex-direction: column;
+}
+.fw-asset-grid > article > details {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.fw-asset-grid > article > details > summary {
+  cursor: pointer;
+  line-height: 1.6;
+  padding: 8px 0;
+}
+.fw-asset-grid > article > .fw-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-top: 1px solid var(--fw-border);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.film-studio .fw-asset-grid > article > .fw-actions > button,
+.fw-asset-grid > article > .fw-actions > .fw-file-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 10px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--dp-typography-label);
+  line-height: 1.4;
+  white-space: normal;
+}
