@@ -1,0 +1,38 @@
+name: Diagnose marketing documents
+on:
+  push:
+    branches: [test/marketing-diagnosis]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read marketing import state
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          MARKETING_KEY: ${{ secrets.MARKETING_KNOWLEDGE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
+          if [ -n "$MARKETING_KEY" ]; then echo IMPORT_SECRET_PRESENT; else echo IMPORT_SECRET_MISSING; fi
+          ssh ubuntu@49.235.121.231 python3 - <<'PY'
+          import sqlite3,json,pathlib
+          env={}
+          for line in pathlib.Path('/home/ubuntu/17_design/.env').read_text().splitlines():
+              if '=' in line:
+                  k,v=line.split('=',1);env[k]=v
+          print('SERVER_IMPORT_KEY_PRESENT',bool(env.get('MARKETING_KNOWLEDGE_KEY')))
+          db=sqlite3.connect('file:/home/ubuntu/17_design/data/knowledge/knowledge.sqlite?mode=ro',uri=True)
+          brands=[json.loads(r[0]) for r in db.execute('select json from brands')]
+          for brand in brands:
+              if brand.get('name')!='营销活动':continue
+              print('MARKETING_BRAND',brand['id'])
+              docs=[json.loads(r[0]) for r in db.execute('select json from documents where brand_id=?',(brand['id'],))]
+              print('DOCUMENT_COUNT',len(docs))
+              for d in docs:
+                  print('DOCUMENT',json.dumps({k:d.get(k) for k in ['id','deletedAt','publishedVersionId','latestVersionId']},ensure_ascii=False))
+          PY
+          ssh ubuntu@49.235.121.231 'journalctl -u 17design.service -n 1500 --no-pager | grep -i "Marketing knowledge" | tail -8' || true
