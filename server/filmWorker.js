@@ -688,7 +688,7 @@ const characterSheetLayout = '生成一张横版角色设定图，按两行三�
 const settingChecks = {
   face: '一张图有正面、45°、90°面部特写，三处五官、脸型、发际线和肤色属于同一人；有原始参考时核对身份',
   wardrobe: '与参考面部图同一身份，并严格比较视觉媒介与质感：真人照片面部搭配卡通、绘画、插画或游戏角色身体是明确风格错误，必须repair；同一套服装全身正面、侧面、背面一致，呈现鞋履和配饰',
-  environment: '设计要求明确列出的时段主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节。只审核这个区域的静态环境，核对该机位可见的地标和连接方向。人员搬运、动作衔接、临时物品搬动后的状态由分镜表现，不要求设定图呈现；其他区域和画外路径不要求在本图展示。',
+  environment: '必须是纯环境空场，所有主图与细节图禁止出现人物、路人、人体局部、人影及镜中人物；只要出现人物必须repair/high并要求清除。设计要求明确列出的时段主视角，建筑、机位、家具、固定道具位置相同；另有环境、照明与道具细节。只审核这个区域的静态环境，核对该机位可见的地标和连接方向。人员搬运、动作衔接、临时物品搬动后的状态由分镜表现，不要求设定图呈现；其他区域和画外路径不要求在本图展示。',
 };
 
 function approvedSetting(resource) {
@@ -739,7 +739,7 @@ async function reviewSetting(p, resource, references) {
   }
   check(p);
   if(!p.resources.includes(resource) || resource.revision!==revision || resource.output?.file!==output.file)return;
-  resource.assetReview = {...review,file:output.file,version:revision,policy:2,locationPolicy:resource.locationId ? 1 : undefined};
+  resource.assetReview = {...review,file:output.file,version:revision,policy:2,emptyScenePolicy:resource.type === 'environment' ? 1 : undefined,locationPolicy:resource.locationId ? 1 : undefined};
   if(review.status==='pass')resource.approvedVersion=revision;
   else if(review.status==='repair' && !resource.locked)resource.approvedVersion=null;
   event(p,'director',id,resource.name+' · '+(review.status==='pass'?'通过并锁定引用版本':'记录风险')+' · '+review.summary,{type:'decision'});
@@ -826,14 +826,14 @@ async function referenceAssets(p, onlyResource) {
             : correction;
           await generate(p,r,'image',{
             model,
-            prompt:[landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt,characterSheet && characterSheetLayout].filter(Boolean).join('；'),
+            prompt:[landscape && "纯环境空场设定图，禁止人物、路人、人体局部、人影或镜中人物。剧本人物动作只用于理解空间，引用图中的人物必须清除。",landscape && filmSceneStyle(p.settings?.style),repair,guide,r.locationConstraint,r.prompt,characterSheet && characterSheetLayout].filter(Boolean).join('；'),
             images:[...(previous ? [previous] : []),...references].map(image=>referenceImage(p,image)),
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
-        if(!r.output || (approvedSetting(r) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual')))return;
+        if(!r.output || (approvedSetting(r) && (r.type!=='environment' || r.assetReview?.emptyScenePolicy===1) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual')))return;
         if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file ||
-          (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
+          (r.type==='environment' && r.assetReview?.emptyScenePolicy!==1) || (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
         const review=r.assetReview;
         const attempts = r.qualityRepairAttempts ?? Number(Boolean(r.qualityRetryUsed));
         if(review?.version!==r.revision || review.status!=='repair')return;
@@ -933,7 +933,7 @@ async function shotImage(p, shot, index, kind) {
   shot.referenceVersions = refs.map(r => ({id:r.id, version:r.revision, file:r.output.file}));
   return generateShot(p, shot, kind, {
     model:p.imageModel,
-    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${filmConsistencyPrompt(p,shot)}；${shot.firstFramePrompt||shot.prompt}；本镜头的景别、机位、构图及叙事动作：${framing}。以本镜头独立构图为准，参考图只约束身份与空间。相邻镜头：${JSON.stringify(adjacent)}。沿动作进展呈现本镜头独有的静态起点，已完成的递物、擦汗等动作不得在告别等后续镜头重新起手。相邻镜头表达不同事件时，人物姿态、视线或景别必须反映事件差异。`,
+    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。场景参考仅提供空间和光照，禁止复制其中的人物。人物数量严格按本镜头要求，只使用本镜头角色身份，禁止重复人物或额外路人。${filmConsistencyPrompt(p,shot)}；${shot.firstFramePrompt||shot.prompt}；本镜头的景别、机位、构图及叙事动作：${framing}。以本镜头独立构图为准，参考图只约束身份与空间。相邻镜头：${JSON.stringify(adjacent)}。沿动作进展呈现本镜头独有的静态起点，已完成的递物、擦汗等动作不得在告别等后续镜头重新起手。相邻镜头表达不同事件时，人物姿态、视线或景别必须反映事件差异。`,
     images:refs.map(r=>referenceImage(p,r.output)),
     aspectRatio,
     ...(nano ? {imageSize:'1K'} : {quality:'auto'}),
