@@ -26,22 +26,14 @@ jobs:
               except Exception as e:
                   detail=e.read().decode()[:600] if isinstance(e,urllib.error.HTTPError) else str(e)
                   return {'seconds':round(time.monotonic()-start,2),'error':detail.replace(key,'[REDACTED]')}
-          listing=call('/v1/models')
-          models=[]
-          if 'data' in listing:
-              raw=listing['data']
-              rows=raw.get('data',raw.get('models',[]))
-              models=[m if isinstance(m,str) else m.get('id',m.get('name','')) for m in rows]
-          print('CATALOG',json.dumps(listing if not models else models,ensure_ascii=False),flush=True)
-          candidates=[m for m in models if any(x in m.lower() for x in ['gpt','gemini','claude','deepseek','qwen','llama','grok','glm','kimi']) and not any(x in m.lower() for x in ['image','video','tts','audio','embedding','nano','vision-image'])]
-          if not candidates:
-              candidates=['gemini-3.1-pro','gemini-3.7-flash','gemini-3.8-flash','gpt-6.1-sol','gpt-6.1-terra','gpt-5.6-sol','gpt-5.6-terra','gpt-4o','gpt-4.1','gemini-2.5-flash','gemini-2.5-pro','claude-sonnet-4-5','deepseek-chat']
+          import struct,zlib,base64
+          w,h=256,128
+          rows=b''.join(b'\x00'+b''.join(bytes((230,30,30) if x<128 else (30,60,230)) for x in range(w)) for y in range(h))
+          def chunk(k,d):return struct.pack('>I',len(d))+k+d+struct.pack('>I',zlib.crc32(k+d)&0xffffffff)
+          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(rows))+chunk(b'IEND',b'')
+          uri='data:image/png;base64,'+base64.b64encode(png).decode()
           def probe(model):
-              r=call('/v1/chat/completions',{'model':model,'messages':[{'role':'user','content':'只回答数字：17减9加3减5等于多少？'}]})
-              if 'data' in r:
-                  d=r.pop('data');r['returnedModel']=d.get('model');r['choices']=d.get('choices');r['usage']=d.get('usage')
-                  if not r['choices']:r['response']=d
-              print('RESULT',model,json.dumps(r,ensure_ascii=False).replace(key,'[REDACTED]'),flush=True)
-          print('CANDIDATES',json.dumps(candidates,ensure_ascii=False),flush=True)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:list(pool.map(probe,candidates))
+              r=call('/v1/chat/completions',{'model':model,'response_format':{'type':'json_object'},'messages':[{'role':'user','content':[{'type':'text','text':'根据图片判断左右两半的颜色。只输出JSON，包含status(pass或review)、confidence(high或low)、summary(写出左侧和右侧实际颜色)。'},{'type':'image_url','image_url':{'url':uri}}]}]})
+              print('VISION',model,json.dumps(r,ensure_ascii=False).replace(key,'[REDACTED]'),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:list(pool.map(probe,['gpt-6.1-sol','gemini-3.1-pro','gpt-6.1-terra','gpt-5.6-sol','gpt-5.6-terra','gemini-3.8-flash']))
           PY
