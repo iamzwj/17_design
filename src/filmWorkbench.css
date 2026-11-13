@@ -467,3 +467,11 @@
 .fw-working-dots i:nth-child(4){animation-delay:1.35s}
 .fw-working-dots i:nth-child(5){animation-delay:1.8s}
 .fw-working-dots i:nth-child(6){animation-delay:2.25s}
+
+/* Collapsed asset details follow the image in normal, compact flow. */
+.film-workbench .fw-asset-grid > article > details { margin: 6px 0 0; padding: 0; flex: 0 0 auto; }
+.film-workbench .fw-asset-grid > article > details > summary { padding: 5px 0; line-height: 1.5; cursor: pointer; }
+.film-workbench .fw-asset-grid > article > details + details { margin-top: 2px; }
+.film-workbench .fw-asset-grid > article > .fw-actions { margin-top: 8px; padding-top: 10px; }
+
+
