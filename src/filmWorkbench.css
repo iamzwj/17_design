@@ -283,7 +283,7 @@
 
 /* One live summary stays above the scrollable production history. */
 .fw-live-summary{flex:0 0 auto;margin:0;border-bottom:1px solid var(--fw-border);background:var(--fw-soft)}
-.fw-live-summary>summary{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;list-style:none}
+.fw-live-summary>summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;list-style:none}
 .fw-live-summary>summary::-webkit-details-marker{display:none}
 .fw-live-spinner{width:12px;height:12px;box-sizing:border-box;border:2px solid color-mix(in srgb,var(--fw-accent) 22%,transparent);border-top-color:var(--fw-accent);border-radius:50%;animation:fw-live-spin .85s linear infinite}
 .fw-live-summary-copy{display:grid;gap:2px;min-width:0}
@@ -456,3 +456,10 @@
 /* Consistent fixed card widths and independent columns for all production results. */
 .fw-asset-grid[data-independent-columns], .film-workbench .fw-storyboard-grid[data-independent-columns], .fw-library-grid[data-independent-columns] { display: block; position: relative; width: 100%; max-width: none; }
 [data-independent-columns] > article { position: absolute; margin: 0; min-width: 0; box-sizing: border-box; align-content: start; }
+
+.fw-working-dots{display:inline-flex;width:1.2em;margin-left:.12em;white-space:nowrap}
+.fw-working-dots i{font-style:normal;opacity:.2;animation:fw-working-dot 1.2s infinite}
+.fw-working-dots i:nth-child(2){animation-delay:.2s}
+.fw-working-dots i:nth-child(3){animation-delay:.4s}
+@keyframes fw-working-dot{0%,65%,100%{opacity:.2}25%,45%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.fw-working-dots i{animation:none;opacity:1}}

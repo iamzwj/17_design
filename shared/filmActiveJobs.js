@@ -54,3 +54,10 @@ export function filmActiveJobSummary(project) {
   }
   return [...groups.values()].map((group) => ({ ...group, progress: progressFor(project, group.stage) }));
 }
+
+export function filmActiveWorkLabel(project) {
+  const names = {plan:'剧本',script:'剧本',characters:'角色',scenes:'场景',storyboard:'分镜',assets:'角色与场景',frames:'分镜',images:'分镜',videos:'视频',quality:'画面检查',audio:'声音',editing:'剪辑',render:'成片'};
+  const stages = filmActiveJobSummary(project).map(group => group.stage);
+  const kinds = [...new Set((stages.length ? stages : [project.stage]).map(stage => names[stage]).filter(Boolean))];
+  return `正在制作${kinds.join('、')}`;
+}

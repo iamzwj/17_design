@@ -18,3 +18,11 @@ test('active film jobs are grouped for one compact live-progress entry', () => {
     { stage: 'frames', label: '分镜图片', count: 1, progress: [3, 4] },
   ]);
 });
+
+test('active work text follows real task stages and deduplicates split frame stages', async () => {
+  const {filmActiveWorkLabel} = await import('../shared/filmActiveJobs.js');
+  for (const [stage, name] of Object.entries({storyboard:'分镜',characters:'角色',script:'剧本',scenes:'场景'})) {
+    assert.equal(filmActiveWorkLabel({status:'running', activeJobs:[{stage}]}), `正在制作${name}`);
+  }
+  assert.equal(filmActiveWorkLabel({status:'running',activeJobs:[{stage:'frames'},{stage:'images'}]}),'正在制作分镜');
+});
