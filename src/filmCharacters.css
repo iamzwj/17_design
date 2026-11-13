@@ -25,3 +25,9 @@
 @media (max-width: 600px) {
   .film-character-dialog, .film-character-decision { padding: 14px; }
 }
+
+.film-character-confirm { width: min(360px, calc(100vw - 32px)); }
+.film-character-confirm .film-character-actions { justify-content: flex-end; margin: 24px 0 0; }
+.fw-current-tasks:empty { display: none; }
+.fw-current-tasks { padding: 14px 18px; border-bottom: 1px solid var(--fw-border); background: var(--fw-soft); color: var(--fw-accent); display: grid; gap: 8px; }
+.film-studio .fw-current-tasks button { text-align: left; color: var(--fw-accent); border: 1px solid var(--fw-accent); background: var(--dp-panel); padding: 9px 12px; line-height: 1.6; }

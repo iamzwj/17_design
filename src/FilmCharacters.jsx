@@ -135,16 +135,30 @@ export function CharacterDecision({ project, request, send, busy }) {
 
 export function SaveCharacterButton({ project, asset, request, notice }) {
   const [state, setState] = useState("idle");
+  const dialog = useRef(null);
   const label = state === "saved" ? "已加入角色库" : "加入角色库";
-  return <button className="film-character-save" type="button" title={label} aria-label={label} disabled={state !== "idle"} onClick={async () => {
+  async function save() {
     setState("saving");
     try {
       await request("/characters", { projectId: project, assetId: asset });
       setState("saved");
+      dialog.current.close();
       notice("已加入角色库");
     } catch (error) {
       setState("idle");
       notice(userError(error.message));
     }
-  }}><WarehouseIcon/></button>;
+  }
+  return <>
+    <button className="film-character-save" type="button" title={label} aria-label={label} disabled={state !== "idle"} onClick={() => dialog.current.showModal()}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill={state === "saved" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+    </button>
+    <dialog ref={dialog} className="film-character-dialog film-character-confirm" aria-label="加入角色库" onCancel={event => { if (state === "saving") event.preventDefault(); }}>
+      <h2>加入角色库</h2>
+      <div className="film-character-actions">
+        <button type="button" disabled={state === "saving"} onClick={() => dialog.current.close()}>取消</button>
+        <button type="button" className="film-primary" disabled={state === "saving"} onClick={save}>{state === "saving" ? "正在加入…" : "确认"}</button>
+      </div>
+    </dialog>
+  </>;
 }
