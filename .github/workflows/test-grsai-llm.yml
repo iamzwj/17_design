@@ -1,0 +1,47 @@
+name: Test GRSAI language models
+on:
+  push:
+    branches: [test/grsai-language-models]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe language model availability
+        env:
+          API_KEY: ${{ secrets.GRSAI_API_KEY }}
+          BASE_URL: ${{ secrets.GRSAI_BASE_URL }}
+        run: |
+          python3 -u - <<'PY'
+          import os,json,time,urllib.request,urllib.error,concurrent.futures
+          key=os.environ['API_KEY']; base=(os.environ.get('BASE_URL') or 'https://grsaiapi.com').rstrip('/')
+          if base.endswith('/v1'): base=base[:-3]
+          def call(path,body=None):
+              start=time.monotonic()
+              req=urllib.request.Request(base+path,data=json.dumps(body).encode() if body else None,headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=65) as r: data=json.load(r)
+                  return {'seconds':round(time.monotonic()-start,2),'data':data}
+              except Exception as e:
+                  detail=e.read().decode()[:600] if isinstance(e,urllib.error.HTTPError) else str(e)
+                  return {'seconds':round(time.monotonic()-start,2),'error':detail.replace(key,'[REDACTED]')}
+          listing=call('/v1/models')
+          models=[]
+          if 'data' in listing:
+              raw=listing['data']
+              rows=raw.get('data',raw.get('models',[]))
+              models=[m if isinstance(m,str) else m.get('id',m.get('name','')) for m in rows]
+          print('CATALOG',json.dumps(listing if not models else models,ensure_ascii=False),flush=True)
+          candidates=[m for m in models if any(x in m.lower() for x in ['gpt','gemini','claude','deepseek','qwen','llama','grok','glm','kimi']) and not any(x in m.lower() for x in ['image','video','tts','audio','embedding','nano','vision-image'])]
+          if not candidates:
+              candidates=['gemini-3.1-pro','gemini-3.7-flash','gemini-3.8-flash','gpt-6.1-sol','gpt-6.1-terra','gpt-5.6-sol','gpt-5.6-terra','gpt-4o','gpt-4.1','gemini-2.5-flash','gemini-2.5-pro','claude-sonnet-4-5','deepseek-chat']
+          def probe(model):
+              r=call('/v1/chat/completions',{'model':model,'messages':[{'role':'user','content':'只回答数字：17减9加3减5等于多少？'}]})
+              if 'data' in r:
+                  d=r.pop('data');r['returnedModel']=d.get('model');r['choices']=d.get('choices');r['usage']=d.get('usage')
+                  if not r['choices']:r['response']=d
+              print('RESULT',model,json.dumps(r,ensure_ascii=False).replace(key,'[REDACTED]'),flush=True)
+          print('CANDIDATES',json.dumps(candidates,ensure_ascii=False),flush=True)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:list(pool.map(probe,candidates))
+          PY
