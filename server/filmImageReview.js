@@ -1,10 +1,15 @@
 import { LANGUAGE_MODELS } from './languageModels.js'
+import sharp from 'sharp'
 /** Try independent vision providers and validate evidence before accepting a review. */
 export async function reviewFilmImages(api, parts) {
   const failures = [];
-  const content = parts.map(part => part.text ? {type:'text',text:part.text} : {
-    type:'image_url',image_url:{url:`data:${part.inline_data.mime_type};base64,${part.inline_data.data}`},
-  });
+  const content = await Promise.all(parts.map(async part => {
+    if (part.text) return {type:'text',text:part.text};
+    const image = await sharp(Buffer.from(part.inline_data.data, 'base64'))
+      .rotate().resize(1536, 1536, {fit:'inside', withoutEnlargement:true})
+      .flatten({background:'#ffffff'}).jpeg({quality:85}).toBuffer();
+    return {type:'image_url',image_url:{url:`data:image/jpeg;base64,${image.toString('base64')}`}};
+  }));
   for (const model of LANGUAGE_MODELS) {
     try {
       const result = await api('/v1/chat/completions', {
