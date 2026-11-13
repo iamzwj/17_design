@@ -212,8 +212,8 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
   app.get("/api/films/history", requireAuth, (req, res) => {
     const projects = fs.readdirSync(root).map(read)
       .filter((project) => project?.userId === req.user.id)
-      .map(({ id, title, createdAt, plan, directorPlan, script }) => ({
-        id, title, createdAt, archived: fs.existsSync(path.join(root, id, 'archived')), named: Boolean(plan || directorPlan || script),
+      .map(({ id, title, createdAt, plan, directorPlan, script, status }) => ({
+        id, title, createdAt, status, archived: fs.existsSync(path.join(root, id, 'archived')), named: Boolean(plan || directorPlan || script),
       }));
     res.json({ projects });
   });

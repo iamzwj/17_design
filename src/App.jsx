@@ -348,14 +348,15 @@ function mergeFilmHistory(conversations, projects) {
     const existing = records.get(id)
     if (existing?.deleted) continue
     const title = project.named ? project.title : '一键成片 · 导演命名中'
+    const status = ['running', 'queued', 'pausing'].includes(project.status) ? 'running' : project.status
     const archived = Boolean(project.archived ?? existing?.archived)
-    if (existing?.filmTitle === title && Boolean(existing.archived) === archived) continue
+    if (existing?.filmTitle === title && existing?.status === status && Boolean(existing.archived) === archived) continue
     const createdAt = new Date(project.createdAt).toISOString()
     records.set(id, {
       id, type: 'film', projectId: project.id, messages: [], createdAt, updatedAt: createdAt,
       ...existing,
       title: existing && existing.title !== existing.filmTitle ? existing.title : title,
-      filmTitle: title,
+      filmTitle: title, status,
       archived,
     })
     changed = true
@@ -521,7 +522,7 @@ function ConversationRow({ conversation, activeConversationId, onSelect, onPin, 
   return <div className={`history-row ${activeConversationId === conversation.id ? 'active' : ''}`}>
     <button className="history-open" onClick={(event) => { if (!editing && !event.target.closest('.history-title-editor')) onSelect(conversation) }}>
       <span className={`history-icon ${conversation.status === 'running' ? 'is-running' : ''} ${conversation.unreadComplete ? 'is-complete' : ''}`}>
-        {conversation.status === 'running' ? <i className="history-spinner"/> : conversation.unreadComplete ? <span className="completion-lights"><i/></span> : <Icon name={module?.icon || 'spark'} size={15}/>} 
+        {conversation.status === 'running' ? <i className="history-spinner" role="status" aria-label="任务进行中"/> : conversation.unreadComplete ? <span className="completion-lights"><i/></span> : <Icon name={module?.icon || 'spark'} size={15}/>} 
       </span>
       <span className="history-title">{editing
         ? <input className="history-title-editor" aria-label="对话标题" autoFocus value={draftTitle} onClick={(event) => event.stopPropagation()} onChange={(event) => setDraftTitle(event.target.value)} onBlur={finishRename} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } if (event.key === 'Escape') { event.preventDefault(); setEditing(false) } }}/>
