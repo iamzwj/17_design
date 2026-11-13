@@ -25,5 +25,5 @@ jobs:
           for index,f in enumerate(files[:8]):
               p=json.loads(f.read_text());shots=p.get('shots',[])
               print('PROJECT_STATS',json.dumps({'recencyRank':index+1,'shots':len(shots),'targetDuration':p.get('duration'),'autoDuration':p.get('autoDuration'),'scriptScenes':len((p.get('script') or {}).get('scenes',[])),'totalShotSeconds':sum(s.get('duration',0) for s in shots),'durations':[s.get('duration') for s in shots],'splitCount':sum(bool(s.get('splitFrom')) for s in shots),'dialogueLengths':[len(s.get('dialogue') or '') for s in shots],'uniqueActions':len(set(s.get('action','') for s in shots))},ensure_ascii=False))
-                    PY
+          PY
           ssh ubuntu@49.235.121.231 'journalctl -u 17design.service -n 1500 --no-pager | grep -i "Marketing knowledge" | tail -8' || true
