@@ -16,6 +16,7 @@ import { filmPool } from './filmPool.js';
 import { runFilmShotPipeline } from './filmShotPipeline.js';
 import { createFilmDispatcher } from './filmScheduler.js';
 import { filmEvent } from '../shared/filmProgress.js';
+import { prepareFilmFrameReferences } from "./filmFrameReferences.js";
 import { filmAssetLink } from "./filmLinks.js";
 import fs from "node:fs";
 import { filmSettingGroups } from './filmLocations.js';
@@ -107,6 +108,14 @@ async function generate(p,slot,key,body,file) {
         ...body,
         prompt: style ? `${body.prompt}\n全片视觉风格：${style}。按此风格表现材质、色彩和光影；参考图用于保持人物身份、服装和空间布局，画面表现以全片视觉风格为准。` : body.prompt,
       };
+      // Keep the saved request small and prepare bytes before marking a submission in flight.
+      let upstreamBody = t.requestBody;
+      if (key === 'frame' && body.model === 'gpt-image-2.5' && slot.referenceVersions?.length) {
+        const images = await prepareFilmFrameReferences(path.join(root, p.id), slot.referenceVersions);
+        check(p);
+        if ((slot.revision || 1) !== version) throw Object.assign(Error('镜头版本已更新'), {code:'PAUSED'});
+        upstreamBody = { ...upstreamBody, images };
+      }
       slot[key+'Attempts']=(slot[key+'Attempts']||0)+1;t.submitting=true;slot[key+'Submitting']=true;save(p);
       let response;
       try {
@@ -118,7 +127,7 @@ async function generate(p,slot,key,body,file) {
           const size = filmVibbitSizes[body.aspectRatio] || filmVibbitSizes['1024x1024'];
           response = await submitVibbitImage({ ...t.requestBody, size });
         } else {
-          response = await api('/v1/api/generate', { ...t.requestBody, replyType: 'async' });
+          response = await api('/v1/api/generate', { ...upstreamBody, replyType: 'async' });
         }
       } catch (error) {
         if (isFilmRateLimit(error)) {
