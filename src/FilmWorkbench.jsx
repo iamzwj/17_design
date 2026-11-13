@@ -5,6 +5,7 @@ import {filmMediaIndex} from '../shared/filmMediaIndex.js';
 import {useEffect,useRef,useState} from 'react';
 import {workflowStages} from '../shared/filmWorkflow.js';
 import {filmTaskName} from '../shared/filmProgress.js';
+import {filmActiveJobSummary,filmActiveJobs} from '../shared/filmActiveJobs.js';
 import FilmEditor from './FilmEditor.jsx';
 import FilmTimeline from './FilmTimeline.jsx';
 import ComposerSelect from './ComposerSelect.jsx';
@@ -65,7 +66,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
   useEffect(()=>{localStorage.setItem(key+':stage',stage);localStorage.setItem(key+':selected',selected);localStorage.setItem(key+':panel',panel);},[key,stage,selected,panel]);
   async function send(type,body={}) {if(submitting.current)return false;submitting.current=true;setBusy(true);setNotice('');try{const result=await request('/'+p.id+'/commands',{type,body});if(result.project)onProject(result.project);setNotice('操作已保存，后台将在安全点应用；已完成结果会保留。');return true;}catch(e){setNotice(userError(e.message));return false;}finally{submitting.current=false;setBusy(false);}}
   function chooseStage(value){setStage(value);setSelected('');setPanel('editor');}
-  function chooseTask(id){const task=p.tasks?.find(t=>t.id===id);const resource=p.resources?.find(r=>r.id===(task?.resourceId||id));if(resource){setStage(resource.category);setSelected(resource.id);}else if(p.shots?.some(s=>s.id===(task?.resourceId||id))){setStage('storyboard');setSelected(task?.resourceId||id);}else if(task?.stage){setStage(stages.some(s=>s.id===task.stage)?task.stage:'script');}setPanel('editor');}
+  function chooseTask(target){const task=typeof target==='string'?p.tasks?.find(t=>t.id===target):target;const resourceId=task?.resourceId||task?.id||target;const resource=p.resources?.find(r=>r.id===resourceId);if(resource){setStage(resource.category);setSelected(resource.id);}else if(p.shots?.some(s=>s.id===resourceId)){setStage('storyboard');setSelected(resourceId);}else if(task?.stage){setStage(stages.some(s=>s.id===task.stage)?task.stage:'script');}setPanel('editor');}
   const blockedSettings = p.status === 'needs-input' && p.stage === 'assets' && p.referenceWorkflow
     ? (p.resources || []).filter(r => ['face','wardrobe','environment'].includes(r.type) &&
       (!r.output || r.stale || (r.approvedVersion !== r.revision &&
@@ -82,6 +83,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
     });
   }
   const events=(p.events||[]).filter(e=>!['dispatch','started'].includes(e.type));
+  const activeJobs=filmActiveJobs(p),activeSummary=filmActiveJobSummary(p);
   return <div className="film-workbench"><header className="fw-control"><div><h2>{filmTaskName(p).replace(/^一键成片 · /, "")}</h2><p>{p.duration == null ? "时长自动" : `${p.duration} 秒`} · {p.ratio} · {p.settings?.style||'电影写实'}{p.status!=='succeeded'&&` · ${phaseLabel}`}</p></div><div className="fw-control-actions"><span className={`fw-state ${p.status}`}>{labels[p.status]||p.status}</span>{p.status!=='succeeded'&&<b>{complete} / {stages.length} 阶段</b>}{!p.awaitingCharacters&&(p.schedulingPaused||['paused','cancelled','failed','needs-input','review'].includes(p.status)?<button className="film-primary" disabled={busy} onClick={()=>needsSettings ? openBlockedSetting(firstSetting) : send('resume',{all:false})}>{needsSettings?'查看待处理设定图':'继续自动制作'}</button>:p.status!=='succeeded'&&<button disabled={busy} onClick={()=>send('pause')}>暂停新任务</button>)}{p.output&&<button className="film-primary" onClick={onDownload}>下载成片</button>}{p.output && p.replacementReady && <button className="film-primary" disabled={busy || Boolean(p.replacement)} onClick={()=>send('export-replacement')}>替换新素材并重新合成</button>}{!['output','media'].includes(stage)&&<button disabled={busy} onClick={()=>send('stage-pause',{stage,paused:!p.pausedStages?.[stage]})}>{p.pausedStages?.[stage]?'恢复当前阶段':'暂停当前阶段'}</button>}<button aria-expanded={settings} onClick={()=>setSettings(!settings)}>项目设置</button></div></header>
 
     {p.awaitingCharacters && <CharacterDecision project={p} request={request} send={send} busy={busy}/>}
@@ -103,8 +105,9 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
           <span>{p.shots.filter(shot => shot.video).length}/{p.shots.length}</span><span>视频</span>
         </> : p.pausedStages?.[s.id]?'已暂停':s.complete?'已完成':s.total?`${s.done}/${s.total}`:s.active?'进行中':'等待'}</small></button>)}<div className="fw-stage-library"><button type="button" className={stage==='media'?'active':''} onClick={()=>chooseStage('media')}>
           <b>全部素材</b><small>{mediaCount} 个文件</small></button><button type="button" ref={timelineTrigger} data-fw-timeline-trigger aria-expanded={Boolean(timelineOpen)} aria-controls={timelineOpen === null ? undefined : "fw-timeline-panel"} className={timelineOpen?"active":""} onClick={()=>setTimelineOpen(open=>!open)}><b>剪辑时间线</b><small>{timelineOpen?'已展开':'查看轨道'}</small></button></div></nav>
-      <section className="fw-conversation" aria-label="Agent协作工作过程"><header className="fw-panel-heading"><h3>制片过程</h3></header><div className="fw-feed" ref={feed}><FilmActivity events={events} project={p} history details={false} limit={limit} onMore={()=>setLimit(limit+80)} onSelect={chooseTask}/>
-}</div>
+      <section className="fw-conversation" aria-label="制作动态"><header className="fw-panel-heading"><h3>制作动态</h3></header>
+        {activeJobs.length>0&&<details className="fw-live-summary"><summary aria-live="polite"><span className="fw-live-spinner" aria-hidden="true"/><span className="fw-live-summary-copy"><b>正在制作 {activeJobs.length} 项</b><small>{activeSummary.map(group=>`${group.label} ${group.count} 项`).join(' · ')}</small></span><span className="fw-live-expand">展开</span></summary><div className="fw-live-summary-details"><p>展开查看各项任务，完成后会自动移入制作记录。</p>{activeSummary.map(group=><div className="fw-live-group" key={group.stage}><b>{group.label}</b><span>{group.count} 项进行中{group.progress.length===2&&group.progress[1]>0?` · 已完成 ${group.progress[0]}/${group.progress[1]}`:''}</span></div>)}<div className="fw-live-job-list">{activeJobs.map(job=><button key={job.id} onClick={()=>chooseTask(job)}>{job.message || '正在制作'}</button>)}</div></div></details>}
+        <div className="fw-feed" ref={feed}><FilmActivity events={events} project={p} history details={false} limit={limit} onMore={()=>setLimit(limit+80)} onSelect={chooseTask}/></div>
       </section>
       <div className="fw-inspector-scroll"><aside className="fw-inspector" aria-label="成果预览与编辑"><header className="fw-panel-heading"><h3>{stage==='media'?'全部素材':stages.find(s=>s.id===stage)?.label||'成果'} · 预览与编辑</h3>{stage==='media'&&<small>图片 · 视频 · 音频</small>}</header><div className="fw-inspector-body"><FilmEditor project={p} stage={stage} selected={selected} onSelect={id=>stage==='media'?chooseTask(id):setSelected(id)} send={send} request={request} notice={setNotice} onOpenTimeline={()=>setTimelineOpen(true)}/></div></aside></div>
     </div>

@@ -281,6 +281,27 @@
 
 .fw-setting-review p{white-space:pre-wrap;overflow-wrap:anywhere}
 
+/* One live summary stays above the scrollable production history. */
+.fw-live-summary{flex:0 0 auto;margin:0;border-bottom:1px solid var(--fw-border);background:var(--fw-soft)}
+.fw-live-summary>summary{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;list-style:none}
+.fw-live-summary>summary::-webkit-details-marker{display:none}
+.fw-live-spinner{width:12px;height:12px;box-sizing:border-box;border:2px solid color-mix(in srgb,var(--fw-accent) 22%,transparent);border-top-color:var(--fw-accent);border-radius:50%;animation:fw-live-spin .85s linear infinite}
+.fw-live-summary-copy{display:grid;gap:2px;min-width:0}
+.fw-live-summary-copy b{font-size:var(--dp-typography-metadata);font-weight:600}
+.fw-live-summary-copy small{overflow:hidden;color:var(--fw-muted);font-size:var(--dp-typography-label);text-overflow:ellipsis;white-space:nowrap}
+.fw-live-expand{font-size:var(--dp-typography-label);color:var(--fw-accent);white-space:nowrap}
+.fw-live-summary[open] .fw-live-expand{font-size:0}
+.fw-live-summary[open] .fw-live-expand::after{content:'收起';font-size:var(--dp-typography-label)}
+.fw-live-summary-details{display:grid;gap:8px;padding:0 16px 14px}
+.fw-live-summary-details>p{margin:0;color:var(--fw-muted);font-size:var(--dp-typography-label);line-height:1.65}
+.fw-live-group{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:var(--dp-typography-label)}
+.fw-live-group b{font-weight:600;color:var(--ink)}
+.fw-live-group span{color:var(--fw-muted);text-align:right}
+.fw-live-job-list{display:grid;gap:4px;margin-top:2px}
+.film-studio .fw-live-job-list button{width:100%;padding:5px 0;border:0;background:transparent;color:var(--fw-accent);font-size:var(--dp-typography-label);line-height:1.6;text-align:left}
+.film-studio .fw-live-job-list button:hover{color:var(--ink);text-decoration:underline}
+@keyframes fw-live-spin{to{transform:rotate(1turn)}}
+
 .fw-timeline-sheet {
   position: fixed;
   z-index: 50;
