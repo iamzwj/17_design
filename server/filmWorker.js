@@ -924,10 +924,16 @@ async function shotImage(p, shot, index, kind) {
   if (kind === 'tail') {
     return generateShot(p, shot, kind, {model:p.imageModel, prompt:shot.tailFramePrompt + "。" + filmScalePrompt, images:[referenceImage(p,shot.frame)], aspectRatio}, `frame-tail-${shot.id}-v${shot.revision}.png`);
   }
+  const framing = JSON.stringify({
+    shotSize:shot.shotSize, angle:shot.angle, composition:shot.composition,
+    action:shot.action, storyBeat:shot.storyBeat, emotion:shot.emotion,
+  });
+  const adjacent = p.shots.slice(Math.max(0,index-1),index+2).filter(item=>item.id!==shot.id)
+    .map(item=>({id:item.id,action:item.action,firstFramePrompt:item.firstFramePrompt}));
   shot.referenceVersions = refs.map(r => ({id:r.id, version:r.revision, file:r.output.file}));
   return generateShot(p, shot, kind, {
     model:p.imageModel,
-    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${filmConsistencyPrompt(p,shot)}；${shot.firstFramePrompt||shot.prompt}`,
+    prompt:`${shot.time}；电影分镜首帧，严格保持参考图身份、服装、环境布局一致。角色造型和空间细节以当前设定图版本为准。根据镜头时间与天气选取场景参考中的对应状态，只生成一幅电影画面，不复制参考板拼版。${filmConsistencyPrompt(p,shot)}；${shot.firstFramePrompt||shot.prompt}；本镜头的景别、机位、构图及叙事动作：${framing}。以本镜头独立构图为准，参考图只约束身份与空间。相邻镜头：${JSON.stringify(adjacent)}。沿动作进展呈现本镜头独有的静态起点，已完成的递物、擦汗等动作不得在告别等后续镜头重新起手。相邻镜头表达不同事件时，人物姿态、视线或景别必须反映事件差异。`,
     images:refs.map(r=>referenceImage(p,r.output)),
     aspectRatio,
     ...(nano ? {imageSize:'1K'} : {quality:'auto'}),
