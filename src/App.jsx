@@ -31,6 +31,7 @@ import GenerationSkillPicker from './GenerationSkillPicker.jsx'
 import { selectGenerationSkill, useGenerationSkill } from './generationSkills.js'
 import KnowledgeContext from './KnowledgeContext.jsx'
 import ComposerSelect from './ComposerSelect.jsx'
+import { fetchTextModels } from './api.js'
 import './complianceBrand.css'
 import { retryWaterfallLogo } from './logoRepair.js'
 import ImageSettings from './ImageSettings.jsx'
@@ -1432,6 +1433,27 @@ function TextStudio({ type, conversation, onSave }) {
   const [runtime] = useState(() => textTaskRuntime(conversationId.current, validTextMessages(conversation?.messages)))
   const [messages, setMessages] = useState(() => runtime.messages.current)
   const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(localStorage.getItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
+  const [textModels, setTextModels] = useState(null)
+  const [selectedTextModel, setSelectedTextModel] = useState('')
+  const usesTextModel = type !== 'compliance' && !(type === 'strategy' && activityContext.format === 'image')
+  useEffect(() => {
+    if (!usesTextModel) return
+    const controller = new AbortController()
+    const refresh = async () => {
+      try {
+        const result = await fetchTextModels(controller.signal)
+        if (!controller.signal.aborted) setTextModels(result.models)
+      } catch {
+        if (!controller.signal.aborted) setTextModels([])
+      }
+    }
+    void refresh()
+    const timer = setInterval(refresh, 60_000)
+    return () => { controller.abort(); clearInterval(timer) }
+  }, [usesTextModel])
+  const availableTextModels = textModels || []
+  const displayedTextModel = availableTextModels.some(({ value }) => value === selectedTextModel) ? selectedTextModel : ''
+  const textModel = displayedTextModel || availableTextModels[0]?.value
   useEffect(() => { if (type === 'strategy') localStorage.setItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext)) }, [activityContext, type])
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
@@ -1615,6 +1637,7 @@ function TextStudio({ type, conversation, onSave }) {
       setAttachmentError('请先选择品牌，再发送审核')
       return
     }
+    if (usesTextModel && !textModel) return
     const submittedAttachments = attachments
     const submittedInput = customInput || input
     const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
@@ -1682,7 +1705,7 @@ function TextStudio({ type, conversation, onSave }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS].filter(Boolean).join('\n\n')
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
@@ -1749,8 +1772,8 @@ function TextStudio({ type, conversation, onSave }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools"><span className="model-chip">{type === 'strategy' && activityContext.format === 'image' ? 'Image 2.5' : 'Gemini 3.1 Pro'}</span>{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
-        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
+        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={displayedTextModel} options={availableTextModels} onChange={setSelectedTextModel} disabled={!textModel} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
+        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
   </section>

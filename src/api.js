@@ -6,6 +6,16 @@ const apiBase = String(configuredApiBase).trim().replace(/\/$/, '')
 const AUTH_TOKEN_KEY = 'diefa-auth-token-v1'
 const AUTH_REMEMBER_KEY = 'diefa-auth-remember-v1'
 
+export async function fetchTextModels(signal) {
+  const response = await fetch(apiUrl('/api/text/models'), {
+    signal,
+    cache: 'no-store',
+    headers: { Authorization: `Bearer ${getAuthToken()}` },
+  })
+  if (!response.ok) throw new Error('无法读取可用模型')
+  return response.json()
+}
+
 export function getAuthToken() {
   return localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY) || ''
 }

@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { installAuth } from './auth.js'
 import { installTextTasks } from './textTasks.js'
+import { startTextModelHealth } from './textModelHealth.js'
 import { installSkills } from './skills.js'
 import { createSkillCompletion } from './skillCompletion.js'
 
@@ -1321,6 +1322,19 @@ app.get('/api/batch-spreadsheet', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+const textModelHealth = startTextModelHealth({
+  dataDir: waterfallDataDir,
+  complete: (body) => requestUpstream('/v1/chat/completions', body, undefined, 60_000),
+  readText: (reply) => {
+    const content = reply?.choices?.[0]?.message?.content ?? reply?.output_text
+    if (typeof content === 'string') return content
+    return Array.isArray(content) ? content.map((part) => part?.text || '').join('') : ''
+  },
+})
+app.get('/api/text/models', requireAuth, (_req, res) => {
+  res.set('Cache-Control', 'no-store').json(textModelHealth())
+})
+
 async function handleTextCompletion(req, res, next) {
   try {
     const { messages, systemPrompt, webSearch, searchQuery } = req.body
@@ -1336,6 +1350,15 @@ async function handleTextCompletion(req, res, next) {
     const sources = [...webResult.sources, ...(context?.sources || [])]
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(webResult.sources, webResult.available) : '', context?.prompt].filter(Boolean).join('\n\n')
     if (context && combinedSystemPrompt.length > 18000) throw Object.assign(new Error('品牌规则与系统指令超过长度预算，请精简后重试'), { status: 400 })
+    const selectedModel = req.body.textModel
+    if (selectedModel !== undefined && !textModelHealth().models.some(({ value }) => value === selectedModel)) {
+      throw Object.assign(new Error('所选模型当前不可用，请重新选择'), { status: 400 })
+    }
+    const complete = async (body) => {
+      if (!selectedModel) return requestLanguageModel(requestTextUpstream, body)
+      const result = await requestTextUpstream('/v1/chat/completions', { ...body, model: selectedModel }, 90_000)
+      return { ...result, model: result.model || selectedModel }
+    }
     const upstreamRequest = {
       stream: false,
       messages: [
@@ -1343,13 +1366,13 @@ async function handleTextCompletion(req, res, next) {
         ...safeMessages,
       ],
     }
-    let data = await requestLanguageModel(requestTextUpstream, upstreamRequest)
+    let data = await complete(upstreamRequest)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
     // field on the first completion. Retry once with an explicit answer request
     // so the UI never renders sources without a response.
     if (!content) {
-      data = await requestLanguageModel(requestTextUpstream, {
+      data = await complete({
         ...upstreamRequest,
         messages: [...upstreamRequest.messages, { role: 'user', content: '请基于以上资料直接给出简洁、完整的中文回答。' }],
       })
