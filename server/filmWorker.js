@@ -76,8 +76,10 @@ async function api(endpoint, body, timeout = 180000) {
 }
 // Headless validation without a public file host may reuse the provider's own
 // generated asset URL. Production uses private signed links covering provider queues.
-function referenceImage(p,output) {
-  return process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url?output.url:filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
+function referenceImage(p,output,preview=false) {
+  if (process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url) return output.url;
+  const link=filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
+  return preview ? link+'&preview=1' : link;
 }
 const filmVibbitSizes = {
   '1024x1024': '2048x2048',
@@ -391,7 +393,7 @@ async function videoShot(p, s, i) {
   const references=p.referenceWorkflow
     ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
     : [];
-  const tail = s.tail ? referenceImage(p,s.tail) : null;
+  const tail = s.tail ? referenceImage(p,s.tail,true) : null;
   const nativeTail = tail && SEEDANCE_MODELS.some(model => model.value === p.videoModel);
   const videoRefs=nativeTail || (p.editorialWorkflow && p.videoModel === 'minimax-h3') ? [] : references.slice(0,(p.videoModel==='wan-3.0'?9:8) - Number(Boolean(tail)));
   await generateShot(
@@ -409,8 +411,8 @@ async function videoShot(p, s, i) {
             "。人物说出上述台词，声音与口型同步。"
           : ""),
       images: [
-        referenceImage(p,s.frame),
-        ...videoRefs.map(r=>referenceImage(p,r)),
+        referenceImage(p,s.frame,true),
+        ...videoRefs.map(r=>referenceImage(p,r,true)),
         ...(tail && !nativeTail ? [tail] : []),
       ],
       ...(nativeTail ? {tailFrameImageUrl:tail} : {}),
