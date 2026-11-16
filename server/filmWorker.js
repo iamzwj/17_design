@@ -1,7 +1,7 @@
 import { languageImageParts, requestLanguageModel } from './languageModels.js'
 import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
-import { filmConsistencyPrompt, filmScalePrompt, filmSceneStyle } from './filmConsistency.js';
+import { filmConsistencyPrompt, filmScalePrompt, filmSceneStyle, filmSpokenAudioPrompt } from './filmConsistency.js';
 import { checkFrameIntegrity } from './filmFrameIntegrity.js';
 import { isFilmRateLimit } from './filmGenerationRecovery.js';
 import { SEEDANCE_MODELS, filmVideoResolution, filmOutputDimensions } from '../shared/filmVideoModels.js';
@@ -406,10 +406,10 @@ async function videoShot(p, s, i) {
         filmConsistencyPrompt(p,s) + "；" + s.prompt + '。不得在画面上生成字幕、旁白字卡或对白文字；场景内必要的手机界面、标识和道具文字可保留。' + (s.tail ? '。尾帧参考图是本镜动作终点：最后时刻的人物位置、手中道具和环境必须对应尾帧，禁止把首尾参考拼贴到视频。' : '') +
         (videoRefs.length ? "。图1提供镜头构图与动作起点，中间参考图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
         (s.dialogue
-          ? "。指定中文对白：" +
+          ? "。指定普通话对白：" +
             s.dialogue +
             "。人物说出上述台词，声音与口型同步。"
-          : ""),
+          : "") + (p.schemaVersion === 2 ? "。" + filmSpokenAudioPrompt(p) : ""),
       images: [
         referenceImage(p,s.frame,true),
         ...videoRefs.map(r=>referenceImage(p,r,true)),

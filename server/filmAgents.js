@@ -1,9 +1,11 @@
 import { availableLanguageModels, requestAvailableLanguageModel, requestLanguageModel } from './languageModels.js'
 import { applyFilmLocations, validateFilmLocations } from './filmLocations.js';
+import { resolveFilmNarrator } from './filmConsistency.js';
 import { normalizeFilmDialogue } from '../shared/filmWorkflow.js';
 import { createHash } from 'node:crypto';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { beginTask, finishTask, event, taskId, applyCommand } from './filmState.js';
+const narrationDirection = '全片旁白与角色对白使用中国大陆标准普通话（zh-CN）。先锁定旁白声线：原稿明确指定独立旁白时用 independent 并指定性别与年龄感；否则用 protagonist，绑定主角角色ID，沿用主角性别与年龄感。中文姓名不能单独作为性别依据；选角确定后，填写角色性别与年龄感，承担旁白的声线不得写未知。保持原稿叙述人称，旁白只作画外音。';
 const json = text => JSON.parse(String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
 const validId = id => typeof id==='string' && /^[a-zA-Z0-9_-]{1,60}$/.test(id);
 export const timePrefix = value => /^(时间[:：\s]*)?(白天|夜晚|清晨|早晨|上午|中午|下午|傍晚|黄昏|深夜|凌晨|日间|夜间|\d{1,2}[:：时点])/.test(String(value).trim());
@@ -151,7 +153,7 @@ export function createFilmAgents({api,save,check}) {
     if (p.storyboardReady) return;
     const narrative = p.context?.narrative;
     const narrativeRules = narrative ? `叙事风格：${narrative.label}。${Object.values(narrative.rules || {}).join('；')}` : '';
-    const instruction = `一次规划完整短片，保持故事事实与因果，按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。对白写明说话人，旁白在videoPrompt明确为画外音，只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
+    const instruction = `一次规划完整短片，保持故事事实与因果。${narrationDirection}按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{mode,characterId,characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{gender,age},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。对白写明说话人，旁白在videoPrompt明确为画外音，只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
     const prepare = result => {
       if (typeof result.title !== 'string' || !result.title.trim()) throw Error('缺少影片标题');
       const script = p.script || normalizeFilmScript(result.script);
@@ -165,7 +167,7 @@ export function createFilmAgents({api,save,check}) {
       for (const scene of scenes) resources.push({id:`${scene.id}-environment`,sourceId:scene.id,name:`${scene.name} · 场景设定`,category:'scenes',type:'environment',agent:'scene',attributes:scene,prompt:scene.prompt,revision:p.scriptRevision||1,history:[]});
       const project = {...p, script, characters:result.characters, scenes, resources, locations:[]};
       const shots = normalizeShots(result.shots, project);
-      return {script, characters:result.characters, scenes, resources, shots};
+      return {script: {...script, narrator: resolveFilmNarrator({...project, shots})}, characters:result.characters, scenes, resources, shots};
     };
     await run(p,'simple-plan','director','script',instruction,{story:p.story,script:p.script || null,ratio:p.ratio,style:p.settings.style},prepare,result=>{
       const plan = prepare(result);
@@ -173,7 +175,7 @@ export function createFilmAgents({api,save,check}) {
     });
   };
   const director=async p=>{if(p.directorPlan)return;await run(p,'director-plan','director','script','制定制作目标与协作计划。返回{title,goal,style,continuityRules:[字符串],handoffs:[{agent,goal}]}。title根据梗概拟5-12字片名。',{story:p.story,duration:p.duration,style:p.settings.style,brandContext:p.context?.prompt||'',skill:p.context?.skill||''},r=>{if(typeof r.title!=='string'||!Array.isArray(r.handoffs))throw Error('导演计划结构无效');},r=>{p.directorPlan=r;p.title=r.title;});};
-  const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。旁白必须确定全片唯一叙述者，第一人称绑定原稿中“我”的角色身份、性别、年龄和声线，不默认男声。返回{narrator:{characterName,gender,age,voice},summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。id使用唯一英文字母或数字；time以白天、夜晚、清晨或具体钟点开头，年代及相对时间放在其后，例如“白天；三个月前”“傍晚；现在”，不得删掉原故事时间信息。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{normalizeFilmScript(r);},r=>{p.script=normalizeFilmScript(r);});};
+  const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。' + narrationDirection + 'summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。旁白必须确定全片唯一叙述者，第一人称绑定原稿中“我”的角色身份、性别、年龄和声线，不默认男声。返回{narrator:{mode,characterId,characterName,gender,age,voice},summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。id使用唯一英文字母或数字；time以白天、夜晚、清晨或具体钟点开头，年代及相对时间放在其后，例如“白天；三个月前”“傍晚；现在”，不得删掉原故事时间信息。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{normalizeFilmScript(r);},r=>{p.script=normalizeFilmScript(r);});};
   const castingGuidance = '依据原稿和已有角色设定确定人物背景。原稿或场次明确发生在中国且当地角色未指定其他背景时，将其设定为中国人物，并在 facePrompt 中明确写出“中国人”、年龄和可辨认的个人特征。用户明确指定的人物背景和参考身份优先。故事地点不明确时，不因原稿使用中文而推断人物背景。';
   const characters=async p=>{if(p.characters||!p.script)return;await run(p,'characters','character','characters','仅提取原稿明确指定造型的主要角色，或必须跨镜头保持同一身份的角色。介绍片中的一次性业主、工作人员、店员、手部和群像直接写在各自分镜里，不单独建档；画外音不算出镜。没有需要独立设定的角色时返回 characters:[]。身份和服装分开，保持唯一 ID。返回{characters:[{id,name,identity:{storyRole,gender,age,face,hair,hairColor,skinTone,height,build,proportions,temperament,features,lookChanges},facePrompt,outfits:[{id,name,prompt,clothes,shoes,materials,colors,accessories,personalItems}]}]}。facePrompt是一张正面、45度、90度同一人面部特写三视图设定图的提示词。outfit描述同一角色的一套服装、鞋履和配饰，供六格角色设定图使用。' + castingGuidance,{script:p.script,style:p.settings.style},r=>{if(!Array.isArray(r.characters)||new Set(r.characters.map(c=>c?.id)).size!==r.characters.length||r.characters.some(c=>!c||!validId(c.id)||!c.name||!c.facePrompt||!Array.isArray(c.outfits)||!c.outfits.length||new Set(c.outfits.map(o=>o?.id)).size!==c.outfits.length||c.outfits.some(o=>!o||!validId(o.id)||!o.prompt)))throw Error('角色设定无效');},r=>{
       p.characters=r.characters;

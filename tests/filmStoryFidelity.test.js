@@ -1,3 +1,4 @@
+import { resolveFilmNarrator } from '../server/filmConsistency.js';
 import { LANGUAGE_MODELS } from '../server/languageModels.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -90,4 +91,17 @@ test('director revises an unresolved shot twice, then keeps the current version'
   assert.match(p.shots[0].prompt,/画面 2$/);
   assert.equal(p.needsRerun,false);
   assert.equal(p.status,'running');
+});
+
+
+test('narration follows the established lead voice and honors an explicit independent narrator', () => {
+  const p = project();
+  p.characters[0].facePrompt = '中国女性邻居，黑发';
+  p.shots = [shot()];
+  p.script.narrator = { characterName: '旁白', gender: '未知', age: '未知' };
+  assert.deepEqual(resolveFilmNarrator(p), {
+    mode:'protagonist', characterId:'c1', characterName:'雪姐', gender:'女', age:'40岁', voice:'自然、清晰、平实',
+  });
+  p.script.narrator = { mode:'independent', characterName:'楼下保安', gender:'男', age:'60岁', voice:'沉稳' };
+  assert.deepEqual(resolveFilmNarrator(p), p.script.narrator);
 });
