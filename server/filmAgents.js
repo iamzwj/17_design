@@ -147,6 +147,31 @@ export function createFilmAgents({api,save,check}) {
     try {const result=await structured.invoke({});save(p);finishTask(p,t,result);if((p.scriptRevision||1)===version)commit(result);else t.status='superseded';save(p);}
     catch(error){finishTask(p,t,null,error);save(p);throw error;}
   };
+  const simplePlan = async p => {
+    if (p.storyboardReady) return;
+    const narrative = p.context?.narrative;
+    const narrativeRules = narrative ? `叙事风格：${narrative.label}。${Object.values(narrative.rules || {}).join('；')}` : '';
+    const instruction = `一次规划完整短片，保持故事事实与因果，按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。对白写明说话人，旁白在videoPrompt明确为画外音，只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
+    const prepare = result => {
+      if (typeof result.title !== 'string' || !result.title.trim()) throw Error('缺少影片标题');
+      const script = p.script || normalizeFilmScript(result.script);
+      if (!Array.isArray(result.characters) || !Array.isArray(result.scenes) || !result.scenes.length) throw Error('缺少角色或场景');
+      for (const character of result.characters) if (!validId(character.id) || !character.name || !Array.isArray(character.outfits) || !character.outfits.length || character.outfits.some(outfit => !validId(outfit.id) || !outfit.prompt)) throw Error('角色或服装设定无效');
+      for (const scene of result.scenes) if (!validId(scene.id) || !scene.name || !scene.prompt) throw Error('场景设定无效');
+      const periods = sceneLightingPeriods(result.scenes, script.scenes);
+      const scenes = result.scenes.map(scene => ({...scene, lightingPeriods:periods.get(scene.id)}));
+      const resources = [];
+      for (const character of result.characters) for (const outfit of character.outfits) resources.push({id:`${character.id}-look-${outfit.id}`,sourceId:character.id,outfitId:outfit.id,name:`${character.name} · ${outfit.name || '角色设定'}`,category:'characters',type:'wardrobe',agent:'character',attributes:outfit,prompt:`同一人物的面容和穿着，${character.facePrompt || ''}；${outfit.prompt}`,revision:p.scriptRevision||1,history:[]});
+      for (const scene of scenes) resources.push({id:`${scene.id}-environment`,sourceId:scene.id,name:`${scene.name} · 场景设定`,category:'scenes',type:'environment',agent:'scene',attributes:scene,prompt:scene.prompt,revision:p.scriptRevision||1,history:[]});
+      const project = {...p, script, characters:result.characters, scenes, resources, locations:[]};
+      const shots = normalizeShots(result.shots, project);
+      return {script, characters:result.characters, scenes, resources, shots};
+    };
+    await run(p,'simple-plan','director','script',instruction,{story:p.story,script:p.script || null,ratio:p.ratio,style:p.settings.style},prepare,result=>{
+      const plan = prepare(result);
+      Object.assign(p,plan,{title:result.title.trim(),directorPlan:{title:result.title.trim(),handoffs:[]},storyboardReady:true,plan:{title:result.title.trim(),summary:plan.script.summary},duration:plan.shots.reduce((sum,shot)=>sum+shot.duration,0)});
+    });
+  };
   const director=async p=>{if(p.directorPlan)return;await run(p,'director-plan','director','script','制定制作目标与协作计划。返回{title,goal,style,continuityRules:[字符串],handoffs:[{agent,goal}]}。title根据梗概拟5-12字片名。',{story:p.story,duration:p.duration,style:p.settings.style,brandContext:p.context?.prompt||'',skill:p.context?.skill||''},r=>{if(typeof r.title!=='string'||!Array.isArray(r.handoffs))throw Error('导演计划结构无效');},r=>{p.directorPlan=r;p.title=r.title;});};
   const writer=async p=>{if(p.script)return;await run(p,'script','writer','script','编写可拍摄剧本。summary说明主要因果链和压缩取舍。场次action必须具体到谁在什么年代做什么、为何推动下一场，不能仅写抽象主题。旁白必须确定全片唯一叙述者，第一人称绑定原稿中“我”的角色身份、性别、年龄和声线，不默认男声。返回{narrator:{characterName,gender,age,voice},summary,scenes:[{id,time,location,action,characters:[名称],dialogue:[{character,text}],narration}]}。保留故事事实，场次有昼夜、动作和对白。id使用唯一英文字母或数字；time以白天、夜晚、清晨或具体钟点开头，年代及相对时间放在其后，例如“白天；三个月前”“傍晚；现在”，不得删掉原故事时间信息。',{story:p.story,plan:p.directorPlan,duration:p.duration},r=>{normalizeFilmScript(r);},r=>{p.script=normalizeFilmScript(r);});};
   const castingGuidance = '依据原稿和已有角色设定确定人物背景。原稿或场次明确发生在中国且当地角色未指定其他背景时，将其设定为中国人物，并在 facePrompt 中明确写出“中国人”、年龄和可辨认的个人特征。用户明确指定的人物背景和参考身份优先。故事地点不明确时，不因原稿使用中文而推断人物背景。';
@@ -185,6 +210,7 @@ export function createFilmAgents({api,save,check}) {
   };
   const scenes = async p => {
     await extractScenes(p);
+    if (p.simpleFilmWorkflow) return;
     if (!p.scenes?.length || (p.locationPlanVersion === 1 && p.locationSceneIds === p.scenes.map(scene => scene.id).sort().join(','))) return;
     await run(p, 'location-layout-v1-' + createHash('sha256').update(JSON.stringify(p.scenes)).digest('hex').slice(0,12), 'location', 'scenes',
       '把所有场景组织成真实地点与子区域。一个小区的大门、内部通道、楼栋入口、电梯厅属于同一地点的不同区域，必须共享建筑材料、门岗、道路和连接路线。不同地址才分地点。返回{locations:[{id,name,sceneIds:[全部所属场景ID],masterSceneId,layout,anchors:[固定建筑外观和空间地标],connections:[{from,to,description}]}]}。connections 的 from/to 优先填写该地点 sceneIds 中的场景 ID；场景内部的门岗、楼梯、电梯或门口等具体节点可以用文字说明。每个场景恰好属于一个地点，主场景选择最能体现建筑与路线的现有场景，不修改原稿地理关系。',
@@ -207,7 +233,7 @@ export function createFilmAgents({api,save,check}) {
       p.plan = { title: p.title, summary: p.script.summary };
     };
     const scenes = p.script.scenes;
-    if (!p.autoDuration || scenes.length < 2) {
+    if (p.simpleFilmWorkflow || !p.autoDuration || scenes.length < 2) {
       await run(p, 'storyboard', 'storyboard', 'storyboard', instruction, input,
         r => normalizeShots(r.shots, p), r => commit(r.shots));
       return;
@@ -285,5 +311,5 @@ export function createFilmAgents({api,save,check}) {
       event(p,'director',taskId(key,'director'),p.continuityReview.reason,{type:'decision'});
     }
   };
-  return {director,writer,characters,scenes,storyboard,continuity,revise};
+  return {simplePlan,director,writer,characters,scenes,storyboard,continuity,revise};
 }

@@ -8,6 +8,49 @@ test('continuity cache follows source and shot meaning, not just unchanged revis
 test('the continuity reviewer receives the original script and records semantic contradictions without stopping production',async()=>{const p=project();p.storyboardReady=true;p.shots=[shot()];let input,system;const agents=createFilmAgents({save:()=>{},check:()=>{},api:async(_url,body)=>{input=JSON.parse(body.messages[1].content);system=body.messages[0].content;return {choices:[{message:{content:JSON.stringify({status:'manual',reason:'结尾改成师父再次帮助新人，丢掉传承',issues:[{shotId:'s1',type:'剧情',evidence:'原稿要求新人成为导师'}]})}}]};}});await agents.continuity(p);assert.equal(input.sourceStory,p.story);assert.match(system,/逐项对照/);assert.notEqual(p.status,'needs-input');assert.equal(p.continuityReview.status,'manual');assert.match(p.continuityReview.reason,/传承/);});
 test('writer input retains the full source and explicit identity/time/dialogue constraints',async()=>{const p=project();delete p.script;let input,system;const agents=createFilmAgents({save:()=>{},check:()=>{},api:async(_url,body)=>{input=JSON.parse(body.messages[1].content);system=body.messages[0].content;return {choices:[{message:{content:JSON.stringify({summary:'传承',scenes:[{id:'a',time:'白天'}]})}}]};}});await agents.writer(p);assert.equal(input.sourceStory,p.story);assert.match(system,/旁白和内心独白/);assert.match(system,/因果顺序/);assert.ok(p.script);});
 
+test('new simple projects plan all scenes in one storyboard request', async () => {
+  const p = project();
+  p.simpleFilmWorkflow = true;
+  p.autoDuration = true;
+  p.duration = null;
+  p.script.scenes = [{id:'a',time:'白天'}, {id:'b',time:'夜晚'}];
+  let calls = 0;
+  const agents = createFilmAgents({save(){}, check(){}, async api(_url, body) {
+    calls++;
+    const input = JSON.parse(body.messages[1].content);
+    assert.equal(input.script.scenes.length, 2);
+    return {choices:[{message:{content:JSON.stringify({shots:[shot()]})}}]};
+  }});
+  await agents.storyboard(p);
+  assert.equal(calls, 1);
+  assert.equal(p.shots.length, 1);
+  assert.equal(p.duration, 5);
+});
+
+test('simple film plans script, references and shots together in one request', async () => {
+  const p = project();
+  delete p.script; delete p.characters; delete p.scenes;
+  p.resources = []; p.duration = null; p.autoDuration = true;
+  p.simpleFilmWorkflow = true; p.editorialWorkflow = true;
+  let calls = 0;
+  const agents = createFilmAgents({save(){}, check(){}, async api() {
+    calls++;
+    return {choices:[{message:{content:JSON.stringify({
+      title:'邻里相助',
+      script:{summary:'邻里互助',scenes:[{id:'scene1',time:'白天',location:'门口'}]},
+      characters:[{id:'c1',name:'雪姐',identity:{age:'40岁'},facePrompt:'黑发',outfits:[{id:'o1',name:'大衣',prompt:'灰色大衣'}]}],
+      scenes:[{id:'scene',name:'门口',layout:'道路在门前',prompt:'小区门口',scriptSceneIds:['scene1']}],
+      shots:[{...shot(),outfitByCharacter:{c1:'o1'}}],
+    })}}]};
+  }});
+  await agents.simplePlan(p);
+  await agents.writer(p); await agents.characters(p); await agents.scenes(p); await agents.storyboard(p);
+  assert.equal(calls,1);
+  assert.equal(p.storyboardReady,true);
+  assert.deepEqual(p.shots[0].resourceIds,['scene-environment','c1-look-o1']);
+  assert.equal(p.duration,5);
+});
+
 test('director revises an unresolved shot twice, then keeps the current version', async () => {
   const p = project();
   p.storyboardReady = true;

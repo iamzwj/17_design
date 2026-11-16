@@ -163,6 +163,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       shots: [],
       assets: [],
       automatic: true,
+      simpleFilmWorkflow: true,
       referenceWorkflow: true,
       editorialWorkflow: true,
     };

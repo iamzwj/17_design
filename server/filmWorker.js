@@ -831,6 +831,11 @@ async function referenceAssets(p, onlyResource) {
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
+        if (p.simpleFilmWorkflow && r.output) {
+          r.approvedVersion = r.revision;
+          save(p);
+          return;
+        }
         if(!r.output || (approvedSetting(r) && (r.type!=='environment' || r.assetReview?.emptyScenePolicy===1) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual')))return;
         if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file ||
           (r.type==='environment' && r.assetReview?.emptyScenePolicy!==1) || (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
@@ -1073,14 +1078,14 @@ const stage =
     }
   };
 const graph = new StateGraph(State)
-  .addNode('director',stage(async p=>{await recoverDetached(p);if(p.schemaVersion===2){await agents.director(p);await agents.revise(p);}else {await plan(p);await revise(p);await agents.revise(p);}},true))
+  .addNode('director',stage(async p=>{await recoverDetached(p);if(p.schemaVersion===2){if(p.simpleFilmWorkflow)await agents.simplePlan(p);else await agents.director(p);await agents.revise(p);}else {await plan(p);await revise(p);await agents.revise(p);}},true))
   .addNode('screenwriter',stage(async p=>{if(p.schemaVersion===2)await agents.writer(p);}))
   .addNode('character_scene',stage(async p=>{if(p.schemaVersion===2){const results=await Promise.allSettled([agents.characters(p),agents.scenes(p)]);const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;}}))
   .addNode('reference_assets',stage(async p=>{if(p.schemaVersion===2 && p.referenceWorkflow)await referenceAssets(p);}))
-  .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2)await agents.continuity(p);}))
+  .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2 && !p.simpleFilmWorkflow)await agents.continuity(p);}))
   .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);}else await images(p);}))
   .addNode('video_shots',stage(produceShots))
-  .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2)await directorReview(p);}))
+  .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2 && !p.simpleFilmWorkflow)await directorReview(p);}))
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))
   .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','reference_assets').addEdge('reference_assets','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();

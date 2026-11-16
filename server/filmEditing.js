@@ -5,6 +5,17 @@ import {beginTask,finishTask,event,taskId} from './filmState.js';
 const exec=promisify(execFile);
 export const probe=async file=>JSON.parse((await exec('ffprobe',['-v','error','-show_streams','-show_format','-of','json',file],{timeout:30000})).stdout);
 const stamp=t=>{const ms=Math.round(t*1000);return `${String(Math.floor(ms/3600000)).padStart(2,'0')}:${String(Math.floor(ms/60000)%60).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')},${String(ms%1000).padStart(3,'0')}`;};
+export function repeatedFilmSpeech(shots) {
+  const seen = new Set();
+  return shots.map(shot => (shot?.audio?.segments || []).filter(segment => {
+    const normalized = segment.text.replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+    if (normalized.length < 6) return false;
+    const scriptedDialogue = String(shot?.dialogue || '').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+    if (seen.has(normalized) && !scriptedDialogue.includes(normalized)) return true;
+    seen.add(normalized);
+    return false;
+  }));
+}
 export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
   p.stage='audio';save(p);const dir=path.join(root,p.id);
   for(const shot of p.shots.filter(s=>(!onlyShot || s.id===onlyShot) && s.video && !s.stale && !s.paused)) {
@@ -16,12 +27,12 @@ export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
       if(hasAudio) {
         audio.file=`audio-${shot.id}-v${version}.m4a`;
         await exec('ffmpeg',['-v','error','-y','-i',path.join(dir,shot.video.file),'-vn','-c:a','aac',path.join(dir,audio.file)],{timeout:120000});
-        if(shot.dialogue) {
+        if(shot.dialogue || p.simpleFilmWorkflow) {
           try {
             const bytes=fs.readFileSync(path.join(dir,audio.file));if(bytes.length>20e6)throw Error('音轨超过对齐预算');
             const r=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:'按实际音频转录中文语音，返回JSON {segments:[{start:秒,end:秒,text:实际听到的话}]}。没有听到的对白不得补写。时间必须在音频范围内。'},{inline_data:{mime_type:'audio/mp4',data:bytes.toString('base64')}}]}],generationConfig:{temperature:0.1}});
             const raw=(r.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const d=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
-            if(!Array.isArray(d.segments)||!d.segments.length||d.segments.some(s=>!Number.isFinite(s.start)||!Number.isFinite(s.end)||s.start<0||s.end<=s.start||s.end>audio.duration+.2||typeof s.text!=='string'))throw Error('实际语音对齐未得到有效结果');
+            if(!Array.isArray(d.segments)||(!p.simpleFilmWorkflow && !d.segments.length)||d.segments.some(s=>!Number.isFinite(s.start)||!Number.isFinite(s.end)||s.start<0||s.end<=s.start||s.end>audio.duration+.2||typeof s.text!=='string'))throw Error('实际语音对齐未得到有效结果');
             audio.segments=d.segments;audio.alignment='audio-model';
           }catch(e){audio.alignment='shot-estimate';audio.note='语音对齐未完成，字幕按镜头暂定，请人工核对：'+e.message;}
         }
@@ -55,6 +66,7 @@ export async function renderFilmTimeline(p,{root,save,check}) {
   const signature=()=>JSON.stringify({shots:p.shots.map(s=>[s.id,s.revision,s.video?.file]),clips:p.timeline.clips,tracks:p.timeline.tracks,revision:p.timeline.revision,settings:p.settings});
   const inputSignature=signature();
   const captions=[];let cursor=0;
+  const duplicates = p.simpleFilmWorkflow ? repeatedFilmSpeech(clips.map(clip => p.shots.find(shot => shot.id === clip.shotId))) : [];
   try {
     for(let i=0;i<clips.length;i++) {
       check(p);const clip=clips[i],shot=p.shots.find(s=>s.id===clip.shotId);if(!shot?.video)throw Error('时间线引用了不存在的片段');
@@ -62,9 +74,11 @@ export async function renderFilmTimeline(p,{root,save,check}) {
       if(clip.trimIn+clip.duration>duration+.3)throw Object.assign(Error(`镜头 ${shot.id} 实际仅${duration.toFixed(1)}秒，不能静默补帧成${clip.duration}秒，请调整时间线或重做`),{code:'INPUT'});
       const hasAudio=meta.streams.some(s=>s.codec_type==='audio');
       const fade=p.settings.transition==='fade'?`,fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0,clip.duration-.2)}:d=0.2`:'';
-      await exec('ffmpeg',['-v','error','-y','-ss',String(clip.trimIn),'-i',source,...(hasAudio?[]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']),'-map','0:v:0','-map',hasAudio?'0:a:0':'1:a:0','-vf',`scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24${fade}`,'-af',`volume=${p.settings.sourceVolume??1},apad`,'-t',String(clip.duration),'-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',path.join(work,`clip-${i}.mp4`)],{timeout:300000});
+      const muted = (duplicates[i] || []).map(segment => ({start:Math.max(0,segment.start-clip.trimIn),end:Math.min(clip.duration,segment.end-clip.trimIn)})).filter(segment=>segment.end>segment.start);
+      const muteFilters = muted.map(segment=>`volume=0:enable='between(t,${segment.start},${segment.end})'`).join(',');
+      await exec('ffmpeg',['-v','error','-y','-ss',String(clip.trimIn),'-i',source,...(hasAudio?[]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']),'-map','0:v:0','-map',hasAudio?'0:a:0':'1:a:0','-vf',`scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24${fade}`,'-af',`volume=${p.settings.sourceVolume??1}${muteFilters ? ','+muteFilters : ''},apad`,'-t',String(clip.duration),'-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',path.join(work,`clip-${i}.mp4`)],{timeout:300000});
       const segments=shot.audio?.segments || (shot.dialogue?[{start:0,end:shot.duration,text:shot.subtitleText||shot.dialogue}]:[]);
-      for(const s of segments) {const start=Math.max(0,s.start-clip.trimIn),end=Math.min(clip.duration,s.end-clip.trimIn);if(end>start)captions.push({start:cursor+start,end:cursor+end,text:s.text,source:shot.audio?.alignment||'shot-estimate'});}
+      for(const s of segments) {if((duplicates[i] || []).includes(s))continue;const start=Math.max(0,s.start-clip.trimIn),end=Math.min(clip.duration,s.end-clip.trimIn);if(end>start)captions.push({start:cursor+start,end:cursor+end,text:s.text,source:shot.audio?.alignment||'shot-estimate'});}
       cursor+=clip.duration;
     }
     fs.writeFileSync(path.join(work,'concat.txt'),clips.map((_,i)=>`file 'clip-${i}.mp4'`).join('\n'));
