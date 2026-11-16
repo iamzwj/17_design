@@ -49,8 +49,10 @@ export function automaticFilmClip(project, shot) {
   if (!project.editorialWorkflow || !edit || typeof edit.evidence !== 'string' || !edit.evidence.trim() ||
       !Number.isFinite(edit.start) || !Number.isFinite(edit.end) || edit.start < 0 ||
       edit.end > duration || edit.end - edit.start < 1) return full;
-  if (shot.dialogue && (!shot.audio?.segments?.length ||
-      shot.audio.segments.some(segment => segment.start < edit.start || segment.end > edit.end))) return full;
+  const speech = shot.audio?.segments;
+  if ((shot.dialogue || (project.simpleFilmWorkflow && shot.audio?.hasAudio)) && !Array.isArray(speech)) return full;
+  if (shot.dialogue && !speech.length) return full;
+  if (speech?.some(segment => segment.start < edit.start || segment.end > edit.end)) return full;
   return {shotId:shot.id,trimIn:edit.start,duration:edit.end-edit.start};
 }
 

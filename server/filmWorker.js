@@ -403,7 +403,7 @@ async function videoShot(p, s, i) {
     {
       model: p.videoModel,
       prompt:
-        filmConsistencyPrompt(p,s) + "；" + s.prompt + (s.tail ? '。尾帧参考图是本镜动作终点：最后时刻的人物位置、手中道具和环境必须对应尾帧，禁止把首尾参考拼贴到视频。' : '') +
+        filmConsistencyPrompt(p,s) + "；" + s.prompt + '。不得在画面上生成字幕、旁白字卡或对白文字；场景内必要的手机界面、标识和道具文字可保留。' + (s.tail ? '。尾帧参考图是本镜动作终点：最后时刻的人物位置、手中道具和环境必须对应尾帧，禁止把首尾参考拼贴到视频。' : '') +
         (videoRefs.length ? "。图1提供镜头构图与动作起点，中间参考图仅供核对场景、身份与服装；角色造型和空间细节以当前设定图版本为准；禁止生成拼版或参考图中的多视角布局。" : "") +
         (s.dialogue
           ? "。指定中文对白：" +
@@ -463,7 +463,7 @@ async function quality(p, onlyShot) {
       );
       const prompt =
         '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
-        shot.prompt + (p.editorialWorkflow ? '。同时给剪辑建议 edit:{start:秒,end:秒,evidence:具体动作}。只有从实际画面可确定重复起手或结尾空停才建议裁剪。保留本镜新增的动作和声音，不确定省略 edit。预计取用时长：'+(shot.editDuration || shot.duration)+'秒' : '') + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
+        shot.prompt + (p.editorialWorkflow ? '。同时给剪辑建议 edit:{start:秒,end:秒,evidence:具体动作,confidence:"high"或"low"}。只有从实际画面可确定重复起手或结尾空停才建议裁剪。保留本镜新增的动作和声音，不确定省略 edit。预计取用时长：'+(shot.editDuration || shot.duration)+'秒' : '') + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
       const extra = [];
       const anchorIds = new Set([...(shot.resourceIds || [])]);
       const images = [...p.resources.filter(r => anchorIds.has(r.id) && r.output && !r.stale).map(r => r.output), ...(shot.tail ? [shot.tail] : [])];
@@ -486,7 +486,7 @@ async function quality(p, onlyShot) {
       reviewResult = {
         file: reviewVideo,
         policy: 2,
-        ...(p.editorialWorkflow && result.confidence==='high' && result.edit ? {edit:result.edit} : {}),
+        ...(p.editorialWorkflow && result.edit?.confidence==='high' ? {edit:result.edit} : {}),
         status: result.status === "pass" ? "pass" : "review",
         summary: String(result.summary || "请核对镜头"),
         issues: Array.isArray(result.issues)?result.issues:[], evidence: {frame:reviewFrame,video:reviewVideo,contact:`check-${shot.id}-v${reviewedVersion}.jpg`},
@@ -1085,7 +1085,7 @@ const graph = new StateGraph(State)
   .addNode('screenwriter',stage(async p=>{if(p.schemaVersion===2)await agents.writer(p);}))
   .addNode('character_scene',stage(async p=>{if(p.schemaVersion===2){const results=await Promise.allSettled([agents.characters(p),agents.scenes(p)]);const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;}}))
   .addNode('reference_assets',stage(async p=>{if(p.schemaVersion===2 && p.referenceWorkflow)await referenceAssets(p);}))
-  .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2 && !p.simpleFilmWorkflow)await agents.continuity(p);}))
+  .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2)await agents.continuity(p);}))
   .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);}else await images(p);}))
   .addNode('video_shots',stage(produceShots))
   .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2 && !p.simpleFilmWorkflow)await directorReview(p);}))

@@ -1,3 +1,4 @@
+import { LANGUAGE_MODELS } from '../server/languageModels.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createFilmAgents,filmContinuityKey,normalizeShots} from '../server/filmAgents.js';
@@ -51,7 +52,7 @@ test('simple film plans script, references and shots together in one request', a
   assert.equal(p.duration,5);
 });
 
-test('simple planning uses at most two bounded model attempts before falling back', async () => {
+test('simple planning tries each available model with a five-minute limit', async () => {
   const p = project();
   delete p.script; delete p.characters; delete p.scenes;
   p.resources = []; p.duration = null; p.autoDuration = true; p.simpleFilmWorkflow = true;
@@ -61,7 +62,7 @@ test('simple planning uses at most two bounded model attempts before falling bac
     return {choices:[{message:{content:'{}'}}]};
   }});
   await assert.rejects(agents.simplePlan(p));
-  assert.deepEqual(timeouts,[30000,30000]);
+  assert.deepEqual(timeouts,LANGUAGE_MODELS.map(() => 300000));
 });
 
 test('director revises an unresolved shot twice, then keeps the current version', async () => {
