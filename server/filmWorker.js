@@ -433,11 +433,11 @@ async function quality(p, onlyShot) {
   if (p.status === "review") return;
   p.stage = "quality";
   save(p);
-  await filmPool(p.shots,10,async (shot,i)=>{
+  await filmPool(p.shots,3,async (shot,i)=>{
     check(p);
     if((onlyShot && shot.id!==onlyShot) || !shot.video || shot.stale || shot.paused)return;
     if(shot.manualApprovedVersion===shot.revision){shot.review={file:shot.video.file,status:"pass",summary:"用户已确认保留当前版本",manual:true};return;}
-    if(shot.review?.file===shot.video.file && shot.review.policy===2)return;
+    if(shot.review?.file===shot.video.file && (shot.review.policy===3 || (shot.review.policy===2 && !shot.review.unavailable)))return;
     const reviewedVersion=shot.revision,reviewVideo=shot.video.file,reviewFrame=shot.frame?.file;let reviewResult, reviewError;
     const reviewTask=beginTask(p,taskId(shot.id,"review",reviewedVersion),"quality","quality",{name:`镜头 ${i+1} 一致性检查`});
     p.activeJobs ||= [];p.activeJobs.push({id:reviewTask.id,stage:"quality",resourceId:shot.id,message:`正在审核镜头 ${i+1}`,startedAt:Date.now()});save(p);
@@ -477,11 +477,11 @@ async function quality(p, onlyShot) {
         {text: prompt + '。明确证据填 confidence: high，不确定填 low。'},
         {file:path.join(dir,reviewFrame)},
         {file:image},
-        ...images.map(reference => ({file:path.join(dir,reference.file)})),
-      ]);
+        ...images.map(reference => ({file:path.join(dir,reference.file),maxEdge:768})),
+      ], {timeout:120_000,budget:240_000});
       reviewResult = {
         file: reviewVideo,
-        policy: 2,
+        policy: 3,
         ...(p.editorialWorkflow && result.edit && (result.edit.confidence ?? result.confidence)==='high' ? {edit:result.edit} : {}),
         status: result.status === "pass" ? "pass" : "review",
         summary: String(result.summary || "请核对镜头"),
@@ -491,12 +491,12 @@ async function quality(p, onlyShot) {
       reviewError=e;
       reviewResult = {
         file: reviewVideo,
-        policy: 2,
+        policy: 3,
         status: "review",
         unavailable:true,
         summary:
           "自动画面检查服务暂不可用，记录结果并继续制作。" +
-          String(e.message).slice(0, 100),
+          String(e.message),
       };
     }
     save(p);
@@ -504,7 +504,7 @@ async function quality(p, onlyShot) {
     p.activeJobs=p.activeJobs.filter(j=>j.id!==reviewTask.id);
     finishTask(p,reviewTask,reviewResult,reviewError);
     if(shot.revision!==reviewedVersion)reviewTask.status="superseded";
-    filmEvent(p, `checked:${reviewVideo}`, `镜头 ${i + 1} 画面检查已结束${reviewResult.status === "pass" ? "" : "，需要人工核对"}`);
+    filmEvent(p, `checked:${reviewVideo}`, `镜头 ${i + 1} 画面检查${reviewResult.unavailable ? "未完成，需要人工核对" : reviewResult.status === "pass" ? "已通过" : "已结束，需要人工核对"}`);
     save(p);
   });
   p.reviewWarning = p.shots.filter((s) => s.review?.status !== "pass").length;

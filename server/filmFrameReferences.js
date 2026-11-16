@@ -1,12 +1,12 @@
 import path from 'node:path'
 import sharp from 'sharp'
 
-export async function filmImageJpeg(source) {
+export async function filmImageJpeg(source, maxEdge = 1280) {
   const image = sharp(source, { limitInputPixels: 50_000_000 }).rotate()
     .flatten({ background: '#ffffff' })
   for (const [size, quality] of [[1280, 84], [1280, 70], [960, 65], [640, 60]]) {
     const jpeg = await image.clone()
-      .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+      .resize(Math.min(size, maxEdge), Math.min(size, maxEdge), { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality }).toBuffer()
     if (jpeg.length <= 400_000) return jpeg
   }
