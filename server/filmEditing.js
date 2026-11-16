@@ -34,7 +34,7 @@ export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
             const raw=(r.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const d=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
             if(!Array.isArray(d.segments)||(!p.simpleFilmWorkflow && !d.segments.length)||d.segments.some(s=>!Number.isFinite(s.start)||!Number.isFinite(s.end)||s.start<0||s.end<=s.start||s.end>audio.duration+.2||typeof s.text!=='string'))throw Error('实际语音对齐未得到有效结果');
             audio.segments=d.segments;audio.alignment='audio-model';
-          }catch(e){audio.alignment='shot-estimate';audio.note='语音对齐未完成，字幕按镜头暂定，请人工核对：'+e.message;}
+          }catch(e){audio.alignment=p.simpleFilmWorkflow?'none':'shot-estimate';audio.note=(p.simpleFilmWorkflow?'语音对齐未完成，本镜暂不添加自动字幕：':'语音对齐未完成，字幕按镜头暂定，请人工核对：')+e.message;}
         }
       } else if(shot.dialogue && !p.settings.allowSilent && !p.timeline.tracks.some(t=>t.kind==='voice')) throw Object.assign(Error(`镜头 ${shot.id} 没有生成语音，请上传配音、重做视频，或在设置中明确允许静音`),{code:'INPUT'});
       save(p);if(shot.revision===version)shot.audio=audio;finishTask(p,t,audio);save(p);
@@ -79,7 +79,7 @@ export async function renderFilmTimeline(p,{root,save,check}) {
       const muted = (duplicates[i] || []).map(segment => ({start:Math.max(0,segment.start-clip.trimIn),end:Math.min(clip.duration,segment.end-clip.trimIn)})).filter(segment=>segment.end>segment.start);
       const muteFilters = muted.map(segment=>`volume=0:enable='between(t,${segment.start},${segment.end})'`).join(',');
       await exec('ffmpeg',['-v','error','-y','-ss',String(clip.trimIn),'-i',source,...(hasAudio?[]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']),'-map','0:v:0','-map',hasAudio?'0:a:0':'1:a:0','-vf',`scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24${fade}`,'-af',`volume=${p.settings.sourceVolume??1}${muteFilters ? ','+muteFilters : ''},apad`,'-t',String(clip.duration),'-c:v','libx264','-preset','fast','-crf','21','-c:a','aac','-ar','48000','-ac','2',path.join(work,`clip-${i}.mp4`)],{timeout:300000});
-      const segments=shot.audio?.segments || (shot.dialogue?[{start:0,end:shot.duration,text:shot.subtitleText||shot.dialogue}]:[]);
+      const segments=shot.audio?.segments || (!p.simpleFilmWorkflow && shot.dialogue?[{start:0,end:shot.duration,text:shot.subtitleText||shot.dialogue}]:[]);
       for(const s of segments) {if((duplicates[i] || []).includes(s))continue;const start=Math.max(0,s.start-clip.trimIn),end=Math.min(clip.duration,s.end-clip.trimIn);if(end>start)captions.push({start:cursor+start,end:cursor+end,text:s.text,source:shot.audio?.alignment||'shot-estimate'});}
       cursor+=clip.duration;
     }

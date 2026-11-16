@@ -462,7 +462,7 @@ async function quality(p, onlyShot) {
         { timeout: 60000 },
       );
       const prompt =
-        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
+        '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",confidence:"high"或"low",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
         shot.prompt + (p.editorialWorkflow ? '。同时给剪辑建议 edit:{start:秒,end:秒,evidence:具体动作,confidence:"high"或"low"}。只有从实际画面可确定重复起手或结尾空停才建议裁剪。保留本镜新增的动作和声音，不确定省略 edit。预计取用时长：'+(shot.editDuration || shot.duration)+'秒' : '') + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
       const extra = [];
       const anchorIds = new Set([...(shot.resourceIds || [])]);
