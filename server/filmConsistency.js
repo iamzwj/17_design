@@ -47,13 +47,39 @@ export function resolveFilmNarrator(project) {
   };
 }
 
-export function filmSpokenAudioPrompt(project) {
-  const narrator = resolveFilmNarrator(project);
-  return [
-    '语音语言：全片所有中文旁白和人物对白必须以中国大陆标准普通话（Mandarin Chinese, zh-CN）逐字清晰读出。禁止粤语、其他方言、夹杂外语或无意义拟声代替台词。只说本镜明确给出的台词和旁白；没有指定语音时只保留环境音。',
-    `旁白使用全片统一的${narrator.gender}声，年龄感：${narrator.age}，音色：${narrator.voice}。此设定优先于分镜文字中冲突的声线。旁白为画外音，不驱动出镜人物口型。`,
-    narrator.mode === 'protagonist' && narrator.characterId ? `旁白声线绑定${narrator.characterName}的角色声音。同一角色在对白与旁白中保持同一音色，其他角色各自保持已设定声线。` : '',
-  ].filter(Boolean).join('；');
+export function filmShotAudio(project, shot) {
+  const narrationMarker = /(?:画外音|旁白)[：:]\s*([^。；;\n]+)[。]?/gu;
+  const dialogue = shot.dialogue?.trim() || '';
+  const legacyLine = /^([^：:\n]{1,60}?)说[：:]\s*(.+)$/su.exec(dialogue);
+  const legacyNarration = [...String(shot.videoPrompt || shot.prompt || '').matchAll(narrationMarker)][0]?.[1];
+  const narration = (shot.narration ?? legacyNarration ?? '').trim();
+  const language = '所有中文语音必须使用中国大陆标准普通话（Mandarin Chinese, zh-CN），逐字自然清晰读出。禁止粤语、其他方言或无意义拟声代替台词。以下是本镜唯一的语音指令，优先于其他描述。';
+  let visualPrompt = String(shot.prompt || '').replaceAll(narrationMarker, '');
+  if (dialogue) visualPrompt = visualPrompt.replaceAll(dialogue, '');
+  if (narration) visualPrompt = visualPrompt.replaceAll(narration, '');
+  if (dialogue) {
+    const cast = project.characters || [];
+    const speaker = cast.find(character => character.id === shot.speakerId) ||
+      (legacyLine && cast.find(character => legacyLine[1].startsWith(character.name)));
+    const narrator = resolveFilmNarrator(project);
+    const sharedVoice = speaker && speaker.id === narrator.characterId;
+    const voice = sharedVoice
+      ? `使用统一的${narrator.gender}声（${narrator.age}，${narrator.voice}）`
+      : '保持该角色设定的性别、年龄与跨镜声线';
+    return {
+      visualPrompt,
+      audioPrompt: `${language}本镜仅有角色对白。说话人：${speaker?.name || legacyLine?.[1] || '分镜指定的说话角色'}，${voice}。只读引号内台词，口型只匹配该说话人，其他人物不发声。禁止加入画外旁白或重复复述。台词：「${legacyLine?.[2] || dialogue}」`,
+    };
+  }
+  if (narration) {
+    const narrator = resolveFilmNarrator(project);
+    const binding = narrator.characterId ? `声线绑定${narrator.characterName}。` : '';
+    return {
+      visualPrompt,
+      audioPrompt: `${language}本镜仅有画外旁白。旁白使用全片统一的${narrator.gender}声，年龄感：${narrator.age}，音色：${narrator.voice}。${binding}旁白不是画面中人物在发声，任何出镜人物都不做说话口型。禁止角色对白及其他人声。旁白词：「${narration}」`,
+    };
+  }
+  return {visualPrompt, audioPrompt: `${language}本镜无台词，只保留动作和环境声。禁止任何旁白、对白或背景人声。`};
 }
 
 export function filmConsistencyPrompt(p, shot) {
@@ -69,7 +95,6 @@ export function filmConsistencyPrompt(p, shot) {
     '本镜出镜角色：' + JSON.stringify(shot.characterIds || []),
     location && '共同地点与区域关系：' + JSON.stringify(location),
     scene && '固定场景布局与材质：' + JSON.stringify(scene),
-    p.script?.narrator && '全片固定旁白：' + JSON.stringify(p.script.narrator),
     '对白绑定说话人身份、性别与年龄，同一角色跨镜保持相同音色、口音和语速。第一人称旁白使用叙述者本人声线，保持画外音，不要求人物口播。不得自行增加旁白、对白或说话人。',
     '保持参考图中同一张脸、体型、服装与空间布局，只按剧本明确要求改变年代、服装、天气与地点，不自行更换画风。'
   ].filter(Boolean).join('；');

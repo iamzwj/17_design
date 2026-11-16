@@ -1,4 +1,4 @@
-import { resolveFilmNarrator } from '../server/filmConsistency.js';
+import { filmShotAudio, resolveFilmNarrator } from '../server/filmConsistency.js';
 import { LANGUAGE_MODELS } from '../server/languageModels.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -104,4 +104,19 @@ test('narration follows the established lead voice and honors an explicit indepe
   });
   p.script.narrator = { mode:'independent', characterName:'楼下保安', gender:'男', age:'60岁', voice:'沉稳' };
   assert.deepEqual(resolveFilmNarrator(p), p.script.narrator);
+});
+
+
+test('legacy doctor shot uses only the doctor dialogue and strips the duplicate voiceover', () => {
+  const p = project();
+  p.characters.push({ id:'doctor', name:'医生', identity:{ gender:'男' } });
+  const dialogue = '医生对刘敏说：是急性肺炎。再晚半天就危险了。';
+  const narration = '后来才知道，王大爷得的是急性肺炎。';
+  const videoPrompt = '医生向刘敏说明诊断。画外音：' + narration + dialogue;
+  const result = filmShotAudio(p, { dialogue, videoPrompt, prompt:videoPrompt });
+  assert.equal(result.visualPrompt,'医生向刘敏说明诊断。');
+  assert.match(result.audioPrompt,/本镜仅有角色对白。说话人：医生/);
+  assert.match(result.audioPrompt,/台词：「是急性肺炎。再晚半天就危险了。」$/);
+  assert.doesNotMatch(result.audioPrompt,/后来才知道|医生对刘敏说/);
+  assert.match(filmShotAudio(p, { prompt:'空镜', narration:'' }).audioPrompt,/本镜无台词/);
 });

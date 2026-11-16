@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { RunnableLambda } from '@langchain/core/runnables';
 import { beginTask, finishTask, event, taskId, applyCommand } from './filmState.js';
 const narrationDirection = '全片旁白与角色对白使用中国大陆标准普通话（zh-CN）。先锁定旁白声线：原稿明确指定独立旁白时用 independent 并指定性别与年龄感；否则用 protagonist，绑定主角角色ID，沿用主角性别与年龄感。中文姓名不能单独作为性别依据；选角确定后，填写角色性别与年龄感，承担旁白的声线不得写未知。保持原稿叙述人称，旁白只作画外音。';
+const shotSpeechDirection = '按镜头划分发声：每镜只能是角色对白镜头、画外旁白镜头或无语音镜头。角色对白只填台词原句至 dialogue，并以 speakerId 指定一个出镜角色，narration 留空；画外旁白只填 narration，dialogue 和 speakerId 留空，画面人物不做说话口型；两者都需要时拆成不同镜头，避免重复讲同一事实。医生报告的诊断归医生对白，旁白不得复述。群聊文字是道具，不能当作角色口播。videoPrompt 只写画面动作、运镜和非人声环境声，不写任何朗读文本。';
 const json = text => JSON.parse(String(text).trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
 const validId = id => typeof id==='string' && /^[a-zA-Z0-9_-]{1,60}$/.test(id);
 export const timePrefix = value => /^(时间[:：\s]*)?(白天|夜晚|清晨|早晨|上午|中午|下午|傍晚|黄昏|深夜|凌晨|日间|夜间|\d{1,2}[:：时点])/.test(String(value).trim());
@@ -74,6 +75,10 @@ export function normalizeShots(raw,p) {
     s.dialogue=normalizeFilmDialogue(s.dialogue);
     if(!validId(s.id)||ids.has(s.id)||!Number.isFinite(s.duration)||s.duration<1||s.duration>10||!timePrefix(s.time)||!p.scenes.some(c=>c.id===s.sceneId)||!Array.isArray(s.characterIds)||s.characterIds.some(id=>!p.characters.some(c=>c.id===id)))throw Error('分镜字段、时间、引用或15秒时长上限校验失败');
     if(['sceneNumber','shotSize','angle','composition','action','emotion','light','camera','ambience','continuity','firstFramePrompt','videoPrompt','dialogue'].some(key=>typeof s[key]!=='string'))throw Error('分镜必填字段未完整返回：'+['sceneNumber','shotSize','angle','composition','action','emotion','light','camera','ambience','continuity','firstFramePrompt','videoPrompt','dialogue'].filter(key=>typeof s[key]!=='string').join('、'));
+    if (s.narration != null && typeof s.narration !== 'string') throw Error('旁白必须是单独的文本字段');
+    if (s.dialogue?.trim() && s.narration?.trim()) throw Error('同一镜头不能同时包含角色对白与旁白，请拆镜');
+    if ((s.speakerId && (!s.dialogue?.trim() || !s.characterIds.includes(s.speakerId))) ||
+        (s.narration != null && s.dialogue?.trim() && !s.speakerId)) throw Error('角色对白必须绑定本镜出镜的说话人');
     ids.add(s.id);
     const location = p.locations?.find(item => item.sceneIds.includes(s.sceneId));
     const refs=[...new Set([`${s.sceneId}-environment`, ...(location ? [location.masterSceneId + '-environment'] : [])])];
@@ -91,7 +96,7 @@ export function normalizeShots(raw,p) {
     const scene=p.scenes.find(c=>c.id===s.sceneId);
     const cast=castMembers.map(({character})=>[character.name||character.id,JSON.stringify(character.identity||{})].join('，')).join('；');
     const costumes=castMembers.map(({character,outfit})=>`${character.name||character.id}：${outfit.name||''} ${outfit.prompt||''}`).join('；');
-    const prompt=[s.time,`场景：${scene.name||s.sceneId}，${scene.layout||''}`,`角色：${cast}`,`服装：${costumes}`,`构图：${s.composition||s.shotSize||''}`,`动作：${s.action||''}`,`光线：${s.light||''}`,`运镜：${s.camera||''}`,`声音：${s.dialogue||''} ${s.ambience||''}`,`连续性：${s.continuity||''}`,s.videoPrompt||''].join('；');
+    const prompt=[s.time,`场景：${scene.name||s.sceneId}，${scene.layout||''}`,`角色：${cast}`,`服装：${costumes}`,`构图：${s.composition||s.shotSize||''}`,`动作：${s.action||''}`,`光线：${s.light||''}`,`运镜：${s.camera||''}`,`环境声：${s.ambience||''}`,`连续性：${s.continuity||''}`,s.videoPrompt||''].join('；');
     // Both configured integrations currently use the verified <=10-second dispatch path.
     const parts=Math.ceil(s.duration/10);
     for(let i=0;i<parts;i++)result.push({...s,...(p.editorialWorkflow ? {outfitByCharacter:Object.fromEntries(castMembers.map(({character,outfit})=>[character.id,outfit.id])),outfitIds:[...new Set(castMembers.map(({outfit})=>outfit.id))]} : {}),id:parts>1?`${s.id}-part${i+1}`:s.id,duration:s.duration/parts,prompt,firstFramePrompt:`${s.time}；${s.firstFramePrompt||prompt}`,tailFramePrompt:s.tailFramePrompt && (!p.editorialWorkflow || s.requiresTailFrame===true)?`${s.time}；${s.tailFramePrompt}`:'',locationId:location?.id,sceneStates:sceneStates(s.time,s.weather),resourceIds:refs,assetIds:refs,revision:p.scriptRevision||1,history:[],splitFrom:parts>1?s.id:undefined});
@@ -153,7 +158,7 @@ export function createFilmAgents({api,save,check}) {
     if (p.storyboardReady) return;
     const narrative = p.context?.narrative;
     const narrativeRules = narrative ? `叙事风格：${narrative.label}。${Object.values(narrative.rules || {}).join('；')}` : '';
-    const instruction = `一次规划完整短片，保持故事事实与因果。${narrationDirection}按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{mode,characterId,characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{gender,age},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。对白写明说话人，旁白在videoPrompt明确为画外音，只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
+    const instruction = `一次规划完整短片，保持故事事实与因果。${narrationDirection}${shotSpeechDirection}按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{mode,characterId,characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{gender,age},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,speakerId,narration,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。每句旁白只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
     const prepare = result => {
       if (typeof result.title !== 'string' || !result.title.trim()) throw Error('缺少影片标题');
       const script = p.script || normalizeFilmScript(result.script);
@@ -222,7 +227,7 @@ export function createFilmAgents({api,save,check}) {
   };
   const storyboard = async p => {
     if (p.storyboardReady || !p.characters || !p.scenes) return;
-    const instruction = '自动分镜。相邻镜头必须分别推进动作或新增叙事信息，首帧须体现不同的动作阶段、姿态和构图；递物、擦汗、告别等独立事件不得重复使用同一递物擦汗起始画面。未建档的临时出镜人物直接描述在画面和动作提示词中，characterIds 只填已建档角色，允许为空。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。原稿第一人称叙述作为画外旁白写入videoPrompt的声音要求；dialogue只放明确出声的人物对白，并说明谁对谁说；无对白时返回空字符串。所有镜头沿用script.narrator身份和声线，在videoPrompt中逐镜明确旁白性别、年龄、音色及画外音方式。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。' + (p.editorialWorkflow ? '作为总导演一次统筹全片分镜和声音。每镜写明新增的叙事信息（storyBeat）和接到下镜的动作。审查相邻镜头，压缩重复起手、重复往返和重复反应。多次重复动作集中用一次短组接，保留关键因果。指定每镜声音落点和预计取用秒数（editDuration），生成秒数可含动作余量。每个角色用 outfitByCharacter 对象明确绑定服装 ID。只有动作终点必须精确命中时才写 requiresTailFrame:true 和尾帧描述。' : '');
+    const instruction = '自动分镜。相邻镜头必须分别推进动作或新增叙事信息，首帧须体现不同的动作阶段、姿态和构图；递物、擦汗、告别等独立事件不得重复使用同一递物擦汗起始画面。未建档的临时出镜人物直接描述在画面和动作提示词中，characterIds 只填已建档角色，允许为空。必须对照sourceStory原稿及剧本逐场落实，跨年代需写明人物阶段与服装变化；firstFramePrompt只描述动作开始前的单一静态瞬间，不把完整动作链、运镜和声音塞进静态首帧。videoPrompt再描述从首帧开始的动作、交接和声音。' + shotSpeechDirection + '所有旁白沿用script.narrator的身份和声线。视觉严格沿用style和设定图，不自行改变人物、场景或画风。返回{shots:[{id,sceneNumber,time,weather,sceneId,characterIds:[id],outfitIds:[id],duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,speakerId,narration,ambience,continuity,firstFramePrompt,tailFramePrompt,videoPrompt}]}。time必须以白天/夜晚/清晨/黄昏等开头。每镜1-10秒，绝不超过15秒；多角度、复杂动作和多段对白按语义边界拆镜，每镜的对白必须完整可在该镜时长自然说完并留有停顿，禁止在句子中间切断。未提供目标时长时，不设总时长目标；按完整剧情、自然动作和对白节奏安排镜头，完整表达优先。提供目标时长时以目标为依据。提示词按时间→场景→角色→服装→构图→动作→光线→运镜→声音→连续性，尾帧按需。' + (p.editorialWorkflow ? '作为总导演一次统筹全片分镜和声音。每镜写明新增的叙事信息（storyBeat）和接到下镜的动作。审查相邻镜头，压缩重复起手、重复往返和重复反应。多次重复动作集中用一次短组接，保留关键因果。指定每镜声音落点和预计取用秒数（editDuration），生成秒数可含动作余量。每个角色用 outfitByCharacter 对象明确绑定服装 ID。只有动作终点必须精确命中时才写 requiresTailFrame:true 和尾帧描述。' : '');
     const input = {
       script: p.script, characters: p.characters, scenes: p.scenes,
       duration: p.duration, ratio: p.ratio, style: p.settings.style,
