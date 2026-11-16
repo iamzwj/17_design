@@ -8,6 +8,7 @@ import { userError } from './userErrors.js'
 import ToolPageHeader from './ToolPageHeader.jsx'
 import dgenWordmark from './dgen-wordmark.svg?raw'
 import FilmStudio, { filmRequest } from './FilmStudio.jsx'
+import LegacyFilmStudio from './LegacyFilmStudio.jsx'
 import { formatComplianceReport } from './complianceReport.js'
 import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
@@ -56,6 +57,7 @@ const KNOWLEDGE_SECTIONS = [
 
 const WORKSPACE_TITLES = {
   film: ['AI FILM STUDIO', '一键成片'],
+  'legacy-film': ['AI VIDEO STUDIO', '一键做视频'],
   content: ['CONTENT CREATION', '朴邻节日节气海报'],
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
@@ -545,7 +547,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
   const regular = conversations.filter((conversation) => !conversation.pinned)
   const [accountExpanded, setAccountExpanded] = useState(false)
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
-  const [expandedMenu, setExpandedMenu] = useState(() => ['video', 'film'].includes(active) ? 'video' : knowledgeActive ? 'knowledge' : ['skills', 'discover-skills'].includes(active) ? 'skills' : active === 'content' ? 'content' : null)
+  const [expandedMenu, setExpandedMenu] = useState(() => ['video', 'film', 'legacy-film'].includes(active) ? 'video' : knowledgeActive ? 'knowledge' : ['skills', 'discover-skills'].includes(active) ? 'skills' : active === 'content' ? 'content' : null)
   const toggleMenu = (menu) => setExpandedMenu((current) => current === menu ? null : menu)
   const accountCloseTimer = useRef(null)
 
@@ -575,10 +577,11 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
             <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
           </div>}
         </div> : item.id === 'video' ? <div className="more-tool-nav" key={item.id}>
-          <button disabled={item.disabled} className={['video', 'film'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'video'} onClick={() => { if (item.disabled) return; toggleMenu('video'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          <button disabled={item.disabled} className={['video', 'film', 'legacy-film'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'video'} onClick={() => { if (item.disabled) return; toggleMenu('video'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'video' && <div className="module-submenu" role="menu" aria-label="视频生成模式">
             <button type="button" role="menuitem" aria-current={active === 'video' ? 'true' : undefined} className={active === 'video' ? 'active' : ''} onClick={() => { onChange('video'); onClose() }}>视频生成</button>
             <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>一键成片</button>
+            <button type="button" role="menuitem" aria-current={active === 'legacy-film' ? 'true' : undefined} className={active === 'legacy-film' ? 'active' : ''} onClick={() => { onChange('legacy-film'); onClose() }}>一键做视频</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'content'} onClick={() => { if (item.disabled) return; toggleMenu('content'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -2135,7 +2138,7 @@ export default function App() {
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
-      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'legacy-film' ? <div className="legacy-film"><LegacyFilmStudio user={user} onLogin={() => openLogin('legacy-film')}/></div> : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
