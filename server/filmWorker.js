@@ -1,4 +1,4 @@
-import { languageImageParts, requestLanguageModel } from './languageModels.js'
+import { requestLanguageModel } from './languageModels.js'
 import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
 import { filmConsistencyPrompt, filmScalePrompt, filmSceneStyle, filmShotAudio } from './filmConsistency.js';
@@ -76,10 +76,10 @@ async function api(endpoint, body, timeout = 180000) {
 }
 // Headless validation without a public file host may reuse the provider's own
 // generated asset URL. Production uses private signed links covering provider queues.
-function referenceImage(p,output,preview=false) {
+function referenceImage(p,output) {
   if (process.env.FILM_REFERENCE_SOURCE==='provider'&&output.url) return output.url;
   const link=filmAssetLink(root,p.id,output.file,process.env.FILM_PUBLIC_BASE_URL||'https://17design.fun');
-  return preview ? link+'&preview=1' : link;
+  return link+'&preview=1';
 }
 const filmVibbitSizes = {
   '1024x1024': '2048x2048',
@@ -393,7 +393,7 @@ async function videoShot(p, s, i) {
   const references=p.referenceWorkflow
     ? (s.referenceVersions||[]).filter(r=>p.resources.some(asset=>asset.id===r.id && usableSetting(asset) && asset.output.file===r.file))
     : [];
-  const tail = s.tail ? referenceImage(p,s.tail,true) : null;
+  const tail = s.tail ? referenceImage(p,s.tail) : null;
   const nativeTail = tail && SEEDANCE_MODELS.some(model => model.value === p.videoModel);
   const videoRefs=nativeTail || (p.editorialWorkflow && p.videoModel === 'minimax-h3') ? [] : references.slice(0,(p.videoModel==='wan-3.0'?9:8) - Number(Boolean(tail)));
   const speech = p.schemaVersion === 2 ? filmShotAudio(p,s) : null;
@@ -412,8 +412,8 @@ async function videoShot(p, s, i) {
             "。人物说出上述台词，声音与口型同步。"
           : ""),
       images: [
-        referenceImage(p,s.frame,true),
-        ...videoRefs.map(r=>referenceImage(p,r,true)),
+        referenceImage(p,s.frame),
+        ...videoRefs.map(r=>referenceImage(p,r)),
         ...(tail && !nativeTail ? [tail] : []),
       ],
       ...(nativeTail ? {tailFrameImageUrl:tail} : {}),
@@ -438,7 +438,7 @@ async function quality(p, onlyShot) {
     if((onlyShot && shot.id!==onlyShot) || !shot.video || shot.stale || shot.paused)return;
     if(shot.manualApprovedVersion===shot.revision){shot.review={file:shot.video.file,status:"pass",summary:"用户已确认保留当前版本",manual:true};return;}
     if(shot.review?.file===shot.video.file && shot.review.policy===2)return;
-    const reviewedVersion=shot.revision,reviewVideo=shot.video.file,reviewFrame=shot.frame?.file;let reviewResult;
+    const reviewedVersion=shot.revision,reviewVideo=shot.video.file,reviewFrame=shot.frame?.file;let reviewResult, reviewError;
     const reviewTask=beginTask(p,taskId(shot.id,"review",reviewedVersion),"quality","quality",{name:`镜头 ${i+1} 一致性检查`});
     p.activeJobs ||= [];p.activeJobs.push({id:reviewTask.id,stage:"quality",resourceId:shot.id,message:`正在审核镜头 ${i+1}`,startedAt:Date.now()});save(p);
 
@@ -465,7 +465,6 @@ async function quality(p, onlyShot) {
       const prompt =
         '对比第一张分镜首帧与第二张视频连续抽帧，只检查能确认的人物服装、重要道具、场景、主体完整性和考虑透视后仍可确认的相对尺度错误，不把审美偏好判错。只输出JSON：{status:"pass"或"review",confidence:"high"或"low",summary:"简短观察，证据不足要说明",issues:[{type:"角色/服装/场景/动作/不确定",evidence:"可见证据",confidence:"high/low"}]}。镜头要求：' +
         shot.prompt + (p.editorialWorkflow ? '。同时给剪辑建议 edit:{start:秒,end:秒,evidence:具体动作,confidence:"high"或"low"}。只有从实际画面可确定重复起手或结尾空停才建议裁剪。保留本镜新增的动作和声音，不确定省略 edit。预计取用时长：'+(shot.editDuration || shot.duration)+'秒' : '') + '。抽帧覆盖完整片长，按从左到右、从上到下的时序检查首中尾，比较附加的场景主图、目标尾帧和前镜交接画面。不得因缺少身份原图要求人工确认。';
-      const extra = [];
       const anchorIds = new Set([...(shot.resourceIds || [])]);
       const images = [...p.resources.filter(r => anchorIds.has(r.id) && r.output && !r.stale).map(r => r.output), ...(shot.tail ? [shot.tail] : [])];
       const previous = p.shots[i-1];
@@ -474,29 +473,27 @@ async function quality(p, onlyShot) {
         await exec('ffmpeg',['-v','error','-y','-sseof','-0.1','-i',path.join(dir,previous.video.file),'-frames:v','1',previousImage],{timeout:60000});
         images.push({file:path.basename(previousImage)});
       }
-      for (const reference of images) {
-        const data = await sharp(path.join(dir,reference.file)).resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).png().toBuffer();
-        extra.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
-      }
       const result = await reviewFilmImages(api, [
         {text: prompt + '。明确证据填 confidence: high，不确定填 low。'},
-        {inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(dir,reviewFrame)).toString('base64')}},
-        {inline_data:{mime_type:'image/jpeg',data:fs.readFileSync(image).toString('base64')}},
-        ...extra,
+        {file:path.join(dir,reviewFrame)},
+        {file:image},
+        ...images.map(reference => ({file:path.join(dir,reference.file)})),
       ]);
       reviewResult = {
         file: reviewVideo,
         policy: 2,
-        ...(p.editorialWorkflow && result.edit?.confidence==='high' ? {edit:result.edit} : {}),
+        ...(p.editorialWorkflow && result.edit && (result.edit.confidence ?? result.confidence)==='high' ? {edit:result.edit} : {}),
         status: result.status === "pass" ? "pass" : "review",
         summary: String(result.summary || "请核对镜头"),
         issues: Array.isArray(result.issues)?result.issues:[], evidence: {frame:reviewFrame,video:reviewVideo,contact:`check-${shot.id}-v${reviewedVersion}.jpg`},
       };
     } catch (e) {
+      reviewError=e;
       reviewResult = {
         file: reviewVideo,
         policy: 2,
         status: "review",
+        unavailable:true,
         summary:
           "自动画面检查服务暂不可用，记录结果并继续制作。" +
           String(e.message).slice(0, 100),
@@ -505,7 +502,7 @@ async function quality(p, onlyShot) {
     save(p);
     if(shot.revision===reviewedVersion)shot.review=reviewResult;
     p.activeJobs=p.activeJobs.filter(j=>j.id!==reviewTask.id);
-    finishTask(p,reviewTask,reviewResult);
+    finishTask(p,reviewTask,reviewResult,reviewError);
     if(shot.revision!==reviewedVersion)reviewTask.status="superseded";
     filmEvent(p, `checked:${reviewVideo}`, `镜头 ${i + 1} 画面检查已结束${reviewResult.status === "pass" ? "" : "，需要人工核对"}`);
     save(p);
@@ -731,14 +728,11 @@ async function reviewSetting(p, resource, references) {
     const parts = [{text: '你是 AI 总导演。第一张图为待审设定图，后续为已确定的身份参考。依据实际图像核对：'+(settingCheck || '核对图像是否满足设定中的明确要求')+
       '。环境图有参考时必须逐一比对共同建筑、门岗、材质、地标及道路；允许机位变化，禁止凭地点名称推断不可见事实。固定空间：'+(resource.locationConstraint || '')+lightingCheck+styleCheck+'。全片要求：'+filmConsistencyPrompt(p,{characterIds:[],sceneId:resource.sourceId})+'。设计要求：'+resource.prompt+
       '。只返回 JSON {status:"pass"|"repair"|"review",confidence:"high"|"low",summary:"可见证据",correction:"明确错误的具体修正"}。若能明确指出至少一处可见且可修复的错误（包括遗漏明确要求的视图或连接路径），返回 repair 和 high，并在 correction 写清要补什么，即使其他项目无法确认。只有没有明确错误但存在不确定时才返回 review。全部要求均确认符合才 pass。'}];
-    for(const image of [output,...references]) {
-      const data = await sharp(path.join(root,p.id,image.file)).resize({width:1536,height:1536,fit:'inside',withoutEnlargement:true}).png().toBuffer();
-      parts.push({inline_data:{mime_type:'image/png',data:data.toString('base64')}});
-    }
+    parts.push(...[output,...references].map(image => ({file:path.join(root,p.id,image.file)})));
     review = await reviewFilmImages(api, parts);
     finishTask(p,task,review);
   } catch(error) {
-    review = {status:'review',confidence:'low',summary:'自动审核暂不可用，已记录并继续制作：'+error.message};
+    review = {status:'review',confidence:'low',unavailable:true,summary:'自动审核暂不可用，已记录并继续制作：'+error.message};
     finishTask(p,task,review,error);
   }
   check(p);
@@ -764,10 +758,7 @@ async function reviewLocationGroup(p, location) {
       JSON.stringify(group.map(resource => ({id:resource.id,name:resource.name}))) +
       '。固定空间和连接：' + JSON.stringify(location) +
       '。逐图横向比较固定建筑、门岗、地标、道路连通性和材质，允许视角与剧本要求的时段光照变化。只有明确可见、可定位且能按主图修复的子区域错误才返回 repair。否则证据不足用 review，确认一致用 pass。只输出 JSON {status,confidence:"high"|"low",summary:"可见证据",targetId:"待修复子区域ID",correction:"定向修复要求"}。'}];
-    for (const file of files) {
-      const image = await sharp(path.join(root,p.id,file)).resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).jpeg().toBuffer();
-      parts.push({inline_data:{mime_type:'image/jpeg',data:image.toString('base64')}});
-    }
+    parts.push(...files.map(file => ({file:path.join(root,p.id,file)})));
     review = await reviewFilmImages(api, parts);
   } catch (error) {
     review = {status:'review',confidence:'low',summary:'整组自动审核暂不可用：'+error.message};
@@ -835,12 +826,10 @@ async function referenceAssets(p, onlyResource) {
             aspectRatio,...(nano?{imageSize:'1K'}:{quality:'auto'}),
           },`asset-${r.id}-v${r.revision}.png`);
         }
-        if (p.simpleFilmWorkflow && r.output) {
-          r.approvedVersion = r.revision;
-          save(p);
-          return;
-        }
-        if(!r.output || (approvedSetting(r) && (r.type!=='environment' || r.assetReview?.emptyScenePolicy===1) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual')))return;
+        if(!r.output) return;
+        const approved = approvedSetting(r) && (r.locked || r.assetReview?.status === 'pass');
+        if(approved && (r.type!=='environment' || r.assetReview?.emptyScenePolicy===1) && (!r.locationId || r.assetReview?.locationPolicy===1 || r.assetReview?.status==='manual'))return;
+        if (!r.assetReview && !r.locked) r.approvedVersion = null;
         if(r.assetReview?.version!==r.revision || r.assetReview.file!==r.output.file ||
           (r.type==='environment' && r.assetReview?.emptyScenePolicy!==1) || (r.assetReview.status==='review' && r.assetReview.policy!==2) || (r.locationId && r.assetReview?.locationPolicy!==1))await reviewSetting(p,r,references);
         const review=r.assetReview;
@@ -878,8 +867,10 @@ async function referenceAssets(p, onlyResource) {
       const version=r.revision,file=r.output.file,t=beginTask(p,taskId(r.id,'asset-review',version),'images','quality',{name:r.name+'设定图检查'});save(p);
       try {
         const requirement=r.type==='face'?'一张完整设定图中，同一个人物是否包含正面、45度、90度面部特写三种角度，身份一致':r.type==='wardrobe'?'是否是一张独立的服饰设定图，展示全身正面、侧面、背面和鞋履配饰，而不是面部特写图':r.type==='environment'?'是否体现设计要求明确列出的时段，建筑布局和固定道具一致':'是否符合该视觉参考的明确要求';
-        const response=await requestLanguageModel(api,{response_format:{type:'json_object'},messages:[{role:'user',content:languageImageParts([{text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},{inline_data:{mime_type:'image/png',data:fs.readFileSync(path.join(root,p.id,file)).toString('base64')}}])}]});
-        const raw=response.choices?.[0]?.message?.content||'';const review=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
+        const review=await reviewFilmImages(api, [
+          {text:`只检查可见事实，不评判审美。${requirement}。返回JSON {status:"pass"|"review",summary:"具体依据",confidence:"high"|"low"}。不确定必须明确说明。`},
+          {file:path.join(root,p.id,file)},
+        ]);
         save(p);if(r.revision===version)r.assetReview={...review,file};finishTask(p,t,{...review,file});
       }catch(e){if(r.revision===version)r.assetReview={file,status:'review',confidence:'low',summary:'设定图自动检查未完成，需人工核对：'+e.message};finishTask(p,t,r.assetReview);}
       save(p);
@@ -1089,7 +1080,7 @@ const graph = new StateGraph(State)
   .addNode('storyboard',stage(async p=>{if(p.schemaVersion===2)await agents.storyboard(p);if(p.schemaVersion===2)await agents.continuity(p);}))
   .addNode('visual_assets',stage(async p=>{if(p.schemaVersion===2){if(!p.referenceWorkflow)await referenceAssets(p);}else await images(p);}))
   .addNode('video_shots',stage(produceShots))
-  .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2 && !p.simpleFilmWorkflow)await directorReview(p);}))
+  .addNode('visual_review',stage(async p=>{await quality(p);if(p.schemaVersion===2)await directorReview(p);}))
   .addNode('audio',stage(async p=>{if(p.pausedStages?.audio)return;if(p.schemaVersion===2 || p.useTimeline)await prepareFilmAudio(p,{root,api,save,check});}))
   .addNode('final_render',stage(async p=>{if(p.output){p.status='succeeded';p.stage='done';save(p);return;}if(p.schemaVersion===2 || p.useTimeline)await renderFilmTimeline(p,{root,save,check});else await render(p);}))
   .addEdge(START,'director').addEdge('director','screenwriter').addEdge('screenwriter','character_scene').addEdge('character_scene','reference_assets').addEdge('reference_assets','storyboard').addEdge('storyboard','visual_assets').addEdge('visual_assets','video_shots').addEdge('video_shots','visual_review').addEdge('visual_review','audio').addEdge('audio','final_render').addEdge('final_render',END).compile();

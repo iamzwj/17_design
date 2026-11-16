@@ -1,16 +1,16 @@
 import { availableLanguageModels, requestAvailableLanguageModel } from './languageModels.js'
-import sharp from 'sharp'
+import { filmImageJpeg } from './filmFrameReferences.js'
 /** Try independent vision providers and validate evidence before accepting a review. */
 export async function reviewFilmImages(api, parts) {
+  const models = availableLanguageModels();
+  if (!models.length) throw Error('所有视觉模型处于故障冷却中');
   const failures = [];
   const content = await Promise.all(parts.map(async part => {
     if (part.text) return {type:'text',text:part.text};
-    const image = await sharp(Buffer.from(part.inline_data.data, 'base64'))
-      .rotate().resize(1536, 1536, {fit:'inside', withoutEnlargement:true})
-      .flatten({background:'#ffffff'}).jpeg({quality:85}).toBuffer();
+    const image = await filmImageJpeg(part.file);
     return {type:'image_url',image_url:{url:`data:image/jpeg;base64,${image.toString('base64')}`}};
   }));
-  for (const model of availableLanguageModels()) {
+  for (const model of models) {
     try {
       const result = await requestAvailableLanguageModel(api, '/v1/chat/completions', {
         model, response_format:{type:'json_object'},

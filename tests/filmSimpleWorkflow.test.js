@@ -29,12 +29,16 @@ test('simple workflow creates a playable film from one director plan', {timeout:
       } else if(typeof system==='string' && system.includes('审核剧本、角色身份')) result={status:'pass',reason:'动作推进顺序正确',issues:[],repairs:[]};
       else if(Array.isArray(system)) {
         const prompt=system[0]?.text || '';
-        result={status:'pass',summary:'通过',issues:[],...(prompt.includes('confidence:"high"或"low",summary:') ? {confidence:'high'} : {})};
+        assert.ok(system.slice(1).every(part=>part.image_url.url.startsWith('data:image/jpeg;base64,')));
+        result={status:'pass',summary:'通过',issues:[],...(prompt.includes('具体可见依据') ? {} : {confidence:'high'})};
       }
       else throw Error('Unexpected language model request');
       result={choices:[{message:{content:JSON.stringify(result)}}]};
     } else if(req.url.includes('generateContent')) result={candidates:[{content:{parts:[{text:JSON.stringify({segments:[{start:0,end:1.5,text:'那是前年腊月二十八快过年了'}]})}]}}]};
-    else if(req.url==='/v1/api/generate') {const id=randomUUID(),isImage=body.model.startsWith('gpt')||body.model.startsWith('nano');jobs.set(id,isImage);if(!isImage)videoPrompts.push(body.prompt);result={id,status:'running'};}
+    else if(req.url==='/v1/api/generate') {const id=randomUUID(),isImage=body.model.startsWith('gpt')||body.model.startsWith('nano');jobs.set(id,isImage);if(!isImage) {
+      videoPrompts.push(body.prompt);
+      assert.ok(body.images.every(url=>new URL(url).searchParams.get('preview')==='1'));
+    }result={id,status:'running'};}
     else {const id=new URL(req.url,origin).searchParams.get('id');result={id,status:'succeeded',results:[{url:origin+(jobs.get(id)?'/image.png':'/clip.mp4')}]};}
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
   });
@@ -49,6 +53,8 @@ test('simple workflow creates a playable film from one director plan', {timeout:
     for(let i=0;i<900;i++) {const response=await fetch(base+'/'+project.id);const current=(await response.json()).project;if(current.status==='succeeded'){done=current;break;}if(['failed','needs-input'].includes(current.status))throw Error(current.error+' '+JSON.stringify(current.tasks.filter(t=>t.status==='failed')));await new Promise(resolve=>setTimeout(resolve,80));}
     assert.ok(done,'film did not complete');assert.equal(plans,1);assert.equal(done.shots.length,2);assert.equal(done.continuityReview?.status,'pass');assert.deepEqual(done.shots.map(shot=>shot.review?.summary),['通过','通过']);
     assert.equal(done.script.narrator.characterId,'c1');
+    assert.ok(done.resources.every(resource=>resource.assetReview?.status==='pass'));
+    assert.ok(done.shots.every(shot=>shot.frameIntegrity?.status==='pass'));
     assert.equal(done.script.narrator.gender,'女');
     assert.equal(videoPrompts.length,2);
     for(const prompt of videoPrompts) assert.match(prompt,/中国大陆标准普通话（Mandarin Chinese, zh-CN）/);
