@@ -12,6 +12,7 @@ import { submitVibbitImage, pollVibbitImage } from './vibbitImages.js';
 import {prepareFilmAudio,renderFilmTimeline,probe} from './filmEditing.js';
 import { readFilmProject, drainFilmCommands, pendingCommands, beginTask, finishTask, event, taskId, clone, applyCommand } from './filmState.js';
 import { createFilmAgents } from './filmAgents.js';
+import { runFilmPlanning } from './filmPlanning.js';
 import { filmPool } from './filmPool.js';
 import { runFilmShotPipeline } from './filmShotPipeline.js';
 import { createFilmDispatcher } from './filmScheduler.js';
@@ -1078,7 +1079,7 @@ const stage =
     }
   };
 const graph = new StateGraph(State)
-  .addNode('director',stage(async p=>{await recoverDetached(p);if(p.schemaVersion===2){if(p.simpleFilmWorkflow)await agents.simplePlan(p);else await agents.director(p);await agents.revise(p);}else {await plan(p);await revise(p);await agents.revise(p);}},true))
+  .addNode('director',stage(async p=>{await recoverDetached(p);if(p.schemaVersion===2){await runFilmPlanning(p,{agents,check,save,event});await agents.revise(p);}else {await plan(p);await revise(p);await agents.revise(p);}},true))
   .addNode('screenwriter',stage(async p=>{if(p.schemaVersion===2)await agents.writer(p);}))
   .addNode('character_scene',stage(async p=>{if(p.schemaVersion===2){const results=await Promise.allSettled([agents.characters(p),agents.scenes(p)]);const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;}}))
   .addNode('reference_assets',stage(async p=>{if(p.schemaVersion===2 && p.referenceWorkflow)await referenceAssets(p);}))

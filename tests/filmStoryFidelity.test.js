@@ -51,6 +51,19 @@ test('simple film plans script, references and shots together in one request', a
   assert.equal(p.duration,5);
 });
 
+test('simple planning uses at most two bounded model attempts before falling back', async () => {
+  const p = project();
+  delete p.script; delete p.characters; delete p.scenes;
+  p.resources = []; p.duration = null; p.autoDuration = true; p.simpleFilmWorkflow = true;
+  const timeouts = [];
+  const agents = createFilmAgents({save(){}, check(){}, async api(_url, _body, timeout) {
+    timeouts.push(timeout);
+    return {choices:[{message:{content:'{}'}}]};
+  }});
+  await assert.rejects(agents.simplePlan(p));
+  assert.deepEqual(timeouts,[30000,30000]);
+});
+
 test('director revises an unresolved shot twice, then keeps the current version', async () => {
   const p = project();
   p.storyboardReady = true;
