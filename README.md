@@ -54,3 +54,19 @@ API 密钥仅由 Node 服务端读取，浏览器只请求本项目的 `/api/tex
 ## 扩展新工具
 
 前端模块入口集中在 `src/App.jsx` 的 `MODULES` 配置中。新增模块时，为配置增加一项，并创建对应工作区组件即可。服务端外部模型调用统一放在 `server/index.js`，便于后续接入知识库、Skills、鉴权、额度与审计日志。
+
+### Local brand-identity testing
+
+Use a separate empty data directory and start the API on localhost:
+
+```sh
+npm run build
+DIEFA_TEST_ACCOUNTS=1 DIEFA_DATA_DIR="$(mktemp -d)" npm start
+```
+
+Open `http://127.0.0.1:8787` and sign in as `严选家@OneWorld.com` or
+`普林@OneWorld.com`. The test code can be any value or empty. The identities map
+to the existing 研选家 and 朴邻 brand spaces. Add non-production sample documents
+to those spaces to verify retrieval. The shared department campaign archive
+contains mixed-brand documents and is available to the marketing department.
+Production does not enable OTP-free sign-in.

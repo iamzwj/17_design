@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import tls from 'node:tls'
+import { TEST_ACCOUNT_IDENTITIES, testAccountIdentity } from '../shared/accountIdentity.js'
 
 const EMAIL_PATTERN = /^[^\s@]+@onewo\.com$/i
 const CODE_TTL = 10 * 60 * 1000
@@ -40,7 +41,16 @@ function bearer(req) {
   return match?.[1] || ''
 }
 
-export function installAuth(app, { dataDir }) {
+export function installAuth(app, { dataDir, allowTestAccounts = false }) {
+  function identityFor(email) {
+    return testAccountIdentity(email) || (REGISTRATION_WHITELIST.has(email) ? 'marketing' : null)
+  }
+  function listAccountIdentities() {
+    return [
+      ...[...REGISTRATION_WHITELIST].map(email => ({ email, identity: identityFor(email), test: false })),
+      ...Object.entries(TEST_ACCOUNT_IDENTITIES).map(([email, identity]) => ({ email, identity, test: true, enabled: allowTestAccounts })),
+    ]
+  }
   const storeFile = path.join(dataDir, 'auth.json')
   fs.mkdirSync(dataDir, { recursive: true })
   let store = { users: [], codes: [], sessions: [] }
@@ -89,10 +99,11 @@ export function installAuth(app, { dataDir }) {
     const session = store.sessions.find((item) => item.tokenHash === hash)
     if (!session) return null
     const user = store.users.find((item) => item.id === session.userId)
+    if (user && testAccountIdentity(user.email) && !allowTestAccounts) return null
     if (user && refreshDailyCredits(user)) save()
     return user ? { session, user } : null
   }
-  function publicUser(user) { return { id: user.id, email: user.email, credits: user.credits, createdAt: user.createdAt } }
+  function publicUser(user) { return { id: user.id, email: user.email, identity: identityFor(user.email), credits: user.credits, createdAt: user.createdAt } }
   function listUsers() {
     let changed = false
     for (const user of store.users) if (refreshDailyCredits(user)) changed = true
@@ -207,6 +218,9 @@ export function installAuth(app, { dataDir }) {
     try {
       cleanup()
       const email = normalizeEmail(req.body.email)
+      if (testAccountIdentity(email)) {
+        return allowTestAccounts ? res.json({ ok: true, test: true }) : res.status(400).json({ error: '测试账号仅在本地测试环境可用' })
+      }
       if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
       try { if (!store.users.some(user => user.email === email)) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
       const recent = store.codes.find((item) => item.email === email && item.sentAt > Date.now() - 60_000)
@@ -240,18 +254,22 @@ export function installAuth(app, { dataDir }) {
   app.post('/api/auth/login', (req, res) => {
     const email = normalizeEmail(req.body.email)
     const code = String(req.body.code || '').trim()
-    if (!EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
+    const isTestLogin = Boolean(testAccountIdentity(email))
+    if (isTestLogin && !allowTestAccounts) return res.status(400).json({ error: '测试账号仅在本地测试环境可用' })
+    if (!isTestLogin && !EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
     let user = store.users.find(item => item.email === email)
-    try { if (!user) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
-    if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: '请输入 6 位验证码' })
-    const verification = verifyCode(email, code)
-    if (verification.error) return res.status(verification.status || 400).json({ error: verification.error })
+    if (!isTestLogin) {
+      try { if (!user) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
+      if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: '请输入 6 位验证码' })
+      const verification = verifyCode(email, code)
+      if (verification.error) return res.status(verification.status || 400).json({ error: verification.error })
+      store.codes = store.codes.filter(item => item !== verification.record)
+    }
     if (!user) {
       const creditLimit = dailyCreditLimit(email)
       user = { id: randomBytes(16).toString('hex'), email, credits: creditLimit, creditLimit, creditsUpdatedOn: currentCreditDay(), createdAt: new Date().toISOString() }
       store.users.push(user)
     }
-    store.codes = store.codes.filter(item => item !== verification.record)
     res.json(issueSession(user, Boolean(req.body.remember)))
   })
 
@@ -283,5 +301,5 @@ export function installAuth(app, { dataDir }) {
     next()
   }
 
-  return { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits }
+  return { requireAuth, requireAdmin, listUsers, listAccountIdentities, spendCredits, refundCredits }
 }

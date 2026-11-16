@@ -1,3 +1,4 @@
+import { ACCOUNT_IDENTITY_LABELS } from '../shared/accountIdentity.js'
 import { userError } from './userErrors.js'
 import { useEffect, useMemo, useState } from 'react'
 import { getAdminOverview } from './api.js'
@@ -69,6 +70,12 @@ export default function AdminStudio() {
       {error ? <div className="admin-error" role="alert">{error}</div> : loading && !overview ? <div className="admin-loading"><i/><span>正在加载后台数据…</span></div> : <>
         <div className="admin-summary">{cards.map(([label, value]) => <div key={label}><span>{label}</span><b>{value}</b></div>)}</div>
         <p className="admin-metric-note">活跃指生成过图片的用户；周日均活为近 7 天平均值，日期按北京时间统计。使用率为活跃用户占注册用户比例。注册率为白名单中已注册用户比例。</p>
+        <h2 className="admin-users-heading">账号身份</h2>
+        <div className="admin-identity-list glass-strong">
+          <table><thead><tr><th scope="col">邮箱</th><th scope="col">身份</th><th scope="col">账号类型</th></tr></thead>
+            <tbody>{overview.accountIdentities?.map(({ email, identity, test, enabled }) => <tr key={email}><td>{email}</td><td>{ACCOUNT_IDENTITY_LABELS[identity]}</td><td>{test ? (enabled ? '测试账号' : '测试环境专用') : '白名单'}</td></tr>)}</tbody>
+          </table>
+        </div>
         <h2 className="admin-users-heading">用户与生成记录 <span>{users.length} 位用户</span></h2>
         <section className="admin-user-list">{users.map((user) => {
           const images = imagesByUser.get(user.id) || []

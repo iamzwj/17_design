@@ -14,6 +14,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/server/material-library/**'] },
     proxy: {
       '/api': 'http://localhost:8787',
     },

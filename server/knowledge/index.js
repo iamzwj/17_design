@@ -5,6 +5,7 @@ import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FOR
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { canViewBrand, scopedBrand } from '../../shared/accountIdentity.js'
 import { MATERIAL_ASSETS } from '../../shared/materialCatalog.js'
 import { randomUUID, createHash } from 'node:crypto'
 import Database from 'better-sqlite3'
@@ -29,7 +30,7 @@ const segmenter = new Intl.Segmenter('zh', { granularity: 'word' })
 function terms(text) { return [...new Set([...segmenter.segment(text.toLowerCase())].filter((x) => x.isWordLike).map((x) => x.segment))] }
 function similarity(a, b) { if (a.length !== b.length) return 0; return a.reduce((sum, value, i) => sum + value * b[i], 0) }
 
-export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, automaticVision = true, backgroundProcessing = true, materialDir = fileURLToPath(new URL('../../public/material-library/', import.meta.url)) }) {
+export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, listUsers, embed: injectedEmbed, analyze: injectedAnalyze, reviewLogo: injectedReviewLogo, automaticVision = true, backgroundProcessing = true, materialDir = fileURLToPath(new URL('../material-library/', import.meta.url)) }) {
   const directory = path.join(dataDir, 'knowledge'), originals = path.join(directory, 'originals')
   fs.mkdirSync(originals, { recursive: true })
   const visuals = path.join(directory, 'visuals'); fs.mkdirSync(visuals, { recursive: true })
@@ -69,7 +70,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   if (!all('brands').some((b) => b.name === '营销活动')) brandPut({ id: 'marketing-activities', name: '营销活动', grants: {}, createdAt: now() })
   const isAdmin = (user) => user?.email?.toLowerCase() === ADMIN
   function level(user, brand) {
-    if (!user || !brand || brand.deletedAt) return 0
+    if (!brand || brand.deletedAt || !canViewBrand(user, brand.name)) return 0
     if (isAdmin(user)) return 3
     // Temporary owner-only maintenance; preserve grants for a future reopening.
     return 1
@@ -269,8 +270,21 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     await handler(req, res)
   } catch (error) { next(error) } })
   const auth = [requireAuth], admin = [requireAdmin]
+  route('get', '/material-library', auth, (req, res) => {
+    res.set('Cache-Control', 'private, no-store').json({ assets: MATERIAL_ASSETS.filter(asset => canViewBrand(req.user, asset.brand)).map(asset => ({
+      ...asset,
+      file: asset.file ? `/material-library/${encodeURIComponent(asset.id)}` : null,
+    })) })
+  })
+  route('get', '/material-library/:id', auth, async (req, res) => {
+    const asset = MATERIAL_ASSETS.find(item => item.id === req.params.id && item.file)
+    if (!asset || !canViewBrand(req.user, asset.brand)) fail('素材不存在或无权访问', 404)
+    await new Promise((resolve, reject) => {
+      res.sendFile(materialPath(asset), { cacheControl: false, headers: { 'Cache-Control': 'private, no-store' } }, error => error ? reject(error) : resolve())
+    })
+  })
   route('get', '/bootstrap', auth, (req, res) => {
-    res.json({ brands: all('brands').filter((b) => !hiddenBrandNames.has(b.name) && level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })
+    res.json({ brands: all('brands').filter((b) => (!hiddenBrandNames.has(b.name) || req.user.identity === 'marketing') && level(req.user, b)).map((b) => ({ ...b, permission: level(req.user, b) })), groups: isAdmin(req.user) ? all('groups') : [], users: isAdmin(req.user) ? listUsers().map(({ id, email }) => ({ id, email })) : [], isAdmin: isAdmin(req.user), model: EMBEDDING_MODEL, visionModel: VISION_MODEL, limits: { maxFileMB: KNOWLEDGE_MAX_FILE_BYTES / 1024 / 1024, maxDocuments: 300, maxChunks: 10000 } })
   })
   route('post', '/brands', admin, (req, res) => {
     const name = clean(req.body.name, 60); if (!name) fail('请输入品牌名称')
@@ -583,6 +597,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       const brandNames = { 'vanke-property': '万科物业', pulin: '朴邻', yanxuanjia: '研选家', 'xingfushe-live': '幸福社' }
       const name = brandNames[input.complianceBrand]
       if (!name) fail('审核品牌无效')
+      if (scopedBrand(user) && !canViewBrand(user, name)) fail('品牌不存在或无权访问', 403)
       if (!user) return { id: '', sources: [], prompt: `本次所选品牌为${name}。本次为游客审核，仅使用通用及现有审核规则，不引用账号品牌知识库，不得声称已按品牌手册审核。` }
       const matched = all('brands').find((b) => b.name === name && !b.deletedAt)
       if (!matched) return { id: '', sources: [], prompt: `本次所选品牌为${name}，尚无对应品牌知识库。继续执行通用审核和现有审核规则，在结果中明确说明未引用品牌知识库，不能声称已按品牌手册审核。` }

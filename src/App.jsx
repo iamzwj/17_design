@@ -1,3 +1,4 @@
+import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
@@ -596,7 +597,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
         </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
           <button className={knowledgeActive ? 'active' : ''} aria-expanded={expandedMenu === 'knowledge'} aria-controls="knowledge-submenu" onClick={() => toggleMenu('knowledge')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'knowledge' && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
-            {KNOWLEDGE_SECTIONS.map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
+            {KNOWLEDGE_SECTIONS.filter(section => !scopedBrand(user) || section.id !== 'marketing-activities').map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'more'} onClick={() => { if (item.disabled) return; toggleMenu('more'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -616,7 +617,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
       </div>
       <div className="sidebar-bottom" onMouseEnter={keepAccountMenuOpen} onMouseLeave={scheduleAccountMenuClose}>
         {user && accountExpanded && <div className="account-dropdown" onMouseEnter={keepAccountMenuOpen}>
-          <div className="account-menu-email"><Icon name="mail" size={15}/><span>{user.email}</span></div>
+          <div className="account-menu-email"><Icon name="mail" size={15}/><span>{user.email}{user.identity && <small> · {ACCOUNT_IDENTITY_LABELS[user.identity]}</small>}</span></div>
           <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 50}</b></div>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
@@ -645,6 +646,8 @@ function AuthScreen({ onAuthenticated, onClose }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const testIdentity = testAccountIdentity(email)
+
   function updateEmailLocal(value) {
     setEmail(value.trim().toLowerCase().replace(/@onewo\.com$/i, ''))
     setCode('')
@@ -656,9 +659,9 @@ function AuthScreen({ onAuthenticated, onClose }) {
     if (loading) return
     setError('')
     setNotice('')
-    if (!EMAIL_LOCAL_PATTERN.test(email)) { setError('请输入企业邮箱账号'); return }
+    if (!testIdentity && !EMAIL_LOCAL_PATTERN.test(email)) { setError('请输入企业邮箱账号'); return }
     setLoading(true)
-    try { await action(email + '@onewo.com') }
+    try { await action(testIdentity ? email : email + '@onewo.com') }
     catch (requestError) { setError(userError(requestError.message)) }
     finally { setLoading(false) }
   }
@@ -666,7 +669,7 @@ function AuthScreen({ onAuthenticated, onClose }) {
   async function submit(event) {
     event.preventDefault()
     await run(async normalizedEmail => {
-      if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
+      if (!testIdentity && !/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
       const result = await loginAccount({ email: normalizedEmail, code, remember })
       saveAuthToken(result.token, remember)
       onAuthenticated(result.user)
@@ -677,12 +680,12 @@ function AuthScreen({ onAuthenticated, onClose }) {
     <button className="modal-close" onClick={onClose} aria-label="关闭"><Icon name="x"/></button>
   <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
     <form className="auth-form" onSubmit={submit}>
-      <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/><b>@onewo.com</b></div></label>
-      <div className="auth-code-field"><label htmlFor="auth-login-code">邮箱验证码</label><div><Icon name="shield" size={17}/><input id="auth-login-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/>
-      <button type="button" className="auth-send-code" disabled={loading} onClick={() => run(async normalizedEmail => {
+      <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/>{!email.includes('@') && <b>@onewo.com</b>}</div></label>
+      <div className="auth-code-field"><label htmlFor="auth-login-code">{testIdentity ? '测试验证码' : '邮箱验证码'}</label><div><Icon name="shield" size={17}/><input id="auth-login-code" inputMode={testIdentity ? 'text' : 'numeric'} autoComplete="one-time-code" maxLength={testIdentity ? 64 : 6} value={code} onChange={event => setCode(testIdentity ? event.target.value : event.target.value.replace(/\D/g, ''))} placeholder={testIdentity ? '任意内容，可留空' : '6 位验证码'} disabled={loading}/>
+      {!testIdentity && <button type="button" className="auth-send-code" disabled={loading} onClick={() => run(async normalizedEmail => {
         await requestLoginCode(normalizedEmail)
         setNotice('验证码已发送，请查收邮件')
-      })}>发送验证码</button></div></div>
+      })}>发送验证码</button>}</div></div>
       <label className="remember-check"><input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)}/><span>记住登录状态，30 天内免登录</span></label>
       {notice && <div className="auth-notice" role="status">{notice}</div>}
       {error && <div className="auth-error" role="alert">{error}</div>}
@@ -1430,7 +1433,8 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
   </div>
 }
 
-function TextStudio({ type, conversation, onSave }) {
+function TextStudio({ type, conversation, onSave, user }) {
+  const brandScope = scopedBrand(user)
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
   const activityImages = useActivityImages(conversationId.current, type === 'strategy')
@@ -1744,7 +1748,7 @@ function TextStudio({ type, conversation, onSave }) {
     <div className="conversation" ref={conversationScrollRef}>
       {messages.length === 0 && runningRequests.length === 0 && !activityImageGroups?.unmatched.length ? <div className="welcome text-welcome">
         <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
-        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
+        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
         const imageRecords = activityImageGroups?.byMessage.get(index)
@@ -1769,7 +1773,7 @@ function TextStudio({ type, conversation, onSave }) {
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>
-    <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
+    <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
       {type === 'compliance' && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
       {type === 'compliance' && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
       {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
@@ -1778,7 +1782,7 @@ function TextStudio({ type, conversation, onSave }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
+        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
@@ -2129,16 +2133,16 @@ export default function App() {
       : active === 'discover-skills'
         ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'marketing-activities'
-        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销知识库" spaceId="marketing-activities" onLogin={() => openLogin('marketing-activities')}/>
+        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName={scopedBrand(user) ? undefined : '营销知识库'} spaceId={scopedBrand(user) ? undefined : 'marketing-activities'} onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
-        ? <KnowledgeStudio user={user} onLogin={() => openLogin('brand-knowledge')}/>
+        ? <KnowledgeStudio key={user?.id || 'guest'} user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'
-        ? <MaterialLibrary key={workspaceToken}/>
+        ? <MaterialLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('assets')}/>
       : ['brand-manual', 'marketing-strategy'].includes(active)
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken}/>
-      : active === 'legacy-film' ? <div className="legacy-film"><LegacyFilmStudio user={user} onLogin={() => openLogin('legacy-film')}/></div> : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={workspaceToken} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'legacy-film' ? <div className="legacy-film"><LegacyFilmStudio user={user} onLogin={() => openLogin('legacy-film')}/></div> : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }

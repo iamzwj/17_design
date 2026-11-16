@@ -475,7 +475,12 @@ app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 app.use('/api/knowledge', express.json({ limit: '140mb' }))
 app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
-const { requireAuth, requireAdmin, listUsers, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir })
+// OTP-free accounts belong to a loopback-only instance with a separate data directory.
+const allowTestAccounts = process.env.DIEFA_TEST_ACCOUNTS === '1' && process.env.NODE_ENV !== 'production'
+if (allowTestAccounts && (!process.env.DIEFA_DATA_DIR || path.resolve(waterfallDataDir) === path.join(rootDir, 'data'))) {
+  throw new Error('DIEFA_TEST_ACCOUNTS requires a separate DIEFA_DATA_DIR')
+}
+const { requireAuth, requireAdmin, listUsers, listAccountIdentities, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir, allowTestAccounts })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
 const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText }) })
 const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth, warmRecommendations: true })
@@ -2043,7 +2048,7 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   const monthlyActive = active((day) => day.startsWith(month))
   const totalActive = active(() => true)
   const weeklyAverage = Array.from({ length: 7 }, (_, offset) => active((day) => day === dayKey(Date.now() - offset * 86400000))).reduce((sum, count) => sum + count, 0) / 7
-  res.json({ users, images, metrics: { dailyActive, monthlyActive, totalActive, weeklyAverage, registeredUsers: users.length, totalImages: images.length, whitelistCount: REGISTRATION_WHITELIST.size, registrationRate: REGISTRATION_WHITELIST.size ? users.filter((user) => REGISTRATION_WHITELIST.has(user.email)).length / REGISTRATION_WHITELIST.size * 100 : null, usageRate: users.length ? totalActive / users.length * 100 : null } })
+  res.json({ users, images, accountIdentities: listAccountIdentities(), metrics: { dailyActive, monthlyActive, totalActive, weeklyAverage, registeredUsers: users.length, totalImages: images.length, whitelistCount: REGISTRATION_WHITELIST.size, registrationRate: REGISTRATION_WHITELIST.size ? users.filter((user) => REGISTRATION_WHITELIST.has(user.email)).length / REGISTRATION_WHITELIST.size * 100 : null, usageRate: users.length ? totalActive / users.length * 100 : null } })
 })
 
 installLegacyFilms(app, { dataDir: waterfallDataDir, requireAuth })
@@ -2086,6 +2091,7 @@ if (fs.existsSync(distDir)) {
     res.set('Cache-Control', 'public, max-age=31536000, immutable')
     return res.type(filename).send(compressed)
   })
+  app.use('/material-library', (_req, res) => res.sendStatus(404))
   app.use('/assets', express.static(path.join(distDir, 'assets'), { maxAge: '1y', immutable: true, fallthrough: false }))
   app.use(express.static(distDir))
   app.use((_req, res) => res.sendFile(path.join(distDir, 'index.html')))
@@ -2099,6 +2105,6 @@ app.use((error, _req, res, _next) => {
 
 recoverWaterfallTasks()
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, allowTestAccounts ? '127.0.0.1' : '0.0.0.0', () => {
   console.log(`Die Fa AI server listening on http://localhost:${port}`)
 })
