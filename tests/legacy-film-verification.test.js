@@ -39,6 +39,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
   let imageCalls = 0,
     videoCalls = 0;
   const kinds = new Map();
+  const languageModels = [];
   let origin;
   const upstream = http.createServer(async (req, res) => {
     if (req.url === "/image.png") {
@@ -73,6 +74,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
         ],
       };
     } else if (req.url === "/v1/chat/completions") {
+      languageModels.push(b.model);
       const revision = b.messages[0].content.includes("JSON数组");
       d = {
         choices: [
@@ -145,6 +147,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
       env: {
         ...process.env,
         FILM_ROOT: film.root,
+        DIEFA_DATA_DIR: dir,
         GRSAI_BASE_URL: origin,
         GRSAI_API_KEY: "test",
       },
@@ -242,6 +245,7 @@ test("film project survives worker restart, renders MP4, and remakes only select
     assert.equal(imageCalls, 4);
     await api("/" + id + "/revise", { change: "修改第一个镜头" });
     await until("succeeded");
+    assert.deepEqual(languageModels, ["gpt-6.1-sol", "gpt-6.1-sol"]);
     assert.equal(videoCalls, 5);
     assert.equal(imageCalls, 5);
     const edited = await api("/" + id + "/assets/" + done.assets[0].id, { prompt: "更新角色衣着" });

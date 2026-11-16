@@ -1,4 +1,5 @@
 import { filmAssetLink } from "./legacyFilmLinks.js";
+import { requestLanguageModel } from "./languageModels.js";
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -23,7 +24,7 @@ function check(p) {
   if (fs.existsSync(path.join(root, p.id, "cancel")))
     throw Error("制作已暂停；上游已提交任务可能继续计费");
 }
-async function api(endpoint, body) {
+async function api(endpoint, body, timeout = 180000) {
   const r = await fetch(base + endpoint, {
     method: body ? "POST" : "GET",
     headers: {
@@ -31,13 +32,13 @@ async function api(endpoint, body) {
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(timeout),
   });
   const d = await r.json();
   if (!r.ok || (d.error && !d.id))
-    throw Error(
+    throw Object.assign(Error(
       typeof d.error === "string" ? d.error : JSON.stringify(d.error || d),
-    );
+    ), { status: r.status });
   return d.data || d;
 }
 async function generate(p, slot, key, body, file) {
@@ -100,8 +101,7 @@ async function plan(p) {
   check(p);
   p.stage = "plan";
   save(p);
-  const d = await api("/v1/chat/completions", {
-    model: "gemini-3.1-pro",
+  const d = await requestLanguageModel(api, {
     messages: [
       {
         role: "system",
@@ -155,8 +155,7 @@ async function revise(p) {
   check(p);
   p.stage = "plan";
   save(p);
-  const d = await api("/v1/chat/completions", {
-    model: "gemini-3.1-pro",
+  const d = await requestLanguageModel(api, {
     messages: [
       {
         role: "system",
