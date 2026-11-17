@@ -5,8 +5,8 @@ export const TEST_ACCOUNT_IDENTITIES = Object.freeze({
 
 export const ACCOUNT_IDENTITY_LABELS = Object.freeze({
   marketing: '营销部',
-  yanxuanjia: '严选家',
-  pulin: '普林',
+  yanxuanjia: '研选家',
+  pulin: '朴邻',
 })
 
 const IDENTITY_BRANDS = Object.freeze({ yanxuanjia: '研选家', pulin: '朴邻' })
