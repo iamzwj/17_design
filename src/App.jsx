@@ -669,7 +669,7 @@ function AuthScreen({ onAuthenticated, onClose }) {
   async function submit(event) {
     event.preventDefault()
     await run(async normalizedEmail => {
-      if (!testIdentity && !/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
+      if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位验证码')
       const result = await loginAccount({ email: normalizedEmail, code, remember })
       saveAuthToken(result.token, remember)
       onAuthenticated(result.user)
@@ -681,7 +681,7 @@ function AuthScreen({ onAuthenticated, onClose }) {
   <div className="auth-brand"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><div><b>D-Gen</b><small>蝶发 AI 创作工作台</small></div></div>
     <form className="auth-form" onSubmit={submit}>
       <label><span>企业邮箱</span><div className="email-local-field"><Icon name="mail" size={17}/><input type="text" inputMode="email" autoComplete="username" value={email} onChange={(e) => updateEmailLocal(e.target.value)} placeholder="邮箱账号" disabled={loading}/>{!email.includes('@') && <b>@onewo.com</b>}</div></label>
-      <div className="auth-code-field"><label htmlFor="auth-login-code">{testIdentity ? '测试验证码' : '邮箱验证码'}</label><div><Icon name="shield" size={17}/><input id="auth-login-code" inputMode={testIdentity ? 'text' : 'numeric'} autoComplete="one-time-code" maxLength={testIdentity ? 64 : 6} value={code} onChange={event => setCode(testIdentity ? event.target.value : event.target.value.replace(/\D/g, ''))} placeholder={testIdentity ? '任意内容，可留空' : '6 位验证码'} disabled={loading}/>
+      <div className="auth-code-field"><label htmlFor="auth-login-code">{testIdentity ? '测试验证码' : '邮箱验证码'}</label><div><Icon name="shield" size={17}/><input id="auth-login-code" inputMode={testIdentity ? 'text' : 'numeric'} autoComplete="one-time-code" maxLength={testIdentity ? 64 : 6} value={code} onChange={event => setCode(testIdentity ? event.target.value : event.target.value.replace(/\D/g, ''))} placeholder="6 位验证码" disabled={loading}/>
       {!testIdentity && <button type="button" className="auth-send-code" disabled={loading} onClick={() => run(async normalizedEmail => {
         await requestLoginCode(normalizedEmail)
         setNotice('验证码已发送，请查收邮件')

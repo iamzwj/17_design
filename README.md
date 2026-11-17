@@ -65,8 +65,8 @@ DIEFA_TEST_ACCOUNTS=1 DIEFA_DATA_DIR="$(mktemp -d)" npm start
 ```
 
 Open `http://127.0.0.1:8787` and sign in as `yanxuanjia@onewo.com` or
-`pulin@onewo.com`. The test code can be any value or empty. The identities map
+`pulin@onewo.com`. The test code is 666666. The identities map
 to the existing 研选家 and 朴邻 brand spaces. Add non-production sample documents
 to those spaces to verify retrieval. The shared department campaign archive
 contains mixed-brand documents and is available to the marketing department.
-The two brand test accounts also accept any code in production.
+The two brand test accounts also use code 666666 in production.

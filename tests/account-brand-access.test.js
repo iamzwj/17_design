@@ -35,8 +35,8 @@ test('account identity restricts brand knowledge, materials, and marketing evide
     assert.equal(response.status, 200)
     return response.json()
   }
-  const yanxuanjia = await login('yanxuanjia@onewo.com', 'arbitrary')
-  const pulin = await login('pulin@onewo.com', '')
+  const yanxuanjia = await login('yanxuanjia@onewo.com', '666666')
+  const pulin = await login('pulin@onewo.com', '666666')
   assert.equal(yanxuanjia.user.identity, 'yanxuanjia')
   assert.equal(pulin.user.identity, 'pulin')
   assert.equal((await request('/auth/login', '', { email: departmentEmail, code: '000000' })).status, 400)

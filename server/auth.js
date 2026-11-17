@@ -258,6 +258,7 @@ export function installAuth(app, { dataDir, allowTestAccounts = false }) {
     if (isTestLogin && !allowTestAccounts) return res.status(400).json({ error: '测试账号仅在本地测试环境可用' })
     if (!isTestLogin && !EMAIL_PATTERN.test(email)) return res.status(400).json({ error: '仅支持 @onewo.com 企业邮箱' })
     let user = store.users.find(item => item.email === email)
+    if (isTestLogin && code !== '666666') return res.status(400).json({ error: '验证码不正确' })
     if (!isTestLogin) {
       try { if (!user) ensureWhitelisted(email) } catch (error) { return res.status(error.status || 403).json({ error: error.message }) }
       if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: '请输入 6 位验证码' })
