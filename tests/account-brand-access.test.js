@@ -53,12 +53,12 @@ test('account identity restricts brand knowledge, materials, and marketing evide
 
   for (const [account, own, other] of [[yanxuanjia, '研选家', '朴邻'], [pulin, '朴邻', '研选家']]) {
     const { brands } = await (await request(knowledge + '/bootstrap', account.token)).json()
-    assert.deepEqual(brands.map(brand => brand.name), [own])
+    assert.deepEqual(new Set(brands.map(brand => brand.name)), new Set(own === '研选家' ? [own, '营销活动'] : [own]))
     const { user } = await (await request('/auth/me', account.token)).json()
     assert.equal(user.identity, account.user.identity)
     const otherId = full.brands.find(brand => brand.name === other).id
     assert.equal((await request(knowledge + '/documents?brandId=' + otherId, account.token)).status, 403)
-    assert.equal((await request(knowledge + '/search', account.token, { brandId: departmentLibrary.id, query: '跨年' })).status, 403)
+    assert.equal((await request(knowledge + '/search', account.token, { brandId: departmentLibrary.id, query: '跨年', mode: 'keyword' })).status, own === '研选家' ? 200 : 403)
     const { assets } = await (await request(knowledge + '/material-library', account.token)).json()
     assert.ok(assets.length > 0 && assets.every(asset => asset.brand === own))
     const image = await request(knowledge + assets[0].file, account.token)
@@ -71,9 +71,9 @@ test('account identity restricts brand knowledge, materials, and marketing evide
 
     const prepared = await kb.prepare(account.user, { activityContext: { identity: other, enabled: true }, messages: [{ role: 'user', content: '给独卫翻新做跨年引流，提高有效咨询' }] }, 'text')
     const { trace } = await (await request(knowledge + '/traces/' + prepared.id, account.token)).json()
-    assert.deepEqual(trace.contextBrandIds, [brands[0].id])
+    assert.deepEqual(new Set(trace.contextBrandIds), new Set(own === '研选家' ? [departmentLibrary.id, brands.find(b => b.name === own).id] : [brands.find(b => b.name === own).id]))
     assert.equal(trace.activity.identity, own)
-    assert.equal(trace.activity.enabled, false)
+    assert.equal(trace.activity.enabled, own === '研选家')
     assert.equal(prepared.prompt.includes('先定位客户卡在哪一步'), own === '研选家')
     if (own === '研选家') assert.match(prepared.prompt, /适配少.*筛选信息.*报价.*承接|勘查到报价率/)
     await assert.rejects(kb.prepare(account.user, { knowledge: { brandId: otherId } }, 'image'), { status: 403 })

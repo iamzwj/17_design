@@ -70,7 +70,7 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
   if (!all('brands').some((b) => b.name === '营销活动')) brandPut({ id: 'marketing-activities', name: '营销活动', grants: {}, createdAt: now() })
   const isAdmin = (user) => user?.email?.toLowerCase() === ADMIN
   function level(user, brand) {
-    if (!brand || brand.deletedAt || !canViewBrand(user, brand.name)) return 0
+    if (!brand || brand.deletedAt || (!canViewBrand(user, brand.name) && !(user?.identity === 'yanxuanjia' && brand.name === '营销活动'))) return 0
     if (isAdmin(user)) return 3
     // Temporary owner-only maintenance; preserve grants for a future reopening.
     return 1

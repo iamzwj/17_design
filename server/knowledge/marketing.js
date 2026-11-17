@@ -56,8 +56,8 @@ export async function prepareActivityContext({ user, input, tool, activity, all,
   if (!user) fail('请先登录后使用营销知识库', 401)
   const brandScope = scopedBrand(user)
   if (brandScope) {
-    // The department archive includes multi-brand documents, so only use published brand-space evidence.
-    activity = { ...activity, identity: brandScope, enabled: false }
+    // Bind the requested identity to the signed-in account.
+    activity = { ...activity, identity: brandScope, enabled: user.identity === 'yanxuanjia' ? activity.enabled : false }
   }
   const last = [...(input.messages || [])].reverse().find(m => m.role === 'user')
   const priorUserTurns = (input.messages || []).filter(m => m.role === 'user').slice(-3, -1).map(m => typeof m.content === 'string' ? m.content : '').join(' ')

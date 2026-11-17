@@ -14,6 +14,6 @@ export default function ActivityStrategy({ value, onChange, onPrompt, brandScope
   </div>
 }
 export function ActivityKnowledgePicker({ value, onChange, brandScope }) {
-  if (brandScope) return <a className="model-chip" href="?module=brand-knowledge">{brandScope}知识库</a>
+  if (brandScope === '朴邻') return <a className="model-chip" href="?module=brand-knowledge">{brandScope}知识库</a>
   return <ComposerSelect icon="library" label="知识库" placeholder="知识库" value={value.enabled ? 'marketing' : ''} options={[{ value: '', label: '不使用营销资料' }, { value: 'marketing', label: '营销活动' }]} onChange={id => onChange({ ...value, enabled: id === 'marketing', ...(!id ? { campaign: '' } : {}) })} footer={<><p>按活动属性、时间和业务检索已发布资料；身份规范同时加载。无需逐份选择文件。</p><a href="?module=marketing-activities">管理营销活动资料 ↗</a></>}/>
 }

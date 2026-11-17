@@ -598,7 +598,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
         </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
           <button className={knowledgeActive ? 'active' : ''} aria-expanded={expandedMenu === 'knowledge'} aria-controls="knowledge-submenu" onClick={() => toggleMenu('knowledge')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'knowledge' && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
-            {KNOWLEDGE_SECTIONS.filter(section => !scopedBrand(user) || section.id !== 'marketing-activities').map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
+            {KNOWLEDGE_SECTIONS.filter(section => user?.identity !== 'pulin' || section.id !== 'marketing-activities').map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'more'} onClick={() => { if (item.disabled) return; toggleMenu('more'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -2146,7 +2146,7 @@ export default function App() {
       : active === 'discover-skills'
         ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'marketing-activities'
-        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName={scopedBrand(user) ? undefined : '营销知识库'} spaceId={scopedBrand(user) ? undefined : 'marketing-activities'} onLogin={() => openLogin('marketing-activities')}/>
+        ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销知识库" spaceId="marketing-activities" onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
         ? <KnowledgeStudio key={user?.id || 'guest'} user={user} onLogin={() => openLogin('brand-knowledge')}/>
       : active === 'assets'
