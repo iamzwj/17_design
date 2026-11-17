@@ -69,4 +69,4 @@ Open `http://127.0.0.1:8787` and sign in as `yanxuanjia@onewo.com` or
 to the existing 研选家 and 朴邻 brand spaces. Add non-production sample documents
 to those spaces to verify retrieval. The shared department campaign archive
 contains mixed-brand documents and is available to the marketing department.
-Production does not enable OTP-free sign-in.
+The two brand test accounts also accept any code in production.

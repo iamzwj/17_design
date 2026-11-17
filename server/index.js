@@ -475,12 +475,7 @@ app.use('/api/compliance/uploads', express.json({ limit: '18mb' }))
 app.use('/api/knowledge', express.json({ limit: '140mb' }))
 app.use('/api/skills', express.json({ limit: '1mb' }))
 app.use(express.json({ limit: '280mb' }))
-// OTP-free accounts belong to a loopback-only instance with a separate data directory.
-const allowTestAccounts = process.env.DIEFA_TEST_ACCOUNTS === '1' && process.env.NODE_ENV !== 'production'
-if (allowTestAccounts && (!process.env.DIEFA_DATA_DIR || path.resolve(waterfallDataDir) === path.join(rootDir, 'data'))) {
-  throw new Error('DIEFA_TEST_ACCOUNTS requires a separate DIEFA_DATA_DIR')
-}
-const { requireAuth, requireAdmin, listUsers, listAccountIdentities, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir, allowTestAccounts })
+const { requireAuth, requireAdmin, listUsers, listAccountIdentities, spendCredits, refundCredits } = installAuth(app, { dataDir: waterfallDataDir, allowTestAccounts: true })
 const knowledge = installKnowledge(app, { dataDir: waterfallDataDir, requireAuth, requireAdmin, listUsers })
 const skillLibrary = installSkills(app, { dataDir: waterfallDataDir, requireAuth, complete: createSkillCompletion({ request: requestUpstream, text: completionText }) })
 const externalSkills = installExternalSkills(app, { dataDir: waterfallDataDir, requireAuth, warmRecommendations: true })
@@ -2105,6 +2100,6 @@ app.use((error, _req, res, _next) => {
 
 recoverWaterfallTasks()
 
-app.listen(port, allowTestAccounts ? '127.0.0.1' : '0.0.0.0', () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Die Fa AI server listening on http://localhost:${port}`)
 })
