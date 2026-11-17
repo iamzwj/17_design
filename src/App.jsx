@@ -1464,7 +1464,12 @@ function TextStudio({ type, conversation, onSave, user }) {
   const textModel = availableTextModels.some(({ value }) => value === selectedTextModel)
     ? selectedTextModel
     : availableTextModels[0]?.value || ''
-  useEffect(() => { if (type === 'strategy') localStorage.setItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext)) }, [activityContext, type])
+  useEffect(() => {
+    if (type !== 'strategy') return
+    try {
+      localStorage.setItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext))
+    } catch { /* Conversation history persists the context separately. */ }
+  }, [activityContext, type])
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
@@ -1876,7 +1881,7 @@ export default function App() {
     if (!THEME_SELECTION_ENABLED) return
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
-    localStorage.setItem(THEME_KEY, theme)
+    try { localStorage.setItem(THEME_KEY, theme) } catch { /* Keep the theme applied for this session. */ }
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#16191f' : '#fcfcfd')
   }, [theme])
 

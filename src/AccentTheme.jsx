@@ -7,7 +7,7 @@ export default function AccentTheme() {
 
   useEffect(() => {
     applyAccentTheme(accent)
-    localStorage.setItem(ACCENT_STORAGE_KEY, accent)
+    try { localStorage.setItem(ACCENT_STORAGE_KEY, accent) } catch { /* Keep the accent applied for this session. */ }
   }, [accent])
 
   return <div className="theme-menu-row accent-theme-row">
