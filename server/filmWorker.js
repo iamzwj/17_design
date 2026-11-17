@@ -58,10 +58,13 @@ function check(p, inflight=false) {
   if(p.schedulingPaused && !inflight)throw Object.assign(Error('已暂停新任务调度，已提交的外部任务继续保存结果'),{code:'PAUSED'});
 }
 async function api(endpoint, body, timeout = 180000) {
-  const r = await fetch(base + endpoint, {
+  const maizi = endpoint === "/v1/chat/completions" && body?.model === "gemini-4-carbon";
+  const requestBase = maizi ? (process.env.MAIZI_BASE_URL || "https://api.maizitech.ai").replace(/\/$/, "") : base;
+  const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY;
+  const r = await fetch(requestBase + endpoint, {
     method: body ? "POST" : "GET",
     headers: {
-      Authorization: `Bearer ${process.env.GRSAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -70,7 +73,7 @@ async function api(endpoint, body, timeout = 180000) {
   const d = await r.json();
   if (!r.ok || (d.error && !d.id))
     throw Error(
-      typeof d.error === "string" ? d.error : JSON.stringify(d.error || d),
+      (typeof d.error === "string" ? d.error : JSON.stringify(d.error || d)).replaceAll(apiKey || "__missing_key__", "[redacted]"),
     );
   return d.data || d;
 }
