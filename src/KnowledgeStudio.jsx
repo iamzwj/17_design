@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage, removeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { KNOWLEDGE_MAX_FILE_BYTES, KNOWLEDGE_FILE_EXTENSIONS, KNOWLEDGE_FILE_FORMATS } from '../shared/knowledgeUpload.js'
 import { useEffect, useRef, useState } from 'react'
@@ -12,9 +13,9 @@ const BASE_KINDS = { document: '品牌资料', rule: '强制规则', logo: 'Logo
 const STATUS = { queued: '等待处理', processing: '解析 / 向量化中', ready: '待发布', failed: '处理失败' }
 const empty = { title: '', content: '', category: '', keywords: '', kind: 'document', ipType: '' }
 const MARKETING_SPACE_ID = 'marketing-activities'
-function initial(spaceName) { try { return JSON.parse(localStorage.getItem(knowledgeKey(spaceName ? `workspace:${spaceName}` : 'workspace'))) || {} } catch { return {} } }
-function readCache(name) { try { const entry = JSON.parse(localStorage.getItem(knowledgeKey(`cache:${name}`))); return entry?.data ?? null } catch { return null } }
-function writeCache(name, data) { try { localStorage.setItem(knowledgeKey(`cache:${name}`), JSON.stringify({ data })) } catch { /* Storage limits must not interrupt server updates. */ } }
+function initial(spaceName) { try { return JSON.parse(readWorkspaceStorage(knowledgeKey(spaceName ? `workspace:${spaceName}` : 'workspace'))) || {} } catch { return {} } }
+function readCache(name) { try { const entry = JSON.parse(readWorkspaceStorage(knowledgeKey(`cache:${name}`))); return entry?.data ?? null } catch { return null } }
+function writeCache(name, data) { try { writeWorkspaceStorage(knowledgeKey(`cache:${name}`), JSON.stringify({ data })) } catch { /* Storage limits must not interrupt server updates. */ } }
 const imageVersion = (v) => ['.png', '.jpg', '.jpeg', '.webp'].includes(v?.ext)
 function AssetImage({ documentId, version, onError }) {
   const [url, setUrl] = useState('')
@@ -107,7 +108,7 @@ export default function KnowledgeStudio({ user, onLogin, spaceName = '', spaceId
   useEffect(() => { if (!user) return; const controller = new AbortController(); loadBootstrap(controller.signal).catch((e) => { if (!controller.signal.aborted) setError(e.name === 'TimeoutError' ? '品牌空间加载超时，请重试。' : e.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) }); return () => controller.abort() }, [user])
   useEffect(() => {
     if (restoringDocument) return
-    localStorage.setItem(knowledgeKey(spaceName ? `workspace:${spaceName}` : 'workspace'), JSON.stringify({ brandId, tab, draft, draftDoc, query, mode, results, selectedDocumentId: selected?.document.id || '', versionId }))
+    writeWorkspaceStorage(knowledgeKey(spaceName ? `workspace:${spaceName}` : 'workspace'), JSON.stringify({ brandId, tab, draft, draftDoc, query, mode, results, selectedDocumentId: selected?.document.id || '', versionId }))
   }, [brandId, tab, draft, draftDoc, query, mode, results, selected, versionId, restoringDocument, spaceName])
   useEffect(() => {
     if (!bootstrap || restoringDocument || !brandId) return
@@ -154,8 +155,8 @@ export default function KnowledgeStudio({ user, onLogin, spaceName = '', spaceId
     listingCache.current.delete(b)
     setListing((current) => current?.brandId === b ? null : current)
     try {
-      localStorage.removeItem(knowledgeKey(`cache:listing:${b}`))
-      if (readKnowledgeSearch()?.request.brandId === b) localStorage.removeItem(knowledgeKey('search'))
+      removeWorkspaceStorage(knowledgeKey(`cache:listing:${b}`))
+      if (readKnowledgeSearch()?.request.brandId === b) removeWorkspaceStorage(knowledgeKey('search'))
     } catch { /* The in-memory listing still reloads from the server. */ }
     if (currentBrand.current === b) {
       setResults(null)
@@ -200,7 +201,7 @@ export default function KnowledgeStudio({ user, onLogin, spaceName = '', spaceId
       await knowledgeRequest(`/brands/${deletedId}`, {}, 'DELETE')
       listingRevision.current++
       listingCache.current.delete(deletedId)
-      localStorage.removeItem(knowledgeKey(`listing:${deletedId}`))
+      removeWorkspaceStorage(knowledgeKey(`listing:${deletedId}`))
       currentBrand.current = ''
       setBrandId(''); setListing(null); setSelected(null); setVersionId('')
       setResults(null); setTraces([]); setDraft(null); setDraftDoc(null)

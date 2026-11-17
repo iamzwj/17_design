@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage, removeWorkspaceStorage } from './workspaceStorage.js'
 import { editFilmClips, filmClipDuration } from '../shared/filmTimelineEditing.js';
 import {useEffect,useRef,useState} from 'react';
 import ComposerSelect from './ComposerSelect.jsx';
@@ -6,20 +7,20 @@ import FilmMedia from './FilmMedia.jsx';
 import FilmVideoTrack from './FilmVideoTrack.jsx';
 export default function FilmTimeline({project:p,request,send,onSelect,notice}) {
   const storage=`film-timeline:${p.id}:${p.timeline?.revision||0}`;
-  const initial=()=>{try{const saved=JSON.parse(localStorage.getItem(storage));if(saved)return saved;}catch{/* use server version */}return {...p.timeline,clips:p.timeline?.clips?.length?p.timeline.clips:p.shots.map(s=>({shotId:s.id,trimIn:0,duration:filmClipDuration(s)})),tracks:p.timeline?.tracks||[],captions:p.timeline?.captions||[]};};
-  const [draft,setDraft]=useState(initial),[dirty,setDirty]=useState(()=>Boolean(localStorage.getItem(storage))),[uploading,setUploading]=useState(false),[kind,setKind]=useState('music');
+  const initial=()=>{try{const saved=JSON.parse(readWorkspaceStorage(storage));if(saved)return saved;}catch{/* use server version */}return {...p.timeline,clips:p.timeline?.clips?.length?p.timeline.clips:p.shots.map(s=>({shotId:s.id,trimIn:0,duration:filmClipDuration(s)})),tracks:p.timeline?.tracks||[],captions:p.timeline?.captions||[]};};
+  const [draft,setDraft]=useState(initial),[dirty,setDirty]=useState(()=>Boolean(readWorkspaceStorage(storage))),[uploading,setUploading]=useState(false),[kind,setKind]=useState('music');
   const pendingSave=useRef(null), undo=useRef([]), redo=useRef([]);
   const serverValue=JSON.stringify(p.timeline);
   useEffect(()=>{if(!dirty)setDraft(initial());},[serverValue,dirty]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>{if(dirty)localStorage.setItem(storage,JSON.stringify(draft));},[draft,dirty,storage]);
+  useEffect(()=>{if(dirty)writeWorkspaceStorage(storage,JSON.stringify(draft));},[draft,dirty,storage]);
   function edit(next){undo.current.push(draft);redo.current=[];setDirty(true);setDraft(next);}
   useEffect(() => {
     if (!pendingSave.current || (p.timeline?.revision || 0) <= pendingSave.current.revision) return;
     const clean = value => JSON.stringify({clips:value?.clips,tracks:value?.tracks,captions:value?.captions,captionMode:value?.captionMode});
     if (clean(p.timeline) !== clean(pendingSave.current.value)) return;
-    localStorage.removeItem(pendingSave.current.key);
+    removeWorkspaceStorage(pendingSave.current.key);
     if (clean(draft) === clean(pendingSave.current.value)) {
-      localStorage.removeItem(storage);
+      removeWorkspaceStorage(storage);
       setDirty(false);
       setDraft(p.timeline);
     }

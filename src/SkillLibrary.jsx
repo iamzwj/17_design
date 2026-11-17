@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
@@ -7,7 +8,7 @@ import './skillLibrary.css'
 
 const CATEGORIES = ['设计创作', '内容写作', '方案策划', '审核检查', '效率工具', '其他']
 const initial = { view: 'all', editor: null, step: 0, instruction: '', handled: [], proposal: null }
-function readSession(key) { try { return { ...initial, ...JSON.parse(localStorage.getItem(key) || 'null') } } catch { return initial } }
+function readSession(key) { try { return { ...initial, ...JSON.parse(readWorkspaceStorage(key) || 'null') } } catch { return initial } }
 function Markdown({ text = '' }) {
   // Render text only: shared files never execute HTML, scripts or embedded URLs.
   return <div className="skill-markdown">{text.replace(/^\uFEFF?\s*---\r?\n[\s\S]*?\r?\n---\r?\n/, '').split('\n').map((line, i) => /^#{1,4} /.test(line) ? <h3 key={i}>{line.replace(/^#+ /, '')}</h3> : <p key={i}>{line || '\u00a0'}</p>)}</div>
@@ -22,7 +23,7 @@ export default function SkillLibrary({ user, onLogin, onUse }) {
   const sessionRef = useRef(session), lock = useRef(false), importInput = useRef(null)
   const update = (patch) => setSession((s) => ({ ...s, ...patch }))
   const edit = (patch) => setSession((s) => ({ ...s, editor: { ...s.editor, ...patch } }))
-  useEffect(() => { sessionRef.current = session; localStorage.setItem(key, JSON.stringify(session)) }, [session, key])
+  useEffect(() => { sessionRef.current = session; writeWorkspaceStorage(key, JSON.stringify(session)) }, [session, key])
   const load = useCallback(async () => {
     if (!user) return
     const [library, jobs] = await Promise.all([skillRequest(sessionRef.current.view === 'mine' ? '?mine=1' : ''), skillRequest('/tasks')])

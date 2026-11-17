@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
@@ -187,7 +188,7 @@ function failedWaterfallTask(task, error) {
 
 function loadWaterfallCache(storageKey) {
   try {
-    const entry = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    const entry = JSON.parse(readWorkspaceStorage(storageKey) || 'null')
     if (!entry) return []
     if (!Array.isArray(entry) && !(Date.now() - entry.savedAt < LOCAL_CACHE_TTL_MS)) {
       localStorage.removeItem(storageKey)
@@ -275,7 +276,7 @@ async function extractComplianceText(file) {
 
 function loadConversations(storageKey = STORAGE_KEY) {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || '[]')
+    const saved = JSON.parse(readWorkspaceStorage(storageKey) || '[]')
     return Array.isArray(saved) ? saved : []
   } catch { return [] }
 }
@@ -971,9 +972,9 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
     tasksRef.current = tasks
     try {
       const next = compactWaterfallCache(tasks)
-      const previous = JSON.parse(localStorage.getItem(storageKey) || 'null')
+      const previous = JSON.parse(readWorkspaceStorage(storageKey) || 'null')
       if (JSON.stringify(previous?.tasks) !== JSON.stringify(next)) {
-        localStorage.setItem(storageKey, JSON.stringify({ savedAt: Date.now(), tasks: next }))
+        writeWorkspaceStorage(storageKey, JSON.stringify({ savedAt: Date.now(), tasks: next }))
       }
     } catch { /* Keep in-memory history if local storage is unavailable. */ }
   }, [storageKey, tasks])
@@ -1440,7 +1441,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   const activityImages = useActivityImages(conversationId.current, type === 'strategy')
   const [runtime] = useState(() => textTaskRuntime(conversationId.current, validTextMessages(conversation?.messages)))
   const [messages, setMessages] = useState(() => runtime.messages.current)
-  const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(localStorage.getItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
+  const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(readWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
   const [textModels, setTextModels] = useState(null)
   const [selectedTextModel, setSelectedTextModel] = useState('')
   const usesTextModel = type !== 'compliance' && !(type === 'strategy' && activityContext.format === 'image')
@@ -1467,7 +1468,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   useEffect(() => {
     if (type !== 'strategy') return
     try {
-      localStorage.setItem(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext))
+      writeWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext))
     } catch { /* Conversation history persists the context separately. */ }
   }, [activityContext, type])
   const [input, setInput] = useState('')
@@ -1795,6 +1796,13 @@ function TextStudio({ type, conversation, onSave, user }) {
 }
 
 export default function App() {
+  const [storageWarning, setStorageWarning] = useState(workspaceStorageUnavailable)
+  useEffect(() => {
+    const warn = () => setStorageWarning(true)
+    window.addEventListener('dgen-storage-unavailable', warn)
+    if (workspaceStorageUnavailable()) warn()
+    return () => window.removeEventListener('dgen-storage-unavailable', warn)
+  }, [])
   const localPreviewParams = new URLSearchParams(window.location.search)
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
@@ -1818,12 +1826,12 @@ export default function App() {
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [active])
   const [moreTool, setMoreTool] = useState('please-day')
-  const [imageMode, setImageMode] = useState(() => localStorage.getItem(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
+  const [imageMode, setImageMode] = useState(() => readWorkspaceStorage(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => {
     if (!THEME_SELECTION_ENABLED) return 'dark'
     if (['light', 'dark'].includes(localPreviewTheme)) return localPreviewTheme
-    return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'
+    return readWorkspaceStorage(THEME_KEY) === 'light' ? 'light' : 'dark'
   })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
@@ -1857,7 +1865,7 @@ export default function App() {
     const loaded = loadConversations(savedKey)
     const withoutVideoHistory = loaded.filter((conversation) => conversation.type !== 'video')
     if (withoutVideoHistory.length !== loaded.length) {
-      try { localStorage.setItem(savedKey, JSON.stringify(withoutVideoHistory)) } catch { /* Keep the cleaned list in memory if storage is unavailable. */ }
+      try { writeWorkspaceStorage(savedKey, JSON.stringify(withoutVideoHistory)) } catch { /* Keep the cleaned list in memory if storage is unavailable. */ }
     }
     let current = true
     readActivityHistory(savedKey).catch(() => undefined).then(savedActivity => {
@@ -1881,7 +1889,7 @@ export default function App() {
     if (!THEME_SELECTION_ENABLED) return
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
-    try { localStorage.setItem(THEME_KEY, theme) } catch { /* Keep the theme applied for this session. */ }
+    try { writeWorkspaceStorage(THEME_KEY, theme) } catch { /* Keep the theme applied for this session. */ }
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#16191f' : '#fcfcfd')
   }, [theme])
 
@@ -1890,7 +1898,7 @@ export default function App() {
       const next = transform(current)
       if (next === current) return current
       void saveActivityHistory(conversationStorageKey, next).catch(() => {})
-      try { localStorage.setItem(conversationStorageKey, JSON.stringify(next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))) } catch { /* Storage quota: keep the in-memory history. */ }
+      try { writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
   }
@@ -1945,7 +1953,7 @@ export default function App() {
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
       const next = [record, ...current.filter((conversation) => conversation.id !== update.id)].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
       if (update.type === 'strategy') void saveActivityHistory(conversationStorageKey, next).catch(() => {})
-      try { localStorage.setItem(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
+      try { writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
   }
@@ -1977,7 +1985,7 @@ export default function App() {
   function selectImageMode(mode) {
     if (!user) { setPendingImageMode(mode); openLogin('image'); return }
     setImageMode(mode)
-    localStorage.setItem(IMAGE_MODE_KEY, mode)
+    writeWorkspaceStorage(IMAGE_MODE_KEY, mode)
     setArchiveViewOpen(false)
     setActive('image')
     setWorkspaceToken((value) => value + 1)
@@ -2007,7 +2015,7 @@ export default function App() {
     else if (requestedModule === 'image') {
       if (pendingImageMode) {
         setImageMode(pendingImageMode)
-        localStorage.setItem(IMAGE_MODE_KEY, pendingImageMode)
+        writeWorkspaceStorage(IMAGE_MODE_KEY, pendingImageMode)
         setPendingImageMode(null)
       }
       startNew('image')
@@ -2025,7 +2033,7 @@ export default function App() {
     }
     if (conversation.type === 'image') {
       setImageMode('dialogue')
-      localStorage.setItem(IMAGE_MODE_KEY, 'dialogue')
+      writeWorkspaceStorage(IMAGE_MODE_KEY, 'dialogue')
     }
     setActive(conversation.type)
     setActiveConversationId(conversation.id)
@@ -2095,7 +2103,7 @@ export default function App() {
       try {
         const restored = { ...item, archived: false, updatedAt: new Date().toISOString() }
         const next = conversations.map(record => record.id === id ? restored : record).filter(record => !(record.archived && record.type !== 'film'))
-        localStorage.setItem(conversationStorageKey, JSON.stringify(next))
+        writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next))
         await filmRequest('/archive-records', { id, record: restored, restore: true })
       } catch (error) { window.alert(`恢复失败：${error.message}`); return }
     }
@@ -2134,9 +2142,9 @@ export default function App() {
       : active === 'content'
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'skills'
-        ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+        ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'discover-skills'
-        ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); localStorage.setItem(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+        ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
       : active === 'marketing-activities'
         ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName={scopedBrand(user) ? undefined : '营销知识库'} spaceId={scopedBrand(user) ? undefined : 'marketing-activities'} onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
@@ -2157,5 +2165,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Suspense fallback={<p role="status">正在加载工具…</p>}><QrBatchStudio/></Suspense></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}<Suspense fallback={<p role="status">正在加载工具…</p>}>{content}</Suspense></main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{storageWarning && <p role="alert" style={{padding: "10px 18px", margin: 0}}>浏览器本地空间已满，未提交的草稿在刷新或关闭后可能丢失，请及时保存。</p>}{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}<Suspense fallback={<p role="status">正在加载工具…</p>}>{content}</Suspense></main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }

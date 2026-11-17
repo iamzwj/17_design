@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { CharacterDecision } from "./FilmCharacters.jsx";
 import FilmActivity from './FilmActivity.jsx';
@@ -13,7 +14,7 @@ import './filmWorkbench.css';
 const labels={queued:'等待调度',running:'正在制作',pausing:'正在暂停调度',paused:'已暂停',cancelled:'已暂停',failed:'执行失败',review:'等待分镜确认','needs-input':'需要人工处理',succeeded:'成片已完成'};
 export default function FilmWorkbench({project:p,lastSynced,request,onProject,onDownload}) {
   const key='film-workbench:'+p.id;
-  const [stage,setStage]=useState(()=>{const value=localStorage.getItem(key+':stage')||'script';return ['images','videos','audio'].includes(value)?'media':value;}),[selected,setSelected]=useState(()=>localStorage.getItem(key+':selected')||''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[limit,setLimit]=useState(60),[panel,setPanel]=useState(()=>localStorage.getItem(key+':panel')||'conversation'),[settings,setSettings]=useState(false);
+  const [stage,setStage]=useState(()=>{const value=readWorkspaceStorage(key+':stage')||'script';return ['images','videos','audio'].includes(value)?'media':value;}),[selected,setSelected]=useState(()=>readWorkspaceStorage(key+':selected')||''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[limit,setLimit]=useState(60),[panel,setPanel]=useState(()=>readWorkspaceStorage(key+':panel')||'conversation'),[settings,setSettings]=useState(false);
   const [timelineOpen,setTimelineOpen]=useState(null);
   const timelinePanel = useRef(null);
   const timelineTrigger = useRef(null);
@@ -63,7 +64,7 @@ export default function FilmWorkbench({project:p,lastSynced,request,onProject,on
       (stage.id === 'storyboard' && ['images','frames','videos','quality'].includes(task.stage)) ||
       (stage.id === 'editing' && task.stage === 'render')));
   const feed=useRef(null),submitting=useRef(false);const stages=workflowStages(p).filter(s=>!['images','videos','audio'].includes(s.id)).map(s=>s.id==='storyboard'?{...s,done:p.shots.filter(shot=>shot.frame&&shot.video).length,total:p.shots.length,complete:p.shots.length>0&&p.shots.every(shot=>shot.frame&&shot.video),active:['storyboard','images','frames','videos','quality','audio'].includes(p.stage)}:s),complete=stages.filter(s=>s.complete).length;const phaseLabel=({plan:'导演规划',script:'剧本编写',characters:'角色设定',scenes:'场景设定',storyboard:'分镜规划',assets:'角色与场景制作',frames:'分镜图片生成',images:'图片生成',videos:'视频生成',quality:'镜头审核',audio:'声音处理',editing:'成片剪辑',render:'成片合成',done:'已完成'})[p.stage]||'等待调度';const mediaCount=filmMediaIndex(p).length;
-  useEffect(()=>{localStorage.setItem(key+':stage',stage);localStorage.setItem(key+':selected',selected);localStorage.setItem(key+':panel',panel);},[key,stage,selected,panel]);
+  useEffect(()=>{writeWorkspaceStorage(key+':stage',stage);writeWorkspaceStorage(key+':selected',selected);writeWorkspaceStorage(key+':panel',panel);},[key,stage,selected,panel]);
   async function send(type,body={}) {if(submitting.current)return false;submitting.current=true;setBusy(true);setNotice('');try{const result=await request('/'+p.id+'/commands',{type,body});if(result.project)onProject(result.project);setNotice('操作已保存，后台将在安全点应用；已完成结果会保留。');return true;}catch(e){setNotice(userError(e.message));return false;}finally{submitting.current=false;setBusy(false);}}
   function chooseStage(value){setStage(value);setSelected('');setPanel('editor');}
   function chooseTask(target){const task=typeof target==='string'?p.tasks?.find(t=>t.id===target):target;const resourceId=task?.resourceId||task?.id||target;const resource=p.resources?.find(r=>r.id===resourceId);if(resource){setStage(resource.category);setSelected(resource.id);}else if(p.shots?.some(s=>s.id===resourceId)){setStage('storyboard');setSelected(resourceId);}else if(task?.stage){setStage(stages.some(s=>s.id===task.stage)?task.stage:'script');}setPanel('editor');}

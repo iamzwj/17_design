@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { FILM_VIDEO_MODELS, filmVideoResolution, filmVideoResolutions } from '../shared/filmVideoModels.js';
 import { VIBBIT_FLARE_MODEL } from '../shared/vibbitImageModels.js';
 import { userError, localizeErrors } from './userErrors.js'
@@ -47,7 +48,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
   const [project, setProject] = useState(() => {
     if (!cacheKey) return null;
     try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey));
+      const cached = JSON.parse(readWorkspaceStorage(cacheKey));
       return cached?.id === projectId && cached?.userId === user.id ? cached : null;
     } catch {
       return null;
@@ -65,7 +66,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
         narrativeStyleId: "",
       };
       try {
-        const saved = JSON.parse(localStorage.getItem("dgen-film-draft-" + getAuthToken().slice(-12)));
+        const saved = JSON.parse(readWorkspaceStorage("dgen-film-draft-" + getAuthToken().slice(-12)));
         const style = typeof saved?.style === "string" ? saved.style : defaults.style;
         // Older drafts saved the previous default even without a user selection.
         const imageModel = saved?.imageModel === "gpt-image-2.5" && saved.imageModelExplicit !== true
@@ -84,7 +85,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
   useEffect(() => {
     if (!user?.id || !project?.id || project.userId !== user.id) return;
     try {
-      localStorage.setItem(`dgen-film-project-${user.id}-${project.id}`, JSON.stringify(project));
+      writeWorkspaceStorage(`dgen-film-project-${user.id}-${project.id}`, JSON.stringify(project));
     } catch {
       // A full browser store must not stop the server-backed project from working.
     }
@@ -113,7 +114,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     };
   }, [user, id]);
   useEffect(() => {
-    localStorage.setItem(
+    writeWorkspaceStorage(
       "dgen-film-draft-" + getAuthToken().slice(-12),
       JSON.stringify(form),
     );

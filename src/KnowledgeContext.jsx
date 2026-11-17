@@ -1,3 +1,4 @@
+import { writeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { useEffect, useState } from 'react'
 import { getAuthToken } from './api.js'
@@ -12,7 +13,7 @@ export default function KnowledgeContext({ tool }) {
     setSelection((current) => {
       if (!current.brandId || d.brands.some((b) => b.id === current.brandId)) return current
       const next = { brandId: '', assetIds: [], ipMode: 'none', ipAssetIds: [], logoVariant: 'color' }
-      localStorage.setItem(knowledgeKey('context'), JSON.stringify(next))
+      writeWorkspaceStorage(knowledgeKey('context'), JSON.stringify(next))
       return next
     })
   } }).catch(() => { if (live) setError('品牌知识库暂不可用') }); return () => { live = false } }, [token])
@@ -25,10 +26,10 @@ export default function KnowledgeContext({ tool }) {
   useEffect(() => {
     if (tool === 'image' && selection.brandId && !selection.enforceBrandColors) {
       const next = { ...selection, enforceBrandColors: true }
-      localStorage.setItem(knowledgeKey('context'), JSON.stringify(next))
+      writeWorkspaceStorage(knowledgeKey('context'), JSON.stringify(next))
     }
   }, [tool, selection])
-  function save(value) { const next = { ...value, ...(tool === 'image' ? { enforceBrandColors: true } : {}) }; setSelection(next); localStorage.setItem(knowledgeKey('context'), JSON.stringify(next)); setError('') }
+  function save(value) { const next = { ...value, ...(tool === 'image' ? { enforceBrandColors: true } : {}) }; setSelection(next); writeWorkspaceStorage(knowledgeKey('context'), JSON.stringify(next)); setError('') }
   const ipMode = selection.ipMode || 'none', ipChoices = assets.filter((a) => a.ipType === ipMode)
   const ipId = selection.ipAssetIds?.[0] || (ipChoices.length === 1 ? ipChoices[0].id : '')
   if (!token) return null

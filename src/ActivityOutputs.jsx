@@ -1,14 +1,15 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { useEffect, useState } from 'react'
 import { createConversationImageTask, getAuthToken, waitForConversationImageTask } from './api.js'
 import { knowledgeRequest } from './knowledgeApi.js'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION } from './imageModels.js'
 
 const running = new Map()
-function read(key) { try { return JSON.parse(localStorage.getItem(key)) || [] } catch { return [] } }
+function read(key) { try { return JSON.parse(readWorkspaceStorage(key)) || [] } catch { return [] } }
 export function useActivityImages(conversationId, enabled) {
   const key = `dgen-activity-images:${getAuthToken().slice(-12)}:${conversationId}`
   const [records, setRecords] = useState(() => read(key))
-  function write(transform) { const next = transform(read(key)); localStorage.setItem(key, JSON.stringify(next)); window.dispatchEvent(new Event('dgen-activity-images')) }
+  function write(transform) { const next = transform(read(key)); writeWorkspaceStorage(key, JSON.stringify(next)); window.dispatchEvent(new Event('dgen-activity-images')) }
   async function execute(record) {
     const runtimeKey = `${key}:${record.id}`
     if (running.has(runtimeKey)) return running.get(runtimeKey)

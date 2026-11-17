@@ -1,11 +1,12 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { getKnowledgeSelection } from './knowledgeApi.js'
 import { getAuthToken } from './api.js'
 
 const liveWaits = new Map()
 const SESSION_KEY = 'diefa-text-task-session-v1'
 function session() {
-  let value = localStorage.getItem(SESSION_KEY)
-  if (!value) { value = crypto.randomUUID(); localStorage.setItem(SESSION_KEY, value) }
+  let value = readWorkspaceStorage(SESSION_KEY)
+  if (!value) { value = crypto.randomUUID(); writeWorkspaceStorage(SESSION_KEY, value) }
   return value
 }
 async function request(kind, id, payload) {

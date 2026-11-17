@@ -1,8 +1,9 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { createPreviewQueue } from './knowledgePreviewQueue.js'
 import { getAuthToken } from './api.js'
 import { readKnowledgeResponse } from './knowledgeResponse.js'
 export function knowledgeKey(suffix = '') { return `dgen-knowledge:${getAuthToken().slice(-12) || 'guest'}:${suffix}` }
-export function getKnowledgeSelection() { try { return JSON.parse(localStorage.getItem(knowledgeKey('context'))) || {} } catch { return {} } }
+export function getKnowledgeSelection() { try { return JSON.parse(readWorkspaceStorage(knowledgeKey('context'))) || {} } catch { return {} } }
 export async function knowledgeRequest(path, body, method = body === undefined ? 'GET' : 'POST', { signal } = {}) {
   const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
   const response = await fetch(`${base}/api/knowledge${path}`, { method, signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, cache: 'no-store', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
@@ -24,18 +25,18 @@ export async function knowledgeDownload(path, name, preview = false, { signal } 
 }
 
 const searches = new Map()
-export function readKnowledgeSearch() { try { return JSON.parse(localStorage.getItem(knowledgeKey('search'))) } catch { return null } }
+export function readKnowledgeSearch() { try { return JSON.parse(readWorkspaceStorage(knowledgeKey('search'))) } catch { return null } }
 export function startKnowledgeSearch(request, resume = false) {
   const key = knowledgeKey('search')
   if (resume && searches.has(key)) return
   const snapshot = { id: crypto.randomUUID(), request, status: 'running' }
-  const save = (value) => { localStorage.setItem(key, JSON.stringify(value)); window.dispatchEvent(new Event('dgen-knowledge-search')) }
+  const save = (value) => { writeWorkspaceStorage(key, JSON.stringify(value)); window.dispatchEvent(new Event('dgen-knowledge-search')) }
   save(snapshot)
   const operation = knowledgeRequest('/search', request).then((result) => {
-    const latest = JSON.parse(localStorage.getItem(key) || 'null')
+    const latest = JSON.parse(readWorkspaceStorage(key) || 'null')
     if (latest?.id === snapshot.id) save({ ...snapshot, status: 'succeeded', result })
   }).catch((error) => {
-    const latest = JSON.parse(localStorage.getItem(key) || 'null')
+    const latest = JSON.parse(readWorkspaceStorage(key) || 'null')
     if (latest?.id === snapshot.id) save({ ...snapshot, status: 'failed', error: error.message })
   }).finally(() => { if (searches.get(key) === operation) searches.delete(key) })
   searches.set(key, operation)

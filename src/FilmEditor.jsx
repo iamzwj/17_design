@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import FilmAssetGrid from './FilmAssetGrid.jsx'
 import { userError, reviewSummary } from './userErrors.js'
 import { CharacterLibrary, readImage, SaveCharacterButton } from "./FilmCharacters.jsx";
@@ -84,8 +85,8 @@ function ShotScript({text}) {
 }
 function ScriptEditor({project:p,send}) {
   const key='film-script-draft:'+p.id+':'+(p.scriptRevision||1);
-  const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||p.script;}catch{return p.script;}});
-  useEffect(()=>{if(draft)localStorage.setItem(key,JSON.stringify(draft));},[key,draft]);
+  const [draft,setDraft]=useState(()=>{try{return JSON.parse(readWorkspaceStorage(key))||p.script;}catch{return p.script;}});
+  useEffect(()=>{if(draft)writeWorkspaceStorage(key,JSON.stringify(draft));},[key,draft]);
   if(!p.script && (p.legacy || p.plan))return <div className="fw-editor-form fw-legacy-script"><h3>原始剧本与镜头脚本</h3><p className="fw-caption">此任务在升级前创建。原始内容和已有分镜均保留，不会因查看剧本重新生成素材。</p><h4>原始故事 / 剧本<CopyOriginalStory text={p.story || ''}/></h4><div className="fw-script-body">{p.story||'该旧任务未保存原始正文'}</div><details><summary>故事梗概</summary><p>{p.plan?.summary}</p></details><h4>已有镜头脚本（{p.shots?.length||0}）</h4>{p.shots?.map((shot,i)=><details key={shot.id} open><summary>镜头 {i+1} · {shot.time||'时间见镜头描述'} · {shot.duration}秒</summary><div className="fw-script-body"><ShotScript text={shot.prompt}/></div>{shot.dialogue&&<p>对白：{shot.dialogue}</p>}</details>)}</div>;
   if(!p.script)return <div className="fw-empty"><h3>{['failed','needs-input','paused'].includes(p.status)?'剧本尚未完成':'编剧正在编写剧本'}</h3><p>{p.error||'可以在中间查看真实任务进度，剧本生成后会自动显示正文。'}</p></div>;
   const updateScene=(i,key,value)=>setDraft(d=>({...d,scenes:d.scenes.map((s,n)=>n===i?{...s,[key]:value}:s)}));
@@ -93,8 +94,8 @@ function ScriptEditor({project:p,send}) {
 }
 function ResourceEditor({item:r,project:p,stage,send,request,notice,hideMedia=false,hideHeading=false,hideTopActions=false}) {
   const shot=(p.shots||[]).some(s=>s.id===r.id),key=`film-edit:${p.id}:${r.id}:${r.revision}`;
-  const [draft,setDraft]=useState(()=>{try{return JSON.parse(localStorage.getItem(key))||r;}catch{return r;}}),[uploading,setUploading]=useState(false);
-  useEffect(()=>{localStorage.setItem(key,JSON.stringify(draft));},[draft,key]);
+  const [draft,setDraft]=useState(()=>{try{return JSON.parse(readWorkspaceStorage(key))||r;}catch{return r;}}),[uploading,setUploading]=useState(false);
+  useEffect(()=>{writeWorkspaceStorage(key,JSON.stringify(draft));},[draft,key]);
   const edit=(name,value)=>setDraft(d=>({...d,[name]:value}));
   const task=[...(p.tasks||[])].reverse().find(t=>t.resourceId===r.id||t.id.startsWith(r.id+':'));
   const output=shot?(stage==='audio'?r.audio:stage==='videos'?r.video:r.frame):r.output||r.image;

@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { useEffect, useState } from "react";
 import { getAuthToken } from "./api.js";
 import ComposerSelect from "./ComposerSelect.jsx";
@@ -68,7 +69,7 @@ export default function FilmStudio({ user, onLogin }) {
   const [projects, setProjects] = useState([]),
     [id, setId] = useState(
       () =>
-        localStorage.getItem(
+        readWorkspaceStorage(
           "dgen-film-selected-" + getAuthToken().slice(-12),
         ) || "",
     ),
@@ -76,7 +77,7 @@ export default function FilmStudio({ user, onLogin }) {
       try {
         return (
           JSON.parse(
-            localStorage.getItem(
+            readWorkspaceStorage(
               "dgen-film-draft-" + getAuthToken().slice(-12),
             ),
           ) || {
@@ -125,13 +126,13 @@ export default function FilmStudio({ user, onLogin }) {
     };
   }, [user]);
   useEffect(() => {
-    localStorage.setItem(
+    writeWorkspaceStorage(
       "dgen-film-draft-" + getAuthToken().slice(-12),
       JSON.stringify(form),
     );
   }, [form]);
   useEffect(() => {
-    localStorage.setItem("dgen-film-selected-" + getAuthToken().slice(-12), id);
+    writeWorkspaceStorage("dgen-film-selected-" + getAuthToken().slice(-12), id);
     setEdits({});
   }, [id]);
   const field = (k, v) => setForm((f) => ({ ...f, [k]: v }));

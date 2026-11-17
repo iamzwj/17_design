@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { useEffect, useState } from 'react'
 import { createFestivalPosterTask, downloadGeneratedImage, generateFestivalPosterImages, getFestivalPosterTask, listFestivalPosterTasks } from './api.js'
@@ -18,7 +19,7 @@ const FESTIVAL_STYLES = [
 ]
 const taskListeners = new Set()
 const taskPollers = new Map()
-let taskStore = { festival: localStorage.getItem(FESTIVAL_DRAFT_KEY) || '国庆', style: localStorage.getItem(FESTIVAL_STYLE_KEY) || DEFAULT_FESTIVAL_STYLE, tasks: [], loadingHistory: false, creating: false, error: '', loaded: false }
+let taskStore = { festival: readWorkspaceStorage(FESTIVAL_DRAFT_KEY) || '国庆', style: readWorkspaceStorage(FESTIVAL_STYLE_KEY) || DEFAULT_FESTIVAL_STYLE, tasks: [], loadingHistory: false, creating: false, error: '', loaded: false }
 
 function festivalStyleLabel(style) {
   return FESTIVAL_STYLES.find((item) => item.value === style)?.label || '彩色水墨风'
@@ -104,8 +105,8 @@ export default function FestivalPosterStudio({ onUserUpdate, onRequireLogin }) {
   useEffect(() => subscribe(setStore), [])
   useEffect(() => { if (!taskStore.loaded) loadHistory().catch(() => {}) }, [])
 
-  function changeFestival(value) { localStorage.setItem(FESTIVAL_DRAFT_KEY, value); emit({ festival: value }) }
-  function changeStyle(value) { localStorage.setItem(FESTIVAL_STYLE_KEY, value); emit({ style: value }) }
+  function changeFestival(value) { writeWorkspaceStorage(FESTIVAL_DRAFT_KEY, value); emit({ festival: value }) }
+  function changeStyle(value) { writeWorkspaceStorage(FESTIVAL_STYLE_KEY, value); emit({ style: value }) }
 
   async function submitFestival() {
     const festival = store.festival.trim()

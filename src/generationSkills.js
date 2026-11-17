@@ -1,14 +1,15 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { useCallback, useEffect, useState } from 'react'
 import { getAuthToken } from './api.js'
 import { skillRequest } from './skillApi.js'
 import { installedLocalSkills } from './externalSkillClient.js'
 const key = (target) => `dgen-generation-skill:${getAuthToken().slice(-12) || 'guest'}:${target}`
 export function selectGenerationSkill(target, id) {
-  localStorage.setItem(key(target), id || '')
+  writeWorkspaceStorage(key(target), id || '')
   window.dispatchEvent(new Event('dgen-generation-skill'))
 }
 export function useGenerationSkill(target) {
-  const [id, setId] = useState(() => localStorage.getItem(key(target)) || '')
+  const [id, setId] = useState(() => readWorkspaceStorage(key(target)) || '')
   const [externalRecords, setExternalRecords] = useState([])
   const [skills, setSkills] = useState([]), [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const reload = useCallback(async () => {
@@ -24,7 +25,7 @@ export function useGenerationSkill(target) {
   }, [target])
   useEffect(() => {
     void reload()
-    const changed = () => { setId(localStorage.getItem(key(target)) || ''); void reload() }
+    const changed = () => { setId(readWorkspaceStorage(key(target)) || ''); void reload() }
     const events = ['dgen-generation-skill', 'dgen-auth-changed', 'focus', 'storage']
     events.forEach((event) => window.addEventListener(event, changed))
     return () => events.forEach((event) => window.removeEventListener(event, changed))

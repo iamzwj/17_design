@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { getAuthToken } from './api.js'
 import { readLocalSkill, writeLocalSkill, removeLocalSkill } from './localSkillFiles.js'
 const base = () => String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
@@ -26,9 +27,9 @@ export async function externalSkillPayload(id, token = getAuthToken()) {
 }
 const key = (owner) => `dgen-discover-state:${owner}`
 const initial = { tab: 'discover', filter: 'related', mode: 'recommended', recommendations: [], recommendedAt: null, query: '', results: [], preview: null, jobs: {}, error: '', notice: '' }
-export function readDiscovery(owner) { try { return { ...initial, ...JSON.parse(localStorage.getItem(key(owner)) || 'null') } } catch { return { ...initial } } }
+export function readDiscovery(owner) { try { return { ...initial, ...JSON.parse(readWorkspaceStorage(key(owner)) || 'null') } } catch { return { ...initial } } }
 export function updateDiscovery(owner, patch) {
-  const next = { ...readDiscovery(owner), ...patch }; localStorage.setItem(key(owner), JSON.stringify(next)); window.dispatchEvent(new CustomEvent('dgen-discovery-change', { detail: owner })); return next
+  const next = { ...readDiscovery(owner), ...patch }; writeWorkspaceStorage(key(owner), JSON.stringify(next)); window.dispatchEvent(new CustomEvent('dgen-discovery-change', { detail: owner })); return next
 }
 const inFlight = new Map()
 function job(owner, id, fn) {

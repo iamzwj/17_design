@@ -1,3 +1,4 @@
+import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { userError } from './userErrors.js'
 import { useEffect, useRef, useState } from 'react'
 import { knowledgeDownload, knowledgeKey, knowledgeRequest } from './knowledgeApi.js'
@@ -24,24 +25,24 @@ function Preview({ analysisId, page }) {
 }
 function Candidate({ analysis, page, asset, index, onImport, busy }) {
   const key = knowledgeKey(`vision:${analysis.id}:${page.number}:${index}`)
-  const [draft, setDraft] = useState(() => { try { return JSON.parse(localStorage.getItem(key)) || { title: asset.title, content: asset.description, box: asset.box, kind: asset.kind } } catch { return { title: asset.title, content: asset.description, box: asset.box, kind: asset.kind } } })
-  useEffect(() => { localStorage.setItem(key, JSON.stringify(draft)) }, [key, draft])
+  const [draft, setDraft] = useState(() => { try { return JSON.parse(readWorkspaceStorage(key)) || { title: asset.title, content: asset.description, box: asset.box, kind: asset.kind } } catch { return { title: asset.title, content: asset.description, box: asset.box, kind: asset.kind } } })
+  useEffect(() => { writeWorkspaceStorage(key, JSON.stringify(draft)) }, [key, draft])
   const blocked = ['prohibited', 'unknown'].includes(asset.kind)
   const width = ((draft.box[2] - draft.box[0]) / 10).toFixed(1), height = ((draft.box[3] - draft.box[1]) / 10).toFixed(1)
   return <div className="kb-vision-candidate"><h4>{NAMES[asset.kind]}</h4><p>{asset.description}</p>{blocked ? <small>已保留在解析记录中，不会作为可调用素材。</small> : <><label>素材名称<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}/></label><label>确认用途<select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}><option value="logo">正式Logo</option><option value="palette">色板</option><option value="original">原始素材</option><option value="style">风格参考</option></select></label><label>素材说明<textarea rows={3} value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })}/></label><details><summary>调整裁切范围 · {width}% × {height}%</summary><p>对照左侧原页，坐标以整页千分位表示。保存后请在素材详情检查裁切图，确认无误再发布。</p><div className="kb-crop-fields">{['左', '上', '右', '下'].map((label, i) => <label key={label}>{label}<input type="number" min="0" max="1000" value={draft.box[i]} onChange={(e) => setDraft({ ...draft, box: draft.box.map((n, j) => i === j ? Number(e.target.value) : n) })}/></label>)}</div></details><button disabled={busy} onClick={() => onImport({ page: page.number, assetIndex: index, ...draft })}>保存素材草稿</button></>}</div>
 }
 function PageResult({ analysis, page, onImport, busy }) {
   const key = knowledgeKey(`vision-text:${analysis.id}:${page.number}`)
-  const [text, setText] = useState(() => { try { return localStorage.getItem(key) || [page.result?.business ? `主营业务：${page.result.business}` : '', ...(page.result?.rules || [])].filter(Boolean).join('\n') } catch { return '' } })
+  const [text, setText] = useState(() => { try { return readWorkspaceStorage(key) || [page.result?.business ? `主营业务：${page.result.business}` : '', ...(page.result?.rules || [])].filter(Boolean).join('\n') } catch { return '' } })
   const [kind, setKind] = useState('rule')
-  useEffect(() => { localStorage.setItem(key, text) }, [key, text])
+  useEffect(() => { writeWorkspaceStorage(key, text) }, [key, text])
   return <section className="kb-vision-page"><header><h4>{page.source}</h4><small>{page.result ? '已识别' : page.status === 'running' ? '识别中' : page.status === 'failed' ? '待重试' : '等待识别'}</small></header><div className="kb-vision-columns"><div className="kb-vision-preview"><Preview analysisId={analysis.id} page={page}/></div><div>{page.result ? <><details><summary>查看图文识别全文</summary><p className="kb-vision-text">{page.result.text}</p></details>{page.result.warnings?.length > 0 && <div className="kb-alert">需核对：{page.result.warnings.join('；')}</div>}<label>核对品牌事实与规则<textarea rows={6} value={text} onChange={(e) => setText(e.target.value)}/></label><button type="button" onClick={() => setText(page.result.text)}>填入图文识别全文</button><label>保存为<select value={kind} onChange={(e) => setKind(e.target.value)}><option value="rule">强制规则 · 发布后固定加载</option><option value="document">品牌资料 · 按任务检索</option></select></label><button disabled={busy || !text.trim()} onClick={() => onImport({ page: page.number, kind, content: text })}>保存文字草稿</button>{page.result.assets.map((asset, index) => <Candidate key={index} analysis={analysis} page={page} asset={asset} index={index} onImport={onImport} busy={busy}/>)}</> : <p>{page.status === 'running' ? '本页正在识别…' : page.error || '本页等待识别，已完成页面会自动保存。'}</p>}</div></div></section>
 }
 export default function KnowledgeVision({ selected, version, onChanged, onOpen, onError, canEdit }) {
   const [analysis, setAnalysis] = useState(null), [busy, setBusy] = useState(false)
   const rangeKey = knowledgeKey(`vision-range:${version.id}`)
-  const [range, setRange] = useState(() => { try { return JSON.parse(localStorage.getItem(rangeKey)) || { start: 1, end: 1 } } catch { return { start: 1, end: 1 } } })
-  useEffect(() => { localStorage.setItem(rangeKey, JSON.stringify(range)) }, [rangeKey, range])
+  const [range, setRange] = useState(() => { try { return JSON.parse(readWorkspaceStorage(rangeKey)) || { start: 1, end: 1 } } catch { return { start: 1, end: 1 } } })
+  useEffect(() => { writeWorkspaceStorage(rangeKey, JSON.stringify(range)) }, [rangeKey, range])
   const history = (selected.analyses || []).filter((a) => a.versionId === version.id).slice().reverse()
   const latestId = history[0]?.id
   const [picked, setPicked] = useState(''), [reload, setReload] = useState(0)
