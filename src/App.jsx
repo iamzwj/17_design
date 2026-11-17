@@ -649,7 +649,7 @@ function AuthScreen({ onAuthenticated, onClose }) {
   const testIdentity = testAccountIdentity(email)
 
   function updateEmailLocal(value) {
-    setEmail(value.trim().toLowerCase().replace(/@onewo\.com$/i, ''))
+    setEmail(value.trim().toLowerCase())
     setCode('')
     setError('')
     setNotice('')
@@ -659,9 +659,9 @@ function AuthScreen({ onAuthenticated, onClose }) {
     if (loading) return
     setError('')
     setNotice('')
-    if (!testIdentity && !EMAIL_LOCAL_PATTERN.test(email)) { setError('请输入企业邮箱账号'); return }
+    if (!testIdentity && !EMAIL_LOCAL_PATTERN.test(email.replace(/@onewo\.com$/i, ''))) { setError('请输入企业邮箱账号'); return }
     setLoading(true)
-    try { await action(testIdentity ? email : email + '@onewo.com') }
+    try { await action(testIdentity || email.endsWith('@onewo.com') ? email : email + '@onewo.com') }
     catch (requestError) { setError(userError(requestError.message)) }
     finally { setLoading(false) }
   }

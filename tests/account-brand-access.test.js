@@ -35,8 +35,8 @@ test('account identity restricts brand knowledge, materials, and marketing evide
     assert.equal(response.status, 200)
     return response.json()
   }
-  const yanxuanjia = await login('严选家@OneWorld.com', 'arbitrary')
-  const pulin = await login('普林@OneWorld.com', '')
+  const yanxuanjia = await login('yanxuanjia@onewo.com', 'arbitrary')
+  const pulin = await login('pulin@onewo.com', '')
   assert.equal(yanxuanjia.user.identity, 'yanxuanjia')
   assert.equal(pulin.user.identity, 'pulin')
   assert.equal((await request('/auth/login', '', { email: departmentEmail, code: '000000' })).status, 400)
@@ -86,6 +86,6 @@ test('account identity restricts brand knowledge, materials, and marketing evide
   t.after(() => production.close())
   await once(production, 'listening')
   const productionBase = `http://127.0.0.1:${production.address().port}/api/auth`
-  assert.equal((await fetch(productionBase + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: '普林@OneWorld.com', code: '' }) })).status, 400)
+  assert.equal((await fetch(productionBase + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'pulin@onewo.com', code: '' }) })).status, 400)
   assert.equal((await fetch(productionBase + '/me', { headers: { Authorization: `Bearer ${pulin.token}` } })).status, 401)
 })

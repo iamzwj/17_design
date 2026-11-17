@@ -1,6 +1,6 @@
 export const TEST_ACCOUNT_IDENTITIES = Object.freeze({
-  '严选家@oneworld.com': 'yanxuanjia',
-  '普林@oneworld.com': 'pulin',
+  'yanxuanjia@onewo.com': 'yanxuanjia',
+  'pulin@onewo.com': 'pulin',
 })
 
 export const ACCOUNT_IDENTITY_LABELS = Object.freeze({
