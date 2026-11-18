@@ -175,16 +175,6 @@ jobs:
               echo 'Static-only deployment: keeping 17design.service running.'
             fi
             sudo systemctl is-active --quiet 17design
-            # One-time removal of the retired legacy film projects after restart.
-            legacy_data=/home/ubuntu/17_design/data/legacy-films
-            if [ -L "$legacy_data" ]; then
-              echo 'Refusing to remove a symlinked legacy film directory' >&2
-              exit 1
-            fi
-            if [ -d "$legacy_data" ]; then
-              rm -rf -- "$legacy_data"
-              echo 'Retired legacy film project data removed.'
-            fi
             # Validate and gracefully reload Nginx. A hard restart closes
             # active client connections and made page refreshes flaky during
             # frequent front-end deployments.
