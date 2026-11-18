@@ -1,5 +1,6 @@
 import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { extractPresentation, presentationPreview } from './htmlPresentation.js'
 import { createConversationImageTask, getAuthToken, waitForConversationImageTask } from './api.js'
 import { knowledgeRequest } from './knowledgeApi.js'
 import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION } from './imageModels.js'
@@ -76,16 +77,17 @@ export function activityContentPages(content) {
   } catch { return [] }
 }
 export function activityVisibleText(content) {
-  let text = String(content || '').replace(/```html\s*[\s\S]*?```/gi, '')
+  let text = String(content || '')
+  if (extractPresentation(text)) text = text.replace(/```html\s*[\s\S]*?```/i, '')
   if (activityContentPages(text).length) text = text.replace(/```json\s*[\s\S]*?```/gi, '')
   return text.trim()
 }
 
 export function ActivityHtmlResult({ content }) {
-  const html = String(content || '').match(/```html\s*([\s\S]*?)```/i)?.[1]
+  const frame = useRef(null)
+  const html = extractPresentation(content)
   if (!html) return null
-  const csp = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'; form-action \'none\'; base-uri \'none\'">'
-  const preview = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + csp) : csp + html
-  function download() { const url = URL.createObjectURL(new Blob([preview], { type: 'text/html;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = '活动方案演示稿.html'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
-  return <section className="activity-html-result"><header><b>HTML 演示稿</b><button type="button" onClick={download}>下载演示稿</button></header><iframe sandbox="allow-scripts" referrerPolicy="no-referrer" title="活动方案演示稿" srcDoc={preview}/></section>
+  const preview = presentationPreview(html)
+  function download() { const url = URL.createObjectURL(new Blob([preview], { type: 'text/html;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = '演示稿.html'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
+  return <section className="activity-html-result"><header><b>HTML 演示稿</b><div><button type="button" onClick={() => frame.current?.requestFullscreen?.()}>全屏播放</button><button type="button" onClick={download}>下载演示稿</button></div></header><iframe ref={frame} sandbox="allow-scripts" allowFullScreen referrerPolicy="no-referrer" title="HTML 演示稿预览" srcDoc={preview}/></section>
 }

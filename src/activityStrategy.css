@@ -79,3 +79,6 @@
 }
 
 .text-answer > .activity-image-results { margin-top: 14px; }
+
+.activity-html-result header > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.activity-html-result button:focus-visible { outline: 2px solid var(--dp-color-accent); outline-offset: 2px; }

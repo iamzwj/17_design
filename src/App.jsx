@@ -1,6 +1,7 @@
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
+import { PRESENTATION_INSTRUCTIONS } from './htmlPresentation.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
@@ -41,6 +42,7 @@ import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, I
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
+  { id: 'chat', label: '新聊天', caption: '提问与日常创作', icon: 'spark' },
   { id: 'strategy', label: '活动策划', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'image', label: '图片创作', caption: '灵感变成画面', icon: 'image' },
   { id: 'video', label: '视频创作', caption: '从脚本到成片', icon: 'video' },
@@ -90,6 +92,7 @@ const RATIO_OPTIONS = [
 const DEFAULT_IMAGE_ASPECT_RATIO = '9:16'
 
 const MODULE_COPY = {
+  chat: { eyebrow: 'NEW CHAT', title: '有什么可以帮你的吗？', subtitle: '告诉我你的想法、任务或问题。', placeholder: '告诉我你想做什么…', systemPrompt: '用清晰的中文回答，基于已有信息，缺少依据时明确说明。' },
   strategy: {
     eyebrow: 'ACTIVITY STRATEGY',
     title: '让策略，落到每一次行动。',
@@ -1440,7 +1443,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   const [messages, setMessages] = useState(() => runtime.messages.current)
   const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(readWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
   const [textModels, setTextModels] = useState(null)
-  const [selectedTextModel, setSelectedTextModel] = useState('')
+  const [selectedTextModel, setSelectedTextModel] = useState('gemini-4-carbon')
   const usesTextModel = type !== 'compliance' && !(type === 'strategy' && activityContext.format === 'image')
   useEffect(() => {
     if (!usesTextModel) return
@@ -1717,7 +1720,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         const text = [item.content, imageInstruction, ...textFiles.map((file) => `\n\n--- 文件：${file.name} ---\n${file.content}`)].join('')
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
-      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS].filter(Boolean).join('\n\n')
+      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS, PRESENTATION_INSTRUCTIONS].filter(Boolean).join('\n\n')
       const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
@@ -1750,7 +1753,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   return <section className={`workspace text-workspace ${type === 'strategy' ? 'activity-workspace' : ''} ${messages.length === 0 ? 'empty' : ''}`} onDragEnter={handleComplianceDragEnter} onDragOver={handleComplianceDragOver} onDragLeave={handleComplianceDragLeave} onDrop={handleComplianceDrop}>
     <div className="conversation" ref={conversationScrollRef}>
       {messages.length === 0 && runningRequests.length === 0 && !activityImageGroups?.unmatched.length ? <div className="welcome text-welcome">
-        <div className={`text-orb ${type}`}><Icon name={type === 'strategy' ? 'spark' : 'shield'} size={38}/></div>
+        <div className={`text-orb ${type}`}><Icon name={type === 'compliance' ? 'shield' : 'spark'} size={38}/></div>
         <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
@@ -1763,7 +1766,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
-            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={message.content}/>}
+            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
             <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>
