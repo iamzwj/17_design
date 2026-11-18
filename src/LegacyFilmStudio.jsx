@@ -173,7 +173,7 @@ export default function FilmStudio({ user, onLogin }) {
   if (!user)
     return (
       <section className="film-studio">
-        <h1>一键成片</h1>
+        <h1>故事成片（旧版）</h1>
         <p>登录后创建自己的短片项目，制作进度和素材会持续保存。</p>
         <button onClick={onLogin}>登录后开始制作</button>
       </section>
@@ -183,7 +183,7 @@ export default function FilmStudio({ user, onLogin }) {
       <header>
         <div>
           <small>AI FILM STUDIO</small>
-          <h1>一键成片</h1>
+          <h1>故事成片（旧版）</h1>
           <p>把故事变成一部短片，让角色、场景与镜头共同讲述。</p>
         </div>
         <button onClick={() => setId("")}>新建短片</button>

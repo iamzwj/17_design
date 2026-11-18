@@ -427,7 +427,7 @@ async function availableFileName(directory, name) {
 
   return <section className="workspace batch-workspace">
     <div className="batch-page more-tool-page">
-      <ToolPageHeader eyebrow="BATCH COMPOSER" title="批处理二维码" description="上传一张底图和 Excel，框选替换位置，一次生成全部成品。"/>
+      <ToolPageHeader eyebrow="BATCH COMPOSER" title="二维码批量制作" description="上传一张底图和 Excel，框选替换位置，一次生成全部成品。"/>
       <div className="batch-layout">
         <aside className="batch-controls glass-strong">
           <Step number="1" title="上传底图" done={Boolean(baseFile)}><label className="batch-upload"><input type="file" accept="image/png,image/jpeg,image/webp" onChange={selectBase}/><Icon name="upload" size={17}/><span>{baseFile ? baseFile.name : '选择 PNG / JPG / WebP'}</span></label>{baseSize && <small>{baseSize.width} × {baseSize.height} px</small>}</Step>

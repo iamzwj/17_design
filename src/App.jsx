@@ -42,30 +42,30 @@ import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, I
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
-  { id: 'strategy', label: '活动策略', caption: '洞察与方案生成', icon: 'spark' },
-  { id: 'image', label: '图像创作', caption: '灵感变成画面', icon: 'image' },
-  { id: 'video', label: '视频生成', caption: '从脚本到成片', icon: 'video' },
+  { id: 'strategy', label: '活动策划', caption: '洞察与方案生成', icon: 'spark' },
+  { id: 'image', label: '图片创作', caption: '灵感变成画面', icon: 'image' },
+  { id: 'video', label: '视频创作', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
   { id: 'skills', label: 'Skill 库', caption: '把经验变成可复用的方法', icon: 'blocks' },
   { id: 'knowledge', label: '知识库', caption: '素材、品牌与营销知识', icon: 'library' },
-  { id: 'more', label: '更多工具', caption: '头像与批量套图', icon: 'blocks' },
+  { id: 'more', label: '实用工具', caption: '头像与批量套图', icon: 'blocks' },
 ]
 
 const KNOWLEDGE_SECTIONS = [
   { id: 'brand-knowledge', label: '品牌规范' },
-  { id: 'assets', label: '素材库' },
+  { id: 'assets', label: '品牌素材' },
   { id: 'marketing-activities', label: '营销知识库' },
 ]
 
 const WORKSPACE_TITLES = {
-  film: ['AI FILM STUDIO', '一键成片'],
-  'legacy-film': ['AI VIDEO STUDIO', '一键做视频'],
+  film: ['AI FILM STUDIO', '故事成片'],
+  'legacy-film': ['AI VIDEO STUDIO', '故事成片（旧版）'],
   content: ['CONTENT CREATION', '朴邻节日节气海报'],
   skills: ['SKILL LIBRARY', '团队 Skill'],
   'discover-skills': ['SKILL LIBRARY', '发现 Skill'],
   'brand-knowledge': ['KNOWLEDGE BASE', '品牌规范'],
   'marketing-activities': ['KNOWLEDGE BASE', '营销知识库'],
-  assets: ['ASSET LIBRARY', '素材库'],
+  assets: ['ASSET LIBRARY', '品牌素材'],
   'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
   'marketing-strategy': ['KNOWLEDGE BASE', '营销策略'],
   admin: ['ADMINISTRATION', '后台管理'],
@@ -73,7 +73,7 @@ const WORKSPACE_TITLES = {
 }
 const MORE_WORKSPACE_TITLES = {
   'please-day': ['PLEASE DAY', '朴里节头像框'],
-  qr: ['BATCH COMPOSER', '批处理二维码'],
+  qr: ['BATCH COMPOSER', '二维码批量制作'],
 }
 
 const RATIO_OPTIONS = [
@@ -574,16 +574,16 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
       <nav className="module-nav primary-tools">
         {MODULES.map((item) => item.id === 'image' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'image'} onClick={() => { if (item.disabled) return; toggleMenu('image'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {expandedMenu === 'image' && <div className="module-submenu" role="menu" aria-label="图像创作模式">
-            <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'dialogue' ? 'true' : undefined} className={active === 'image' && imageMode === 'dialogue' ? 'active' : ''} onClick={() => { onSelectImageMode('dialogue'); onClose() }}>对话模式</button>
-            <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>瀑布流模式</button>
+          {expandedMenu === 'image' && <div className="module-submenu" role="menu" aria-label="图片创作方式">
+            <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'dialogue' ? 'true' : undefined} className={active === 'image' && imageMode === 'dialogue' ? 'active' : ''} onClick={() => { onSelectImageMode('dialogue'); onClose() }}>对话生图</button>
+            <button type="button" role="menuitem" aria-current={active === 'image' && imageMode === 'waterfall' ? 'true' : undefined} className={active === 'image' && imageMode === 'waterfall' ? 'active' : ''} onClick={() => { onSelectImageMode('waterfall'); onClose() }}>批量生图</button>
           </div>}
         </div> : item.id === 'video' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={['video', 'film', 'legacy-film'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'video'} onClick={() => { if (item.disabled) return; toggleMenu('video'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'video' && <div className="module-submenu" role="menu" aria-label="视频生成模式">
-            <button type="button" role="menuitem" aria-current={active === 'video' ? 'true' : undefined} className={active === 'video' ? 'active' : ''} onClick={() => { onChange('video'); onClose() }}>视频生成</button>
-            <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>一键成片</button>
-            <button type="button" role="menuitem" aria-current={active === 'legacy-film' ? 'true' : undefined} className={active === 'legacy-film' ? 'active' : ''} onClick={() => { onChange('legacy-film'); onClose() }}>一键做视频</button>
+            <button type="button" role="menuitem" aria-current={active === 'video' ? 'true' : undefined} className={active === 'video' ? 'active' : ''} onClick={() => { onChange('video'); onClose() }}>生成视频</button>
+            <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>故事成片</button>
+            <button type="button" role="menuitem" aria-current={active === 'legacy-film' ? 'true' : undefined} className={active === 'legacy-film' ? 'active' : ''} onClick={() => { onChange('legacy-film'); onClose() }}>故事成片（旧版）</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'content'} onClick={() => { if (item.disabled) return; toggleMenu('content'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
@@ -602,9 +602,9 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           </div>}
         </div> : item.id === 'more' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'more'} onClick={() => { if (item.disabled) return; toggleMenu('more'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
-          {expandedMenu === 'more' && <div className="module-submenu" role="menu" aria-label="更多工具列表">
+          {expandedMenu === 'more' && <div className="module-submenu" role="menu" aria-label="实用工具列表">
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'please-day' ? 'true' : undefined} className={active === 'more' && moreTool === 'please-day' ? 'active' : ''} onClick={() => { onSelectMoreTool('please-day'); onClose() }}>朴里节头像框</button>
-            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>批处理二维码</button>
+            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>二维码批量制作</button>
           </div>}
         </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
       </nav>

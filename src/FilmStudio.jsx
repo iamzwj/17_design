@@ -170,7 +170,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
   if (!user)
     return (
       <section className="film-studio">
-        <h1>一键成片</h1>
+        <h1>故事成片</h1>
         <p>登录后创建自己的短片项目，制作进度和素材会持续保存。</p>
         <button onClick={onLogin}>登录后开始制作</button>
       </section>
@@ -203,7 +203,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
             >
               <header className="film-create-heading">
                 <div>
-                  <h1>一键成片</h1>
+                  <h1>故事成片</h1>
                   <label htmlFor="film-story">故事梗概</label>
                 </div>
 
