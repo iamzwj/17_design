@@ -2,7 +2,6 @@ import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './lan
 import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
-import { installLegacyFilms } from './legacyFilms.js'
 import { installExternalSkills } from './externalSkills.js'
 import { isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
 import { VIBBIT_IMAGE_MODELS, canonicalImageModel } from '../shared/vibbitImageModels.js'
@@ -2050,7 +2049,6 @@ app.get('/api/admin/overview', requireAdmin, (_req, res) => {
   res.json({ users, images, accountIdentities: listAccountIdentities(), metrics: { dailyActive, monthlyActive, totalActive, weeklyAverage, registeredUsers: users.length, totalImages: images.length, whitelistCount: REGISTRATION_WHITELIST.size, registrationRate: REGISTRATION_WHITELIST.size ? users.filter((user) => REGISTRATION_WHITELIST.has(user.email)).length / REGISTRATION_WHITELIST.size * 100 : null, usageRate: users.length ? totalActive / users.length * 100 : null } })
 })
 
-installLegacyFilms(app, { dataDir: waterfallDataDir, requireAuth })
 installFilms(app, { dataDir: waterfallDataDir, requireAuth, analyzeStory: async (story) => {
   let lastError;
   for (const model of LANGUAGE_MODELS) {
