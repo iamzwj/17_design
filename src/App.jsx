@@ -583,7 +583,6 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           {expandedMenu === 'video' && <div className="module-submenu" role="menu" aria-label="视频生成模式">
             <button type="button" role="menuitem" aria-current={active === 'video' ? 'true' : undefined} className={active === 'video' ? 'active' : ''} onClick={() => { onChange('video'); onClose() }}>生成视频</button>
             <button type="button" role="menuitem" aria-current={active === 'film' ? 'true' : undefined} className={active === 'film' ? 'active' : ''} onClick={() => { onChange('film'); onClose() }}>故事成片</button>
-            <button type="button" role="menuitem" aria-current={active === 'legacy-film' ? 'true' : undefined} className={active === 'legacy-film' ? 'active' : ''} onClick={() => { onChange('legacy-film'); onClose() }}>故事成片（旧版）</button>
           </div>}
         </div> : item.id === 'content' ? <div className="more-tool-nav" key={item.id}>
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'content'} onClick={() => { if (item.disabled) return; toggleMenu('content'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
