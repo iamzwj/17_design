@@ -76,6 +76,18 @@ test('brand knowledge permissions, version publishing, index changes, images and
     const asset = await call('/documents', { brandId, title: 'Logo', kind: 'logo', content: '品牌标志', file: { name: 'logo.png', base64: png } })
     const assetDoc = asset.data.document.id, assetV = (await ready(assetDoc)).document.latestVersionId
     await call(`/documents/${assetDoc}/publish`, { versionId: assetV })
+    const ip = await call('/documents', { brandId, title: '可可', kind: 'original', ipType: 'cartoon', file: { name: 'coco.png', base64: png } })
+    const ipDoc = ip.data.document.id, ipVersion = (await ready(ipDoc)).document.latestVersionId
+    const ipUrl = `/generation-assets/${ipDoc}/image?brandId=${brandId}`
+    assert.equal((await call(ipUrl, undefined, 'viewer')).status, 404)
+    await call(`/documents/${ipDoc}/publish`, { versionId: ipVersion })
+    assert.ok((await call(`/generation-assets?brandId=${brandId}`, undefined, 'viewer')).data.assets.some((item) => item.id === ipDoc && item.ipType === 'cartoon'))
+    const imageResponse = await fetch(base + ipUrl, { headers: { 'X-User': 'viewer' } })
+    assert.equal(imageResponse.status, 200)
+    assert.deepEqual(Buffer.from(await imageResponse.arrayBuffer()), Buffer.from(png, 'base64'))
+    assert.equal((await fetch(base + ipUrl)).status, 401)
+    assert.equal((await call(`/generation-assets/${assetDoc}/image?brandId=${brandId}`, undefined, 'viewer')).status, 404)
+    assert.equal((await call(`/generation-assets/${ipDoc}/image?brandId=missing`, undefined, 'viewer')).status, 403)
     const imageTrace = await kb.prepare(users[2], { prompt: '品牌海报', knowledge: { brandId, assetIds: [assetDoc] } }, 'image')
     assert.ok(imageTrace.images[0].startsWith('data:image/png;base64,'))
     const stored = (await call(`/traces/${imageTrace.id}`, undefined, 'viewer')).data.trace

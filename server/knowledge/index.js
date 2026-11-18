@@ -554,6 +554,15 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     const pendingManual = all('documents').some((d) => d.brandId === brand.id && !d.deletedAt && !d.publishedVersionId && chunksFor(d.latestVersionId).some((c) => c.enabled && colorPattern.test(c.text)))
     res.json({ assets: generationAssets(brand), colorReady: colors.length > 0, colorSourceCount: new Set(colors.map((c) => c.documentId)).size, colorStatus: colors.length ? '已加载已发布手册的标准色' : pendingManual ? '品牌手册含颜色规范，但尚未发布' : '尚无已发布的颜色规范，请先上传或解析并发布品牌手册' })
   })
+  route('get', '/generation-assets/:id/image', auth, (req, res) => {
+    const brand = access(req.user, req.query.brandId)
+    const asset = generationAssets(brand).find((item) => item.id === req.params.id && item.ipType)
+    if (!asset) fail('IP形象不存在或无权访问', 404)
+    const file = asset.origin === 'document'
+      ? path.join(originals, get('versions', asset.versionId).file)
+      : materialPath(MATERIAL_ASSETS.find((item) => item.id === asset.materialId))
+    res.set('Cache-Control', 'private, no-store').sendFile(path.resolve(file))
+  })
   function snapshotMaterial(brand, candidate) {
     const asset = MATERIAL_ASSETS.find((a) => a.id === candidate.materialId)
     if (!asset || asset.brand !== brand.name) fail('素材不属于当前品牌', 403)
