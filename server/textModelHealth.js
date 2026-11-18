@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const models = [
+  { value: 'gemini-4-carbon', label: 'Gemini 4 Carbon' },
   { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
   { value: 'gpt-6.1-sol', label: 'GPT-6.1 Sol' },
   { value: 'gpt-6.1-terra', label: 'GPT-6.1 Terra' },

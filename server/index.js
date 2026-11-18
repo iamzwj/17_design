@@ -600,10 +600,14 @@ async function saveVideoReference(source) {
 }
 
 async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
-  const response = await fetch(`${apiBase}${endpoint}`, {
+  const maizi = endpoint === '/v1/chat/completions' && body?.model === 'gemini-4-carbon'
+  const base = maizi ? (process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai').replace(/\/$/, '') : apiBase
+  const apiKey = maizi ? process.env.MAIZI_API_KEY : getApiKey()
+  if (!apiKey) throw new Error('MaiziAI API Key 未配置')
+  const response = await fetch(`${base}${endpoint}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${getApiKey()}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -625,7 +629,7 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
     const message = /openai api error/i.test(String(upstreamMessage))
       ? 'AI 审核服务暂时不可用，请稍后重试'
       : upstreamMessage
-    const error = new Error(typeof message === 'string' ? message : JSON.stringify(message))
+    const error = new Error((typeof message === 'string' ? message : JSON.stringify(message)).replaceAll(apiKey, '[redacted]'))
     error.status = response.status
     throw error
   }

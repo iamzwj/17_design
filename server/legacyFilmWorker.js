@@ -25,10 +25,14 @@ function check(p) {
     throw Error("制作已暂停；上游已提交任务可能继续计费");
 }
 async function api(endpoint, body, timeout = 180000) {
-  const r = await fetch(base + endpoint, {
+  const maizi = endpoint === "/v1/chat/completions" && body?.model === "gemini-4-carbon";
+  const requestBase = maizi ? (process.env.MAIZI_BASE_URL || "https://api.maizitech.ai").replace(/\/$/, "") : base;
+  const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY;
+  if (!apiKey) throw Error("语言模型服务未配置");
+  const r = await fetch(requestBase + endpoint, {
     method: body ? "POST" : "GET",
     headers: {
-      Authorization: `Bearer ${process.env.GRSAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,

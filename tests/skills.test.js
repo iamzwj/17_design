@@ -86,11 +86,11 @@ test('Skill model fallback handles primary timeout and invalid output, while pre
     const seen = []
     const complete = createSkillCompletion({ text: (data) => data.content, request: async (_url, body) => {
       seen.push(body.model)
-      if (body.model === 'gpt-6.1-sol') { if (first === 'timeout') throw new Error('timeout'); return { content: 'invalid JSON' } }
-      return { content: rawSkill, model: 'gemini-3.1-pro' }
+      if (body.model === 'gemini-4-carbon') { if (first === 'timeout') throw new Error('timeout'); return { content: 'invalid JSON' } }
+      return { content: rawSkill, model: 'gpt-6.1-sol' }
     } })
     const result = await complete([], 'generate')
-    assert.deepEqual(seen, ['gpt-6.1-sol', 'gemini-3.1-pro']); assert.equal(result.model, 'gemini-3.1-pro'); assert.equal(result.content, rawSkill)
+    assert.deepEqual(seen, ['gemini-4-carbon', 'gpt-6.1-sol']); assert.equal(result.model, 'gpt-6.1-sol'); assert.equal(result.content, rawSkill)
   }
   const unavailable = createSkillCompletion({ text: () => '', request: async () => { throw new Error('unavailable') } })
   await assert.rejects(unavailable([], 'generate'), /unavailable/)

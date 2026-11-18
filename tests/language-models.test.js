@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { requestLanguageModel } from '../server/languageModels.js'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+process.env.DIEFA_DATA_DIR = mkdtempSync(path.join(tmpdir(), 'language-models-'))
+const { requestLanguageModel } = await import('../server/languageModels.js')
 
 test('language calls preserve their inputs and follow the requested order after timeout and maintenance', async () => {
   const seen = []
@@ -17,8 +22,8 @@ test('language calls preserve their inputs and follow the requested order after 
     return { choices: [{ message: { content: 'OK' } }] }
   }, { messages }, { timeout: 50 })
 
-  assert.deepEqual(seen, ['gpt-6.1-sol', 'gemini-3.1-pro', 'gpt-6.1-terra', 'gpt-5.6-sol', 'gpt-5.6-terra'])
-  assert.equal(result.model, 'gpt-5.6-terra')
+  assert.deepEqual(seen, ['gemini-4-carbon', 'gpt-6.1-sol', 'gemini-3.1-pro', 'gpt-6.1-terra', 'gpt-5.6-sol'])
+  assert.equal(result.model, 'gpt-5.6-sol')
 })
 
 test('language calls do not try a backup after the caller cancels', async () => {

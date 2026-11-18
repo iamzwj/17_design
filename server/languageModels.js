@@ -2,6 +2,7 @@ import { languageModelAvailability } from './languageModelAvailability.js'
 export const availableLanguageModels = () => LANGUAGE_MODELS.filter(languageModelAvailability.available)
 export const requestAvailableLanguageModel = (...args) => languageModelAvailability.request(...args)
 export const LANGUAGE_MODELS = Object.freeze([
+  'gemini-4-carbon',
   'gpt-6.1-sol',
   'gemini-3.1-pro',
   'gpt-6.1-terra',
@@ -20,7 +21,7 @@ export async function requestLanguageModel(request, body, { signal, timeout = 90
       return { ...data, model: data.model || model }
     } catch (error) {
       signal?.throwIfAborted()
-      if ([401, 403, 413].includes(error?.status)) throw error
+      if (error?.status === 413 || ([401, 403].includes(error?.status) && model !== 'gemini-4-carbon')) throw error
       lastError = error
     }
   }
