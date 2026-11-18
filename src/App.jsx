@@ -42,7 +42,7 @@ import { DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY, DEFAULT_IMAGE_RESOLUTION, I
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
-  { id: 'chat', label: '新聊天', caption: '提问与日常创作', icon: 'spark' },
+  { id: 'chat', label: '新聊天', caption: '提问与日常创作', icon: 'chat' },
   { id: 'strategy', label: '活动策划', caption: '洞察与方案生成', icon: 'spark' },
   { id: 'image', label: '图片创作', caption: '灵感变成画面', icon: 'image' },
   { id: 'video', label: '视频创作', caption: '从脚本到成片', icon: 'video' },
