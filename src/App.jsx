@@ -1436,6 +1436,7 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
 
 function TextStudio({ type, conversation, onSave, user }) {
   const brandScope = scopedBrand(user)
+  const chatSkill = useGenerationSkill('chat')
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
   const activityImages = useActivityImages(conversationId.current, type === 'strategy')
@@ -1545,7 +1546,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         startTask(task.id, task.startedAt)
         void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then(async (result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
-            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
           if (type === 'strategy' && conversation.activityContext?.format === 'content') {
             const pages = activityContentPages(result.content)
@@ -1654,6 +1655,7 @@ function TextStudio({ type, conversation, onSave, user }) {
       return
     }
     if (usesTextModel && !textModel) return
+    if (type === 'chat' && chatSkill.id && !chatSkill.selected) { setAttachmentError('所选 Skill 不可用，请重新选择或重新下载'); return }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
     const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
@@ -1721,8 +1723,8 @@ function TextStudio({ type, conversation, onSave, user }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS, PRESENTATION_INSTRUCTIONS].filter(Boolean).join('\n\n')
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
-      const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
+      const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
       if (type === 'strategy') saveTaskState(completedMessages)
@@ -1764,6 +1766,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
+          {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {message.skillSnapshot.title}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
             {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
@@ -1788,7 +1791,7 @@ function TextStudio({ type, conversation, onSave, user }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
+        </div> : <div className="text-tools">{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>} {usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 

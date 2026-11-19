@@ -1345,10 +1345,13 @@ async function handleTextCompletion(req, res, next) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'messages 不能为空' })
     }
+    const skill = req.body.__skill
+    if (skill && (!skill.markdown || skill.markdown.length > 24000)) throw Object.assign(new Error('Skill 内容过长，请精简到 24,000 字符以内'), { status: 400 })
     const safeMessages = (await Promise.all(messages
       .filter((message) => ['user', 'assistant'].includes(message.role))
       .map(normalizeTextMessage)))
       .filter(Boolean)
+    if (skill) safeMessages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
     const context = req.body.__knowledge
     const sources = [...webResult.sources, ...(context?.sources || [])]
@@ -1646,7 +1649,7 @@ for (const task of festivalPosterTasks.filter((item) => item.status === 'running
   setImmediate(() => { void (task.phase === 'generating' ? runFestivalPosterImageTask(task.id) : runFestivalPosterPlanningTask(task.id)) })
 }
 
-installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion, prepareInput: (req) => prepareKnowledgeInput(req, req.path.includes('compliance') ? 'compliance' : 'text') })
+installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion, resolveSkill: (user, id, localSkill) => String(id).startsWith('external-') ? externalSkills.resolve(user, id, 'chat', localSkill) : skillLibrary.resolve(user, id, 'chat'), prepareInput: (req) => prepareKnowledgeInput(req, req.path.includes('compliance') ? 'compliance' : 'text') })
 
 app.post('/api/text', requireAuth, knowledgeMiddleware('text'), handleTextCompletion)
 // Compliance review remains separate from account-only text chat.

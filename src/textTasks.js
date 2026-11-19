@@ -1,6 +1,7 @@
 import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { getKnowledgeSelection } from './knowledgeApi.js'
 import { getAuthToken } from './api.js'
+import { externalSkillPayload } from './externalSkillClient.js'
 
 const liveWaits = new Map()
 const SESSION_KEY = 'diefa-text-task-session-v1'
@@ -39,6 +40,13 @@ export function waitForTextTask(kind, id) {
         await delay(); continue
       }
       missingSince = null
+      if (task.status === 'needs-local-skill') {
+        const token = getAuthToken()
+        const localSkill = await externalSkillPayload(task.skill.id, token)
+        const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+        const response = await fetch(`${base}/api/text/tasks/${encodeURIComponent(id)}/resume-skill`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ localSkill }), signal: AbortSignal.timeout(30_000) })
+        if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error || '恢复 Skill 失败') }
+      }
       if (task.status === 'succeeded') return task.result
       if (task.status === 'failed') throw new Error(task.error || '回复生成失败')
       await delay()
@@ -48,6 +56,7 @@ export function waitForTextTask(kind, id) {
   return promise
 }
 export async function generatePersistentText(kind, id, payload) {
+  if (kind === 'text' && payload.skillId?.startsWith('external-')) payload = { ...payload, localSkill: await externalSkillPayload(payload.skillId) }
   // Idempotent POST: a lost acknowledgment must not create another generation.
   for (let attempt = 0; ; attempt += 1) {
     try { await request(kind, id, payload); break }

@@ -85,3 +85,34 @@ test('brand compliance tasks are owned by the authenticated user, not a shared b
     assert.equal((await fetch(`${base}/${id}`, { headers: { 'X-Text-Session': 'other' } })).status, 404)
   } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
 })
+
+test('chat skills are authorized, applied, and local rules recover without being stored', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-skill-test-'))
+  const localText = 'private local skill rules'
+  const id = randomUUID()
+  const pending = { id, owner: 'alice', kind: 'text', status: 'running', createdAt: Date.now(), input: { messages: [{ role: 'user', content: 'hello' }] }, user: { id: 'alice' }, skill: { id: 'external-one', title: 'Local', external: true, sha256: 'expected' } }
+  fs.writeFileSync(path.join(dataDir, 'text-tasks.json'), JSON.stringify([pending]))
+  const app = express(); app.use(express.json())
+  installTextTasks(app, {
+    dataDir,
+    requireAuth(req, res, next) { req.user = { id: req.headers['x-user'] || 'alice' }; next() },
+    resolveSkill(user, skillId, local) {
+      if (user.id !== 'alice' || skillId !== 'external-one' || local?.markdown !== localText) throw Object.assign(new Error('invalid skill'), { status: 403 })
+      return { id: skillId, title: 'Local', external: true, sha256: 'expected', markdown: local.markdown }
+    },
+    handleCompletion: async (req, res) => res.json({ content: req.body.__skill.markdown === localText ? 'applied' : 'missing' }),
+  })
+  app.use((error, req, res, next) => { void req; void next; res.status(error.status || 500).json({ error: error.message }) })
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve))
+  const base = `http://127.0.0.1:${server.address().port}/api/text/tasks/${id}`
+  try {
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal((await (await fetch(base)).json()).task.status, 'needs-local-skill')
+    assert.equal((await fetch(`${base}/resume-skill`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User': 'bob' }, body: JSON.stringify({ localSkill: { markdown: localText } }) })).status, 404)
+    assert.equal((await fetch(`${base}/resume-skill`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localSkill: { markdown: 'wrong' } }) })).status, 403)
+    assert.equal((await fetch(`${base}/resume-skill`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localSkill: { markdown: localText } }) })).status, 200)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal((await (await fetch(base)).json()).task.result.content, 'applied')
+    assert.ok(!fs.readFileSync(path.join(dataDir, 'text-tasks.json'), 'utf8').includes(localText))
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); fs.rmSync(dataDir, { recursive: true, force: true }) }
+})

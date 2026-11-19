@@ -133,7 +133,7 @@ export function installExternalSkills(app, { dataDir, requireAuth, fetchImpl = f
   app.delete('/api/skills/external/:id', requireAuth, route((req, res) => { own(req.user, req.params.id); records = records.filter((r) => r.id !== req.params.id); save(); res.json({ ok: true }) }))
   return { recommendations, resolve(user, id, target, input) {
     const record = own(user, id)
-    if (!record.compatibility.usable || !record.targets.includes(target)) throw fail(record.compatibility.usable ? record.fit.reason : record.compatibility.reason, 422)
+    if (!record.compatibility.usable || (target !== 'chat' && !record.targets.includes(target))) throw fail(record.compatibility.usable ? record.fit.reason : record.compatibility.reason, 422)
     if (!input || typeof input.markdown !== 'string') throw fail('本机缺少 Skill MD 文件，请到“发现 Skill → 已安装”重新下载', 409)
     validateSkillMarkdown(input.markdown)
     if (sha(input.markdown) !== record.sha256) throw fail('本地 Skill 文件已变更或损坏，请重新下载', 409)

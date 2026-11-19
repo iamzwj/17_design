@@ -17,10 +17,10 @@ export function useGenerationSkill(target) {
     if (!token) { setSkills([]); setExternalRecords([]); setId(''); setError(''); setLoading(false); return }
     setLoading(true)
     try {
-      const [data, external] = await Promise.all([skillRequest(`?target=${target}`), installedLocalSkills(token)])
+      const [data, external] = await Promise.all([skillRequest(target === 'chat' ? '' : `?target=${target}`), installedLocalSkills(token)])
       if (getAuthToken() !== token) return
       setExternalRecords(external)
-      setSkills([...data.skills, ...external.filter((s) => s.compatibility.usable && s.localReady && s.targets.includes(target))]); setError('')
+      setSkills([...data.skills, ...external.filter((s) => s.compatibility.usable && s.localReady && (target === 'chat' || s.targets.includes(target)))]); setError('')
     } catch (e) { if (getAuthToken() === token) setError(e.message) } finally { if (getAuthToken() === token) setLoading(false) }
   }, [target])
   useEffect(() => {
@@ -31,6 +31,6 @@ export function useGenerationSkill(target) {
     return () => events.forEach((event) => window.removeEventListener(event, changed))
   }, [target, reload])
   const local = externalRecords.find((s) => s.id === id)
-  const unavailableReason = local ? !local.localReady ? local.localError : !local.compatibility.usable ? local.compatibility.reason : !local.targets.includes(target) ? local.fit?.reason || '此 Skill 尚未适配当前工具' : '' : ''
+  const unavailableReason = local ? !local.localReady ? local.localError : !local.compatibility.usable ? local.compatibility.reason : target !== 'chat' && !local.targets.includes(target) ? local.fit?.reason || '此 Skill 尚未适配当前工具' : '' : ''
   return { id, skills, loading, unavailableReason, selected: skills.find((s) => s.id === id), error, reload, select: (value) => selectGenerationSkill(target, value) }
 }

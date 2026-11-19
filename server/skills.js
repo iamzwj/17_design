@@ -164,7 +164,7 @@ export function installSkills(app, { dataDir, requireAuth, complete }) {
       const record = store.skills.find((s) => s.id === id)
       const skill = builtin || record?.published
       if (!skill) throw fail('所选 Skill 已取消发布或不存在，请重新选择', 404)
-      if (!skillTargets(skill).includes(target)) throw fail('所选 Skill 不适用于当前生成工具')
+      if (target !== 'chat' && !skillTargets(skill).includes(target)) throw fail('所选 Skill 不适用于当前生成工具')
       validateSkillMarkdown(skill.markdown)
       return { id, title: skill.title, markdown: skill.markdown, targets: skillTargets(skill), builtIn: Boolean(builtin), publishedAt: skill.updatedAt, referenceCount: builtin?.referenceCount || 0 }
     },
