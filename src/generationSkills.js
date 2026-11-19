@@ -1,3 +1,4 @@
+import { uniqueSkillOptions } from './skillOptions.js'
 import { readWorkspaceStorage, writeWorkspaceStorage } from './workspaceStorage.js'
 import { useCallback, useEffect, useState } from 'react'
 import { getAuthToken } from './api.js'
@@ -20,7 +21,10 @@ export function useGenerationSkill(target) {
       const [data, external] = await Promise.all([skillRequest(target === 'chat' ? '' : `?target=${target}`), installedLocalSkills(token)])
       if (getAuthToken() !== token) return
       setExternalRecords(external)
-      setSkills([...data.skills, ...external.filter((s) => s.compatibility.usable && s.localReady && (target === 'chat' || s.targets.includes(target)))]); setError('')
+      const options = uniqueSkillOptions([...data.skills, ...external.filter((s) => s.compatibility.usable && s.localReady && (target === 'chat' || s.targets.includes(target)))], readWorkspaceStorage(key(target)) || '')
+      setSkills(options.skills)
+      if (options.selectedId !== (readWorkspaceStorage(key(target)) || '')) { writeWorkspaceStorage(key(target), options.selectedId); setId(options.selectedId) }
+      setError('')
     } catch (e) { if (getAuthToken() === token) setError(e.message) } finally { if (getAuthToken() === token) setLoading(false) }
   }, [target])
   useEffect(() => {
