@@ -806,14 +806,17 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .text-answer .answer-plain .answer-bullet { align-items: flex-start; }
 .text-answer .answer-plain .answer-bullet i { flex: none; }
 
+.ppt-result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.text-answer .ppt-result-actions .message-copy-button.with-label { height: 36px; margin: 0; padding: 0 12px; font-size: 14px; }
 .ppt-download-button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding: 10px 16px;
+  height: 36px;
+  margin: 0;
+  padding: 0 14px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 7px;
   background: #176fe8;
   color: #fff;
   font: inherit;

@@ -1,3 +1,4 @@
+import { skillDisplayName } from './skillDisplayName.js'
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
@@ -1786,15 +1787,15 @@ function TextStudio({ type, conversation, onSave, user }) {
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
-          {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {message.skillSnapshot.title}</div>}
+          {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
             {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
-            <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>
+            {!message.pptTaskId && <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
           </>}
-          {message.pptTaskId && <button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button>}
+          {message.pptTaskId && <div className="ppt-result-actions"><MessageCopyButton content={message.content} label/><button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button></div>}
           {imageRecords && <ActivityImageResults records={imageRecords}/>}
         </div>
       })}
