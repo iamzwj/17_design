@@ -74,6 +74,7 @@ const WORKSPACE_TITLES = {
 const MORE_WORKSPACE_TITLES = {
   'please-day': ['PLEASE DAY', '朴里节头像框'],
   qr: ['BATCH COMPOSER', '二维码批量制作'],
+  'pulin-report': ['PULIN REPORT', '朴邻战报制作'],
 }
 
 const RATIO_OPTIONS = [
@@ -604,6 +605,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <button disabled={item.disabled} className={active === item.id ? 'active' : ''} aria-expanded={expandedMenu === 'more'} onClick={() => { if (item.disabled) return; toggleMenu('more'); onChange(item.id) }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'more' && <div className="module-submenu" role="menu" aria-label="实用工具列表">
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'please-day' ? 'true' : undefined} className={active === 'more' && moreTool === 'please-day' ? 'active' : ''} onClick={() => { onSelectMoreTool('please-day'); onClose() }}>朴里节头像框</button>
+            <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'pulin-report' ? 'true' : undefined} className={active === 'more' && moreTool === 'pulin-report' ? 'active' : ''} onClick={() => { onSelectMoreTool('pulin-report'); onClose() }}>朴邻战报制作</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>二维码批量制作</button>
           </div>}
         </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
@@ -2139,7 +2141,7 @@ export default function App() {
     : active === 'admin'
       ? <AdminStudio key={workspaceToken}/>
     : active === 'more'
-      ? <MoreTools key={workspaceToken} tool={moreTool}/>
+      ? <MoreTools key={workspaceToken} tool={moreTool} user={user} onLogin={() => openLogin('more')}/>
     : active === 'image'
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'content'
