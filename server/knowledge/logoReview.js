@@ -1,3 +1,4 @@
+import { collectMaiziStream } from '../maiziStream.js'
 import { LANGUAGE_MODELS } from '../languageModels.js'
 import sharp from 'sharp'
 
@@ -34,9 +35,9 @@ export async function reviewLogo(image, logo, brandName, { request, signal } = {
         const base = maizi ? (process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai') : (process.env.GRSAI_BASE_URL || 'https://grsaiapi.com')
         const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY
         if (!apiKey) throw new Error('语言模型服务未配置')
-        const response = await fetch(`${base.replace(/\/$/, '')}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(body), signal: AbortSignal.any([AbortSignal.timeout(60000), ...(signal ? [signal] : [])]) })
+        const response = await fetch(`${base.replace(/\/$/, '')}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(maizi ? { ...body, stream: true } : body), signal: AbortSignal.any([AbortSignal.timeout(maizi ? 120000 : 60000), ...(signal ? [signal] : [])]) })
         if (!response.ok) throw new Error(`Logo检查服务返回HTTP ${response.status}`)
-        data = await response.json()
+        data = maizi && response.headers.get('content-type')?.includes('text/event-stream') ? await collectMaiziStream(response) : await response.json()
       }
       const content = data.choices?.[0]?.message?.content
       if (typeof content !== 'string') throw new Error('Logo检查未返回结果')

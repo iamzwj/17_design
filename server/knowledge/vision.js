@@ -1,3 +1,4 @@
+import { collectMaiziStream } from '../maiziStream.js'
 import { LANGUAGE_MODELS } from '../languageModels.js'
 import { renderPptx } from './renderPptx.js'
 import fs from 'node:fs/promises'
@@ -36,11 +37,11 @@ export async function analyzePage(image, context = '', { request } = {}) {
         const response = await fetch(`${base.replace(/\/$/, '')}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify(input),
+          body: JSON.stringify(maizi ? { ...input, stream: true } : input),
           signal: AbortSignal.timeout(120_000),
         })
         if (!response.ok) throw new Error(`图文服务暂不可用（HTTP ${response.status}），可稍后重试`)
-        data = await response.json()
+        data = maizi && response.headers.get('content-type')?.includes('text/event-stream') ? await collectMaiziStream(response) : await response.json()
       }
       const content = data.choices?.[0]?.message?.content
       if (typeof content !== 'string') throw new Error('图文服务未返回解析结果')

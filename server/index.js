@@ -1,3 +1,4 @@
+import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
 import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './languageModels.js'
 import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
@@ -610,10 +611,11 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(maizi ? { ...body, stream: true } : body),
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   })
 
+  if (maizi && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) return collectMaiziStream(response)
   const raw = await response.text()
   let data
   try {
@@ -1329,7 +1331,7 @@ app.get('/api/batch-spreadsheet', async (req, res, next) => {
 
 const textModelHealth = startTextModelHealth({
   dataDir: waterfallDataDir,
-  complete: (body) => requestUpstream('/v1/chat/completions', body, undefined, 60_000),
+  complete: (body) => requestUpstream('/v1/chat/completions', body, undefined, body.model === 'gemini-4-carbon' ? 180_000 : 60_000),
   readText: (reply) => {
     const content = reply?.choices?.[0]?.message?.content ?? reply?.output_text
     if (typeof content === 'string') return content
@@ -1390,7 +1392,7 @@ async function handleTextCompletion(req, res, next) {
     }
     const complete = async (body) => {
       if (!selectedModel) return requestLanguageModel(requestTextUpstream, body)
-      const result = await requestTextUpstream('/v1/chat/completions', { ...body, model: selectedModel }, 90_000)
+      const result = await requestTextUpstream('/v1/chat/completions', { ...body, model: selectedModel }, selectedModel === 'gemini-4-carbon' ? 180_000 : 90_000)
       return { ...result, model: result.model || selectedModel }
     }
     const upstreamRequest = {

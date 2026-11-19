@@ -1,3 +1,4 @@
+import { collectMaiziStream } from './maiziStream.js'
 import { requestLanguageModel } from './languageModels.js'
 import { filmLocationReviewTargets } from '../shared/filmReviewWarnings.js';
 import { reviewFilmImages } from './filmImageReview.js';
@@ -67,10 +68,10 @@ async function api(endpoint, body, timeout = 180000) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify(maizi ? { ...body, stream: true } : body) : undefined,
     signal: AbortSignal.timeout(timeout),
   });
-  const d = await r.json();
+  const d = maizi && r.ok && r.headers.get("content-type")?.includes("text/event-stream") ? await collectMaiziStream(r) : await r.json();
   if (!r.ok || (d.error && !d.id))
     throw Error(
       (typeof d.error === "string" ? d.error : JSON.stringify(d.error || d)).replaceAll(apiKey || "__missing_key__", "[redacted]"),
