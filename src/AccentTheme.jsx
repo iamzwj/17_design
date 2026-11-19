@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
-import { ACCENT_STORAGE_KEY, ACCENT_THEMES, applyAccentTheme, readAccentTheme } from './accentThemes.js'
+import { ACCENT_THEMES, applyAccentTheme, readAccentTheme, saveAccentTheme } from './accentThemes.js'
 import './accentTheme.css'
 
-export default function AccentTheme() {
-  const [accent, setAccent] = useState(readAccentTheme)
+export default function AccentTheme({ user }) {
+  const [accent, setAccent] = useState(() => readAccentTheme(user))
 
-  useEffect(() => {
-    applyAccentTheme(accent)
-    try { localStorage.setItem(ACCENT_STORAGE_KEY, accent) } catch { /* Keep the accent applied for this session. */ }
-  }, [accent])
+  useEffect(() => { setAccent(readAccentTheme(user)) }, [user?.id, user?.identity])
+
+  function selectAccent(id) {
+    setAccent(id)
+    applyAccentTheme(id)
+    saveAccentTheme(user, id)
+  }
 
   return <div className="theme-menu-row accent-theme-row">
     <span className="theme-menu-label">主题色</span>
@@ -20,7 +23,7 @@ export default function AccentTheme() {
         aria-pressed={accent === id}
         title={label}
         style={{ '--accent-swatch': swatch }}
-        onClick={() => setAccent(id)}
+        onClick={() => selectAccent(id)}
       />)}
     </div>
   </div>

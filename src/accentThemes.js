@@ -8,9 +8,23 @@ export const ACCENT_THEMES = [
   { id: 'pink', label: '粉色', swatch: '#f54b9b' },
 ]
 
-export function readAccentTheme() {
-  const saved = localStorage.getItem(ACCENT_STORAGE_KEY)
-  return ACCENT_THEMES.find(({ id }) => id === saved)?.id ?? 'blue'
+export function defaultAccentTheme(identity) {
+  return identity === 'yanxuanjia' ? 'green' : identity === 'pulin' ? 'orange' : 'blue'
+}
+
+export function accentStorageKey(user) {
+  return user?.id ? `${ACCENT_STORAGE_KEY}:${encodeURIComponent(user.id)}` : `${ACCENT_STORAGE_KEY}:guest`
+}
+
+export function readAccentTheme(user) {
+  let saved
+  try { saved = localStorage.getItem(accentStorageKey(user)) } catch { /* Use the identity default when storage is unavailable. */ }
+  return ACCENT_THEMES.find(({ id }) => id === saved)?.id ?? defaultAccentTheme(user?.identity)
+}
+
+export function saveAccentTheme(user, id) {
+  if (!ACCENT_THEMES.some((theme) => theme.id === id)) return
+  try { localStorage.setItem(accentStorageKey(user), id) } catch { /* Keep the choice for the current session. */ }
 }
 
 export function applyAccentTheme(id) {

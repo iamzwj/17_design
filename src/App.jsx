@@ -7,6 +7,7 @@ import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActiv
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
 import AccentTheme from './AccentTheme.jsx'
+import { applyAccentTheme, readAccentTheme } from './accentThemes.js'
 import { userError } from './userErrors.js'
 import ToolPageHeader from './ToolPageHeader.jsx'
 import dgenWordmark from './dgen-wordmark.svg?raw'
@@ -624,7 +625,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 50}</b></div>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
-          <AccentTheme/>
+          <AccentTheme user={user}/>
           {THEME_SELECTION_ENABLED && <div className="theme-menu-row">
             <span className="theme-menu-label"><Icon name="sun" size={16}/><span>显示模式</span></span>
             <div className="theme-mode-options" role="group" aria-label="显示模式">
@@ -1819,6 +1820,7 @@ export default function App() {
   const localPreviewTheme = localPreviewParams.get('theme')
   const [authState, setAuthState] = useState(() => getAuthToken() ? 'checking' : 'guest')
   const [user, setUser] = useState(null)
+  useEffect(() => { if (authState !== 'checking') applyAccentTheme(readAccentTheme(user)) }, [authState, user?.id, user?.identity])
   const [loginPromptModule, setLoginPromptModule] = useState(null)
   const [active, setActive] = useState(() => localPreviewParams.get('module') === 'strategy' ? 'strategy' : localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
   useEffect(() => {
