@@ -43,13 +43,13 @@ import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
 
 const MODULES = [
   { id: 'chat', label: '新聊天', caption: '提问与日常创作', icon: 'chat' },
-  { id: 'strategy', label: '活动策划', caption: '洞察与方案生成', icon: 'spark' },
+  { id: 'strategy', label: '活动策划', caption: '洞察与方案生成', icon: 'plan' },
   { id: 'image', label: '图片创作', caption: '灵感变成画面', icon: 'image' },
   { id: 'video', label: '视频创作', caption: '从脚本到成片', icon: 'video' },
   { id: 'compliance', label: '合规审核', caption: '内容风险预检', icon: 'shield' },
-  { id: 'skills', label: 'Skill 库', caption: '把经验变成可复用的方法', icon: 'blocks' },
   { id: 'knowledge', label: '知识库', caption: '素材、品牌与营销知识', icon: 'library' },
   { id: 'more', label: '实用工具', caption: '头像与批量套图', icon: 'blocks' },
+  { id: 'skills', label: 'Skill 库', caption: '把经验变成可复用的方法', icon: 'spark' },
 ]
 
 const KNOWLEDGE_SECTIONS = [
