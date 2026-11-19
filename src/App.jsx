@@ -1294,7 +1294,7 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
 
 function UserMessage({ content, images = [], files = [], messageRef, onPreview, protectedImages = false }) {
   return <div ref={messageRef} className="user-message-group">
-    {images.length > 0 && <div className="message-refs">{images.map((item, index) => <button type="button" onClick={() => { if (!protectedImages || !item.src.startsWith('/api/chat-images/')) onPreview(item.src) }} aria-label={`预览图片 ${index + 1}`} key={`${item.name || item.src}-${index}`}>{protectedImages ? <QuietReferenceImage src={item.src}/> : <img src={item.src} alt={item.name || '参考图'}/>}</button>)}</div>}
+    {images.length > 0 && <div className="message-refs">{images.map((item, index) => <button type="button" onClick={() => onPreview(item.src)} aria-label={`预览图片 ${index + 1}`} key={`${item.name || item.src}-${index}`}>{protectedImages ? <QuietReferenceImage src={item.src}/> : <img src={item.src} alt={item.name || '参考图'}/>}</button>)}</div>}
     {(content || files.length > 0) && <div className="user-message">
       {files.length > 0 && <div className="text-attachment-list">{files.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
       {content && <div className="user-message-content">{content}</div>}

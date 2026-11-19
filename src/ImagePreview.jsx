@@ -1,6 +1,6 @@
 import { userError } from './userErrors.js'
 import { useEffect, useMemo, useState } from 'react'
-import { downloadGeneratedImage } from './api.js'
+import { downloadGeneratedImage, getAuthToken } from './api.js'
 import { Icon } from './icons.jsx'
 
 /** Shared full-screen image preview used by waterfall results and Hub outputs. */
@@ -11,7 +11,20 @@ export default function ImagePreview({ url, urls, prompt, onClose }) {
   }, [url, urls])
   const [index, setIndex] = useState(() => Math.max(0, images.indexOf(url)))
   const activeUrl = images[index] || images[0] || url
+  const [privateUrl, setPrivateUrl] = useState('')
   const canBrowse = images.length > 1
+
+  useEffect(() => {
+    setPrivateUrl('')
+    if (!activeUrl?.startsWith('/api/chat-images/')) return undefined
+    const controller = new AbortController()
+    let objectUrl = ''
+    fetch(activeUrl, { headers: { Authorization: `Bearer ${getAuthToken()}` }, signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('图片加载失败'); return response.blob() })
+      .then((blob) => { objectUrl = URL.createObjectURL(blob); setPrivateUrl(objectUrl) })
+      .catch(() => {})
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [activeUrl])
 
   useEffect(() => {
     const nextIndex = images.indexOf(url)
@@ -33,14 +46,14 @@ export default function ImagePreview({ url, urls, prompt, onClose }) {
 
   async function download() {
     try {
-      await downloadGeneratedImage(activeUrl, prompt)
+      await downloadGeneratedImage(activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl, prompt)
     } catch (error) {
       window.alert(`下载失败：${userError(error.message) || '请稍后重试'}`)
     }
   }
 
   return <div className="image-preview" role="dialog" aria-modal="true" aria-label="图片预览" onClick={onClose}>
-    <img src={activeUrl} alt={`AI 生成图片预览 ${index + 1}`} onClick={(event) => event.stopPropagation()}/>
+    <img src={activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl} alt={`图片预览 ${index + 1}`} onClick={(event) => event.stopPropagation()}/>
     <div className="preview-actions" onClick={(event) => event.stopPropagation()}>
       {canBrowse && <><button className="preview-nav" type="button" onClick={previous} aria-label="上一张">‹</button><span className="preview-counter">{index + 1} / {images.length}</span><button className="preview-nav" type="button" onClick={next} aria-label="下一张">›</button></>}
       <button className="preview-download" type="button" onClick={() => void download()}><Icon name="download" size={17}/>下载</button>

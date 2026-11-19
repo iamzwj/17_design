@@ -8,6 +8,7 @@ import GenerationWelcome from './GenerationWelcome.jsx'
 import GenerationSkillPicker from './GenerationSkillPicker.jsx'
 import { useGenerationSkill } from './generationSkills.js'
 import { compressImageForUpload, isSupportedImageFile } from './imageUpload.js'
+import ImagePreview from './ImagePreview.jsx'
 
 const MODELS = [
   { value: 'doubao-seedance-2-5-260628', label: 'Seedance 2.5', resolutions: ['480p', '720p', '1080p'], maximum: 30, seedance25: true },
@@ -75,6 +76,9 @@ export default function VideoStudio() {
   const [aspectRatio, setAspectRatio] = useState('16:9')
   const [error, setError] = useState('')
   const [imagePicker, setImagePicker] = useState(false)
+  const [previewImage, setPreviewImage] = useState('')
+  const [draggingFiles, setDraggingFiles] = useState(false)
+  const dragDepth = useRef(0)
   const imageRef = useRef(null)
   const videoRef = useRef(null)
   const resultsRef = useRef(null)
@@ -283,7 +287,7 @@ export default function VideoStudio() {
             </header>
             {(task.referenceImages?.length > 0 || task.referenceVideos?.length > 0) && (
               <div className="video-waterfall-references">
-                {task.referenceImages?.map((url, index) => <img src={url} alt={`参考图 ${index + 1}`} key={`${url}-${index}`}/>)}
+                {task.referenceImages?.map((url, index) => <button type="button" className="video-history-reference" onClick={() => setPreviewImage(url)} aria-label={`预览参考图 ${index + 1}`} key={`${url}-${index}`}><img src={url} alt=""/></button>)}
                 {task.referenceVideos?.map((url, index) => <video muted preload="metadata" src={url} aria-label={`参考视频 ${index + 1}`} key={`${url}-${index}`}/>)}
               </div>
             )}
@@ -295,11 +299,13 @@ export default function VideoStudio() {
     </div>
     <div className="waterfall-composer-wrap" ref={composerRef}>
       {modes.length > 0 && <div className="reference-mode-picker" aria-label="参考方式">{modes.map((mode) => <button type="button" key={mode} className={referenceMode === mode ? 'selected' : ''} onClick={() => selectMode(mode)}>{REFERENCE_MODES[mode].label}</button>)}</div>}
-      <div className="composer waterfall-composer glass-strong">
-        {references.length > 0 && <div className="reference-strip sortable-reference-strip video-reference-strip" aria-label="视频参考素材，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview">{item.kind === 'video' ? <video muted preload="metadata" src={item.src}/> : <img src={item.src} alt="参考图"/>}</button><span className="reference-order">{referenceLabel(referenceMode, item, index)}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考素材"><Icon name="x" size={13}/></button></div>)}</div>}
+      <div className={`composer waterfall-composer glass-strong ${draggingFiles ? 'is-dragging-files' : ''}`} onDragEnter={(event) => { if (!Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); dragDepth.current += 1; setDraggingFiles(true) }} onDragOver={(event) => { if (!Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }} onDragLeave={(event) => { if (!Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDraggingFiles(false) }} onDrop={(event) => { if (!Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); event.stopPropagation(); dragDepth.current = 0; setDraggingFiles(false); const files = Array.from(event.dataTransfer.files); const imageFiles = files.filter((file) => file.type.startsWith('image/')); if (imageFiles.length && mediaLimit(selectedModel, referenceMode, 'image') > 0) void appendImages(imageFiles); else setError('当前模式不支持图片参考，请切换参考方式') }}>
+        {draggingFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
+        {references.length > 0 && <div className="reference-strip sortable-reference-strip video-reference-strip" aria-label="视频参考素材，拖动可调整顺序">{references.map((item, index) => <div key={`${item.name}-${index}`} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { if (Array.from(event.dataTransfer.types).includes('Files')) return; event.preventDefault(); event.stopPropagation(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from) && from !== index) reorderReferences(from, index) }}><button type="button" className="reference-preview">{item.kind === 'video' ? <video muted preload="metadata" src={item.src}/> : <img src={item.src} alt="参考图"/>}</button><span className="reference-order">{referenceLabel(referenceMode, item, index)}</span><button type="button" className="reference-remove" onClick={() => setReferences((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除参考素材"><Icon name="x" size={13}/></button></div>)}</div>}
         <textarea ref={promptRef} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit() } }} placeholder={referenceMode === 'edit' ? '描述要怎样编辑源视频，例如：将背景换成雨夜，同时保留人物动作和运镜…' : referenceMode === 'extend' ? '描述接下来的视频内容，例如：从视频 1 的结尾继续，人物走进车站…' : '描述你想生成的视频…'} rows="2"/>
         <div className="composer-tools"><div className="tool-group">{mediaLimit(selectedModel, referenceMode, 'image') > images.length && <><button className="tool-button reference-add" type="button" onClick={() => setImagePicker(true)} aria-label="添加图片参考"><Icon name="image" size={17}/></button><input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { void appendImages(event.target.files); event.target.value = '' }}/></>}{mediaLimit(selectedModel, referenceMode, 'video') > videos.length && <><button className="tool-button reference-add video-reference-add" type="button" onClick={() => videoRef.current?.click()} aria-label="添加视频参考"><Icon name="video" size={17}/></button><input ref={videoRef} hidden type="file" accept="video/mp4,video/quicktime,video/webm" multiple onChange={(event) => { void appendVideos(event.target.files); event.target.value = '' }}/></>}<VideoSelect label="视频模型" value={model} onChange={setModel} options={MODELS.map((item) => ({ value: item.value, label: item.label }))}/>{locksAspectRatio ? <span className="video-locked-setting">自适应画幅</span> : <VideoSelect label="视频画幅" value={aspectRatio} onChange={setAspectRatio} options={aspectRatios}/>}<VideoSelect label="视频清晰度" value={resolution} onChange={setResolution} options={selectedModel.resolutions.map((item) => ({ value: item, label: item }))}/>{locksDuration ? <span className="video-locked-setting">自动时长</span> : <label className="video-duration-control"><input type="range" min={durationMin} max={durationMax} step="1" value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="视频时长"/><output>{duration}秒</output></label>}<GenerationSkillPicker target="video" state={skillState}/></div><button className="send-button" type="button" onClick={() => void submit()} disabled={!prompt.trim()} aria-label="生成视频"><Icon name="arrowUp" size={18}/></button></div>
       </div>{error && <small className="composer-note error">{error}</small>}
     </div>
+    {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage('')}/>}
   </section>
 }

@@ -147,6 +147,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .reference-strip { display: flex; gap: 8px; padding: 0 4px 9px; }
 .reference-strip > div { width: 52px; height: 52px; border-radius: 10px; position: relative; border: 1px solid rgba(255,255,255,.8); }
 .reference-preview { display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; overflow: hidden; background: transparent; cursor: zoom-in; }.reference-preview img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; transition: filter .16s ease; }.reference-preview:hover img { filter: brightness(.92); }
+.video-history-reference { display: block; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: zoom-in; }.video-history-reference img { display: block; }
 .reference-remove { position: absolute; right: -5px; top: -5px; width: 17px; height: 17px; padding: 0; border: 1px solid rgba(255,255,255,.8); border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; cursor: pointer; }
 
 .waterfall-workspace { overflow: hidden; }
