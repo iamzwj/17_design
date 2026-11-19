@@ -54,3 +54,23 @@ test('activity generation loads marketing evidence AND identity rules, keeps pag
     await assert.rejects(kb.prepare(null, input, 'text'), /请先登录/)
   } finally { await kb.close(); await new Promise(r => server.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }) }
 })
+
+
+test('activity context retains a large brand rule set and trims optional marketing references', async () => {
+  const { prepareActivityContext } = await import('../server/knowledge/marketing.js')
+  const brand = { id: 'brand', name: '研选家' }, marketing = { id: 'marketing', name: '营销活动' }
+  const doc = { id: 'doc', brandId: 'marketing', publishedVersionId: 'v' }
+  const version = { id: 'v', title: '活动方案', number: 1, kind: 'document' }
+  const chunks = Array.from({ length: 4 }, (_, i) => ({ id: `c${i}`, enabled: true, source: `p${i}`, text: '参考资料'.repeat(500) }))
+  let trace
+  const result = await prepareActivityContext({ user: { id: 'user' }, input: { prompt: '卫浴翻新咨询活动' }, tool: 'text', activity: { identity: '研选家', enabled: true },
+    all: (type) => type === 'brands' ? [brand, marketing] : type === 'documents' ? [doc] : [],
+    get: (type, id) => type === 'versions' ? version : type === 'traces' ? { rules: [], retrieved: [] } : null,
+    access: () => {}, chunksFor: () => chunks, search: async () => ({ results: chunks.map((c) => ({ ...c, documentId: 'doc' })) }),
+    prepare: async () => ({ id: 'trace', prompt: '品牌规范'.repeat(3400), sources: [{ kind: 'rule', title: '品牌规范' }] }),
+    tracePut: (value) => { trace = value; return value }, finish: () => {}, id: () => 'new', now: () => 0, clean: (v, n) => String(v || '').slice(0, n), fail: (message) => { throw Error(message) } })
+  assert.ok(result.prompt.length <= 24000)
+  assert.ok(result.prompt.includes('品牌规范'.repeat(3400)))
+  assert.ok(result.prompt.includes('研选家服务营销方法'))
+  assert.ok(trace.retrieved.length < chunks.length)
+})
