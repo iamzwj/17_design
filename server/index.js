@@ -1191,7 +1191,7 @@ async function normalizeTextMessage({ role, content }, generalImages = false) {
   const imageSources = content
     .filter((part) => part?.type === 'image_url' && typeof part?.image_url?.url === 'string')
     .map((part) => part.image_url.url)
-    .slice(0, 4)
+    .slice(0, generalImages ? 6 : 4)
 
   const [visionAnalysis, recognizedImages] = await Promise.all([
     imageSources.length ? analyzeImageLayout(imageSources, generalImages ? textParts.join('\n') || '请描述图片' : '') : Promise.resolve(''),

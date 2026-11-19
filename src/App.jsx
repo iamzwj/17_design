@@ -1603,8 +1603,9 @@ function TextStudio({ type, conversation, onSave, user }) {
   }, [brand, messages, onSave, type, webSearch])
 
   async function appendComplianceFiles(fileList) {
-    const files = Array.from(fileList || []).slice(0, 4 - attachments.length)
-    if (!files.length && fileList?.length) { setAttachmentError('最多上传 4 张图片或文件'); return }
+    const limit = type === 'chat' ? 6 : 4
+    const files = Array.from(fileList || []).slice(0, limit - attachments.length)
+    if (!files.length && fileList?.length) { setAttachmentError(`最多上传 ${limit} 张图片或文件`); return }
     if (type === 'chat' && files.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024)) { setAttachmentError('请拖入 10MB 以内的 JPG、PNG、WebP 或 GIF 图片'); return }
     const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || !complianceFileKind(file))
     if (invalid) { setAttachmentError(`${invalid.name} 不支持或超过 12MB`); return }
@@ -1615,7 +1616,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         if (!plainText(content)) throw new Error(`${file.name} 未提取到可审核的文字内容`)
         return { name: file.name, kind: 'text', mime: file.type || 'application/octet-stream', content }
       }))
-      setAttachments((current) => [...current, ...encoded].slice(0, 4))
+      setAttachments((current) => [...current, ...encoded].slice(0, limit))
       setAttachmentError('')
     } catch (error) { setAttachmentError(userError(error.message) || '文件解析失败') }
   }
@@ -1652,7 +1653,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     setDraggingComplianceFiles(false)
     const generatedImage = event.dataTransfer?.getData(GENERATED_IMAGE_DRAG_TYPE)
     if (generatedImage) {
-      setAttachments((current) => current.some((item) => item.src === generatedImage) ? current : [...current, { name: '已生成图片', kind: 'image', mime: 'image/*', src: generatedImage }].slice(0, 4))
+      setAttachments((current) => current.some((item) => item.src === generatedImage) ? current : [...current, { name: '已生成图片', kind: 'image', mime: 'image/*', src: generatedImage }].slice(0, type === 'chat' ? 6 : 4))
       return
     }
     await appendComplianceFiles(droppedFiles(event.dataTransfer))
@@ -1811,7 +1812,7 @@ function TextStudio({ type, conversation, onSave, user }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
+        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
