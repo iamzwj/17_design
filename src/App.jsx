@@ -555,6 +555,9 @@ function BrandIcon({ alt = '' }) {
 function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onLogout, onLogin }) {
   const pinned = conversations.filter((conversation) => conversation.pinned)
   const regular = conversations.filter((conversation) => !conversation.pinned)
+  const [pinnedOpen, setPinnedOpen] = useState(() => readWorkspaceStorage("dgen-sidebar-pinned-open") !== "false")
+  const [historyOpen, setHistoryOpen] = useState(() => readWorkspaceStorage("dgen-sidebar-history-open") !== "false")
+  const toggleHistory = (open, setOpen, key) => { const next = !open; setOpen(next); writeWorkspaceStorage(key, String(next)) }
   const [accountExpanded, setAccountExpanded] = useState(false)
   const knowledgeActive = KNOWLEDGE_SECTIONS.some((item) => item.id === active)
   const [expandedMenu, setExpandedMenu] = useState(() => ['video', 'film'].includes(active) ? 'video' : knowledgeActive ? 'knowledge' : ['skills', 'discover-skills'].includes(active) ? 'skills' : active === 'content' ? 'content' : null)
@@ -616,14 +619,14 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           </div>}
         </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
       </nav>
-      <div className="nav-label nav-label-secondary history-heading"><span>置顶</span></div>
-      <div className="conversation-history pinned-history">
+      <button type="button" className="nav-label nav-label-secondary history-heading history-toggle" aria-expanded={pinnedOpen} aria-controls="sidebar-pinned-history" onClick={() => toggleHistory(pinnedOpen, setPinnedOpen, "dgen-sidebar-pinned-open")}><span>置顶</span><Icon name="chevron" size={13}/></button>
+      {pinnedOpen && <div id="sidebar-pinned-history" className="conversation-history pinned-history">
         {pinned.length === 0 ? <div className="history-empty compact"><Icon name="pin" size={15}/><span>暂无置顶对话</span></div> : pinned.map((conversation) => <ConversationRow key={conversation.id} conversation={conversation} activeConversationId={activeConversationId} onSelect={(item) => { onSelectConversation(item); onClose() }} onPin={onPinConversation} onArchive={onArchiveConversation} onRename={onRenameConversation}/>)}
-      </div>
-      <div className="nav-label history-heading conversation-heading"><span>对话记录</span></div>
-      <div className="conversation-history">
+      </div>}
+      <button type="button" className="nav-label history-heading conversation-heading history-toggle" aria-expanded={historyOpen} aria-controls="sidebar-conversation-history" onClick={() => toggleHistory(historyOpen, setHistoryOpen, "dgen-sidebar-history-open")}><span>对话记录</span><Icon name="chevron" size={13}/></button>
+      {historyOpen && <div id="sidebar-conversation-history" className="conversation-history">
         {regular.length === 0 ? <div className="history-empty"><Icon name="history" size={18}/><span>还没有历史对话</span></div> : regular.slice(0, 20).map((conversation) => <ConversationRow key={conversation.id} conversation={conversation} activeConversationId={activeConversationId} onSelect={(item) => { onSelectConversation(item); onClose() }} onPin={onPinConversation} onArchive={onArchiveConversation} onRename={onRenameConversation}/>)}
-      </div>
+      </div>}
       <div className="sidebar-bottom" onMouseEnter={keepAccountMenuOpen} onMouseLeave={scheduleAccountMenuClose}>
         {user && accountExpanded && <div className="account-dropdown" onMouseEnter={keepAccountMenuOpen}>
           <div className="account-menu-email"><Icon name="mail" size={15}/><span>{user.email}{user.identity && <small> · {ACCOUNT_IDENTITY_LABELS[user.identity]}</small>}</span></div>
