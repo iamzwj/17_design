@@ -5,6 +5,11 @@ export const BUILTIN_SKILLS = [{
   previewUrl: '/pulin-title/stacked-subtitle-hands.png', category: '设计创作', author: 'D-Gen 内置', builtIn: true, canEdit: false, targets: ['image'], referenceCount: 1,
   updatedAt: '2026-10-23T00:00:00.000Z', publishedAt: '2026-10-23T00:00:00.000Z',
   markdown: `---\nname: pulin-title\ndescription: "生成朴里节风格的立体中文标题，适用于只制作标题视觉的生图任务。"\n---\n\n# 朴里节风格标题\n\n## 输入\n用户提供准确的主标题、副标题（可不填）和标题行数。\n\n## 视觉规则\n${PULIN_TITLE_RULES}\n\n## 使用方式\n在 D-Gen 生图中选择此 Skill，系统会自动附加标准参考图，占用一个参考图位置。下载的 Markdown 仅包含规则，不包含参考图文件。\n\n## 示例\n主标题两行：万科物业朴里节 羽球联赛赛事预告；副标题：提前了解羽球联赛赛程。\n`,
+}, {
+  id: 'image-to-editable-ppt', title: '图片转可编辑 PPT', summary: '上传一张图片，将文字、基础图形和图片素材重建为可编辑的 PowerPoint。',
+  category: '效率工具', author: 'D-Gen 内置', builtIn: true, canEdit: false, targets: ['chat'], referenceCount: 0,
+  updatedAt: '2026-11-19T00:00:00.000Z', publishedAt: '2026-11-19T00:00:00.000Z',
+  markdown: `---\nname: image-to-editable-ppt\ndescription: "将单张图片重建为可编辑 PowerPoint。"\n---\n\n# 图片转可编辑 PPT\n\n在对话中上传一张图片并发送，系统识别文字、基础图形和图片素材，生成可下载的 PPTX。复杂视觉元素可能保留为图片，请检查文字与排版。\n`,
 }]
 export const skillTargets = (skill) => Array.isArray(skill.targets) ? skill.targets : ['image', 'video']
 export function generationSkillPrompt(snapshot, prompt, target) {
