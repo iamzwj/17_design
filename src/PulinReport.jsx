@@ -70,7 +70,7 @@ async function finish(id, taskId) {
   active.add(taskId)
   try {
     const result = await waitForConversationImageTask(taskId)
-    if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url: result.urls[0], uniformVersion: 2 } } }))
+    if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url: result.urls[0], uniformVersion: 3 } } }))
   } catch (error) {
     if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }))
   } finally { active.delete(taskId) }
@@ -81,12 +81,11 @@ async function generate(season) {
   if (!reference || state.cards[season.id]?.status === 'running') return
   update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running' } } }))
   try {
-    const isSpringAutumn = season.id === 'spring'
-    const collarResponse = await fetch(isSpringAutumn ? '/pulin-tie-reference.png' : '/pulin-collar-reference.png')
+    const collarResponse = await fetch('/pulin-collar-reference.png')
     if (!collarResponse.ok) throw new Error('着装参考图加载失败，请重试')
     const collarReference = await fileToDataUrl(await collarResponse.blob())
     const result = await createConversationImageTask({
-      prompt: `第一张参考图是人物，第二张是朴邻${isSpringAutumn ? '行政领带' : '女士领花'}实物，仅供服装配饰参考。把第一张照片中的同一个人生成真人写实职业全身肖像，保持原有五官、年龄、肤色和身份特征，不换脸，不卡通。根据人物呈现朴邻${season.name}职业着装：${season.clothes}。${isSpringAutumn ? '人物佩戴第二张图所示金色行政长领带，领带从衬衫领口垂至腰部，不佩戴领花或蝴蝶结。' : '女性严格照第二张图佩戴领花：金棕色布质，两片交叠并向下垂的尖角，顶部有圆形扣饰；不是横向蝴蝶结，不是蝴蝶领结。男性佩戴金色行政长领带，不佩戴女士领花。'}衣服整洁得体。正面站立，自然姿态，纯浅灰背景，完整头部到鞋子，不加文字。`,
+      prompt: `第一张参考图是人物，第二张是朴邻女士领花实物，仅供女性服装配饰参考。先根据第一张人物照片判断使用男款还是女款，生成同一个人的真人写实职业全身肖像，保持五官、年龄、肤色和身份特征，不换脸，不卡通。${season.name}着装：${season.clothes}。女性三季均佩戴第二张参考图中的金棕色领花：两片交叠向下的尖角，顶部圆形扣饰，不是横向蝴蝶结，不佩戴男式长领带；男性三季均佩戴金色行政长领带，不佩戴女士领花。正面站立，自然姿态，浅灰背景，完整头部到鞋子，不加文字。`,
       images: [waterfallReferenceForRequest(reference), collarReference], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '3:4', knowledge: {},
     })
     const taskId = result.task.id
@@ -179,8 +178,8 @@ export default function PulinReport({ user, onLogin }) {
     <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
     <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，自动生成三季真人着装。</p>
-      <div className="pr-portrait-row"><label className="pr-upload pr-portrait-upload">{view.portrait ? <img src={view.portrait} alt="已上传头像"/> : <span>＋</span>}<input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label><div className="pr-portrait-info"><strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong><small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small><label className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label></div><button className="pr-generate-all" disabled={!view.portrait || seasons.some(s => view.cards[s.id]?.status === 'running')} onClick={() => seasons.forEach(s => void generate(s))}>重新生成三季</button></div>
-      <div className="pr-cards">{seasons.map(s => { const c = view.cards[s.id]; return <article key={s.id}><h3>{s.name}着装</h3><div className="pr-image">{c?.url ? <img src={c.url} alt={s.name + '真人着装'}/> : <span>{c?.status === 'running' ? '正在生成…' : '等待生成'}</span>}</div>{c?.url && c.uniformVersion !== 2 && <p className="pr-version-note">着装规范已更新，请重新生成</p>}{c?.error && <p role="alert">{c.error}</p>}<div><button disabled={!view.portrait || c?.status === 'running'} onClick={() => void generate(s)}>{c?.url ? '重新生成' : '单独生成'}</button>{c?.url && <button onClick={() => downloadGeneratedImage(c.url, '朴邻' + s.name + '着装')}>下载</button>}</div></article> })}</div>
+      <div className="pr-portrait-row"><label className="pr-upload pr-portrait-upload"><span>＋</span><input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label><div className="pr-portrait-info"><strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong><small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small><label className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label></div><button className="pr-generate-all" disabled={!view.portrait || seasons.some(s => view.cards[s.id]?.status === 'running')} onClick={() => seasons.forEach(s => void generate(s))}>重新生成三季</button></div>
+      <div className="pr-cards">{seasons.map(s => { const c = view.cards[s.id]; return <article key={s.id}><h3>{s.name}着装</h3><div className="pr-image">{c?.url && c.uniformVersion === 3 ? <img src={c.url} alt={s.name + '真人着装'}/> : <span>{c?.status === 'running' ? '正在生成…' : c?.url ? '着装规范已更新，请重新生成' : '上传头像后生成'}</span>}</div>{c?.url && c.uniformVersion !== 3 && <p className="pr-version-note">着装规范已更新，请重新生成</p>}{c?.error && <p role="alert">{c.error}</p>}<div><button disabled={!view.portrait || c?.status === 'running'} onClick={() => void generate(s)}>{c?.url ? '重新生成' : '单独生成'}</button>{c?.url && <button onClick={() => downloadGeneratedImage(c.url, '朴邻' + s.name + '着装')}>下载</button>}</div></article> })}</div>
     </div>
     <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single' })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
       {view.mode === 'single' ? <><button onClick={() => setPicker(true)}>选择着装照</button>{view.selected && <p>已选择{seasons.find(s => s.id === view.selected)?.name}着装</p>}</> : <label className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
@@ -191,6 +190,6 @@ export default function PulinReport({ user, onLogin }) {
       <button onClick={() => makeReport().catch(e => setError(e.message))}>生成战报</button>
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>关闭</button></header><div className="pr-cards">{seasons.map(s => <button key={s.id} disabled={!view.cards[s.id]?.url} onClick={() => { update({ ...state, selected: s.id }); setPicker(false) }}>{view.cards[s.id]?.url ? <img src={view.cards[s.id].url} alt=""/> : <span>尚未生成</span>}<b>{s.name}</b></button>)}</div></div></div>}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>关闭</button></header><div className="pr-cards">{seasons.map(s => <button key={s.id} disabled={!view.cards[s.id]?.url || view.cards[s.id]?.uniformVersion !== 3} onClick={() => { update({ ...state, selected: s.id }); setPicker(false) }}>{view.cards[s.id]?.url && view.cards[s.id]?.uniformVersion === 3 ? <img src={view.cards[s.id].url} alt=""/> : <span>请重新生成</span>}<b>{s.name}</b></button>)}</div></div></div>}
   </section>
 }
