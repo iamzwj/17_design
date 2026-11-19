@@ -1291,12 +1291,19 @@ function WaterfallStudio({ skillState, storageKey, onUserUpdate, onRequireLogin 
   </section>
 }
 
-function ImageMessage({ message, focusRef, onPreview }) {
-  if (message.role === 'user') return <div ref={focusRef} className="user-message">
-    {message.references?.length > 0 && <div className="message-refs">{message.references.map((item, index) => <button type="button" onClick={() => onPreview(item.src)} aria-label={`预览参考图 ${index + 1}`} key={index}><img src={item.src} alt="参考图"/></button>)}</div>}
-    <div className="user-message-content">{message.content}</div>
-    <MessageCopyButton content={message.content}/>
+function UserMessage({ content, images = [], files = [], messageRef, onPreview, protectedImages = false }) {
+  return <div ref={messageRef} className="user-message-group">
+    {images.length > 0 && <div className="message-refs">{images.map((item, index) => <button type="button" onClick={() => { if (!protectedImages || !item.src.startsWith('/api/chat-images/')) onPreview(item.src) }} aria-label={`预览图片 ${index + 1}`} key={`${item.name || item.src}-${index}`}>{protectedImages ? <QuietReferenceImage src={item.src}/> : <img src={item.src} alt={item.name || '参考图'}/>}</button>)}</div>}
+    {(content || files.length > 0) && <div className="user-message">
+      {files.length > 0 && <div className="text-attachment-list">{files.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
+      {content && <div className="user-message-content">{content}</div>}
+      {content && <MessageCopyButton content={content}/>}
+    </div>}
   </div>
+}
+
+function ImageMessage({ message, focusRef, onPreview }) {
+  if (message.role === 'user') return <UserMessage messageRef={focusRef} content={message.content} images={(message.references || []).filter(item => item.src)} onPreview={onPreview}/>
   if (message.role === 'error') return <div ref={focusRef} className="error-message"><span><b>生成失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
   return <div ref={focusRef} className="assistant-turn has-copy-control">{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
     <div className={`generated-grid ${message.urls.length === 1 ? 'single' : ''}`}>{message.urls.map((url, index) => <figure key={url}><button className="image-preview-trigger" onClick={() => onPreview({ url, urls: message.urls, prompt: message.prompt })} aria-label={`预览生成图片 ${index + 1}`}><img src={url} alt={`AI 生成结果 ${index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, url); event.dataTransfer.setData('text/uri-list', url) }}/></button></figure>)}</div>
@@ -1306,14 +1313,9 @@ function ImageMessage({ message, focusRef, onPreview }) {
 }
 
 function TextUserMessage({ message, messageRef, onPreview }) {
-  const imageAttachments = (message.attachments || []).filter((file) => file.kind === 'image' && file.src)
-  const textAttachments = (message.attachments || []).filter((file) => file.kind !== 'image')
-  return <div ref={messageRef} className={['user-message', imageAttachments.length ? 'has-image-attachments' : ''].filter(Boolean).join(' ')}>
-    {imageAttachments.length > 0 && <div className="message-refs">{imageAttachments.map((file, index) => <button type="button" onClick={() => { if (!file.src.startsWith('/api/chat-images/')) onPreview(file.src) }} aria-label={`上传图片 ${index + 1}`} key={file.name + index}><QuietReferenceImage src={file.src}/></button>)}</div>}
-    {textAttachments.length > 0 && <div className="text-attachment-list">{textAttachments.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
-    <div className="user-message-content">{message.content}</div>
-    <MessageCopyButton content={message.content}/>
-  </div>
+  const images = (message.attachments || []).filter((file) => file.kind === 'image' && file.src)
+  const files = (message.attachments || []).filter((file) => file.kind !== 'image')
+  return <UserMessage messageRef={messageRef} content={message.content} images={images} files={files} onPreview={onPreview} protectedImages/>
 }
 
 function ReferenceStrip({ references, setReferences, onPreview, thumbnail = (src) => src }) {
