@@ -591,12 +591,12 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
             <button type="button" role="menuitem" aria-current="true" className="active" onClick={() => onClose()}>朴邻节日节气海报</button>
           </div>}
         </div> : item.id === 'skills' ? <div className="more-tool-nav" key={item.id}>
-          <button className={['skills', 'discover-skills'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'skills'} aria-controls="skills-submenu" onClick={() => toggleMenu('skills')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          <button className={['skills', 'discover-skills'].includes(active) ? 'active' : ''} aria-expanded={expandedMenu === 'skills'} aria-controls="skills-submenu" onClick={() => { toggleMenu('skills'); onChange('skills') }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'skills' && <div id="skills-submenu" className="module-submenu" role="menu" aria-label="Skill 库目录">
             {[['skills', '团队 Skill'], ['discover-skills', '发现 Skill']].map(([id, label]) => <button key={id} type="button" role="menuitem" aria-current={active === id ? 'page' : undefined} className={active === id ? 'active' : ''} onClick={() => { onChange(id); onClose() }}>{label}</button>)}
           </div>}
         </div> : item.id === 'knowledge' ? <div className="more-tool-nav" key={item.id}>
-          <button className={knowledgeActive ? 'active' : ''} aria-expanded={expandedMenu === 'knowledge'} aria-controls="knowledge-submenu" onClick={() => toggleMenu('knowledge')}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
+          <button className={knowledgeActive ? 'active' : ''} aria-expanded={expandedMenu === 'knowledge'} aria-controls="knowledge-submenu" onClick={() => { toggleMenu('knowledge'); onChange('brand-knowledge') }}><Icon name={item.icon} size={17}/><b>{item.label}</b><Icon name="chevron" size={14}/></button>
           {expandedMenu === 'knowledge' && <div id="knowledge-submenu" className="module-submenu" role="menu" aria-label="知识库目录">
             {KNOWLEDGE_SECTIONS.filter(section => user?.identity !== 'pulin' || section.id !== 'marketing-activities').map((section) => <button key={section.id} type="button" role="menuitem" aria-current={active === section.id ? 'page' : undefined} className={active === section.id ? 'active' : ''} onClick={() => { onChange(section.id); onClose() }}>{section.label}</button>)}
           </div>}
