@@ -805,3 +805,21 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .text-answer .answer-plain strong { color: var(--dp-ink); font-weight: 750; }
 .text-answer .answer-plain .answer-bullet { align-items: flex-start; }
 .text-answer .answer-plain .answer-bullet i { flex: none; }
+
+.ppt-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: #176fe8;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ppt-download-button:hover { background: #0d5dcc; }
+.ppt-download-button:focus-visible { outline: 2px solid #559bff; outline-offset: 3px; }

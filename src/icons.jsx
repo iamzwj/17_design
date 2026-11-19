@@ -20,6 +20,7 @@ export function Icon({ name, size = 20 }) {
     edit: <><path d="m4 20 4.2-1 10.5-10.5a2.1 2.1 0 0 0-3-3L5.2 16Z"/><path d="m13.8 7.4 3 3"/></>,
     upload: <><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></>,
     x: <><path d="m6 6 12 12M18 6 6 18"/></>,
+    file: <><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4M9 12h6M9 16h6"/></>,
     download: <><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></>,
     copy: <><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
     check: <path d="m5 12 4 4L19 6"/>,

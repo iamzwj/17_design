@@ -1788,13 +1788,13 @@ function TextStudio({ type, conversation, onSave, user }) {
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {message.skillSnapshot.title}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
-          {message.pptTaskId && <button type="button" className="tool-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}>下载 PPT</button>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
             {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
             <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>
           </>}
+          {message.pptTaskId && <button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button>}
           {imageRecords && <ActivityImageResults records={imageRecords}/>}
         </div>
       })}
