@@ -534,6 +534,9 @@ img.image-unavailable, img:not([src]), img[src=""] { visibility: hidden; }
 .has-workspace-title:has(> .skill-workspace) { --workspace-title-inset: calc(40px + max(0px, (100% - 1320px) / 2)); }
 .has-workspace-title:has(> :is(.please-day-workspace, .batch-workspace)) { --workspace-title-inset: max(28px, (100% - 1180px) / 2); }
 .has-workspace-title:has(> .festival-poster-workspace) { --workspace-title-inset: max(24px, (100% - 1180px) / 2); }
+.has-workspace-title:has(> .pulin-report) { --workspace-title-inset: calc(24px + max(0px, (100% - 1180px) / 2)); }
+.has-workspace-title > .pulin-report { padding-top: 0; }
+.has-workspace-title > .pulin-report > header > h1, .has-workspace-title > .pulin-report > h1 { display: none; }
 .has-workspace-title:has(> .admin-workspace) { --workspace-title-inset: max(28px, (100% - 1060px) / 2); }
 .has-workspace-title:has(> .archive-workspace) { --workspace-title-inset: max(24px, (100% - 900px) / 2); }
 @media (max-width: 1100px) {
@@ -542,6 +545,7 @@ img.image-unavailable, img:not([src]), img[src=""] { visibility: hidden; }
 @media (max-width: 820px) {
   .has-workspace-title:has(> :is(.please-day-workspace, .batch-workspace)) { --workspace-title-inset: max(14px, (100% - 540px) / 2); }
 }
+@media (max-width: 600px) { .has-workspace-title:has(> .pulin-report) { --workspace-title-inset: 14px; } }
 @media (max-width: 720px) {
   .has-workspace-title:has(> .admin-workspace) { --workspace-title-inset: 14px; }
 }
