@@ -202,6 +202,15 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .image-preview-trigger { display: block; width: fit-content; max-width: 100%; padding: 0; border: 0; background: var(--dp-panel); cursor: zoom-in; }.image-preview-trigger img { display: block; width: auto; height: auto; max-width: 100%; max-height: 560px; object-fit: contain; transition: filter .18s ease; }.image-preview-trigger:hover img { filter: brightness(.96); }
 .image-preview { position: fixed; z-index: 200; inset: 0; padding: 24px 24px 96px; display: grid; place-items: center; background: rgba(19,29,22,.68); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); animation: appear .2s ease both; }
 .image-preview > img { display: block; max-width: calc(100vw - 48px); max-height: calc(100vh - 120px); object-fit: contain; }
+.image-preview > img.preview-image-pending { position: absolute; visibility: hidden; }
+img.image-unavailable, img:not([src]), img[src=""] { visibility: hidden; }
+.preview-loading-state { display: grid; justify-items: center; gap: 12px; color: #f4f5f8; text-align: center; }
+.preview-loading-state small { color: #b4b9c4; font-size: 13px; }
+.preview-spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.2); border-top-color: #8bb8ff; border-radius: 50%; animation: preview-spin .8s linear infinite; }
+.preview-loading-state button { padding: 8px 16px; border: 1px solid rgba(255,255,255,.3); border-radius: 9px; background: rgba(255,255,255,.1); color: #fff; cursor: pointer; }
+.preview-actions button:disabled { opacity: .45; cursor: not-allowed; }
+@keyframes preview-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .preview-spinner { animation: none; } }
 .preview-actions { position: fixed; z-index: 2; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 9px; }
 .preview-actions button { height: 40px; min-width: 92px; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.7); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: var(--dp-typography-metadata); cursor: pointer; box-shadow: 0 7px 22px rgba(12,24,16,.18); background: var(--dp-panel); color: var(--ink); backdrop-filter: blur(12px); }.preview-actions .preview-download { background: var(--accent); color: #fff; border-color: transparent; }.preview-actions button:not(.preview-download) svg { transform: rotate(180deg); }
 .preview-actions .preview-nav { min-width: 40px; width: 40px; padding: 0; font-size: 26px; font-weight: 400; line-height: 1; }.preview-counter { min-width: 39px; align-self: center; color: var(--mid); font-size: var(--dp-typography-metadata); font-variant-numeric: tabular-nums; text-align: center; }
