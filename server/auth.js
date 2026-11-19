@@ -21,7 +21,6 @@ const BUILTIN_USERS = [
 ]
 const DAILY_CREDIT_OVERRIDES = new Map([
   ['zhangwj159@onewo.com', 999],
-  ['yem15@onewo.com', 999],
 ])
 export const REGISTRATION_WHITELIST = new Set([
   'caoyh21@onewo.com', 'chenj529@onewo.com', 'chent05@onewo.com', 'huangpd01@onewo.com', 'shenxx09@onewo.com', 'tangf16@onewo.com', 'wangyc48@onewo.com',
@@ -126,7 +125,7 @@ export function installAuth(app, { dataDir, allowTestAccounts = false }) {
     }
     refreshDailyCredits(user)
     if (user.credits < amount) {
-      const error = new Error('积分不足，无法生成图片')
+      const error = new Error('积分不足，无法生成')
       error.status = 402
       throw error
     }

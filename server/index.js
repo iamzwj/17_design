@@ -4,6 +4,7 @@ import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './lan
 import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
 import { installFilms } from './films.js'
+import { probe as probeFilmMedia } from './filmEditing.js'
 import { installExternalSkills } from './externalSkills.js'
 import { isMaiziImageModel, createMaiziImageClient } from './maiziImages.js'
 import { VIBBIT_IMAGE_MODELS, canonicalImageModel } from '../shared/vibbitImageModels.js'
@@ -149,11 +150,8 @@ function imageModelSettings(model, resolution, quality) {
   return { model: selectedModel, resolution: selectedResolution, quality: selectedQuality }
 }
 
-function imageCreditCost(model, count = 1) {
-  const creditsPerImage = {
-    'gpt-image-2-vip': 4,
-  }[model] || 1
-  return creditsPerImage * Math.max(1, Number(count) || 1)
+function imageCreditCost(_model, count = 1) {
+  return Math.max(1, Number(count) || 1)
 }
 
 function generationSize(model, resolution, ratio) {
@@ -370,6 +368,15 @@ function updateFestivalPosterTask(id, update) {
   festivalPosterTasks = festivalPosterTasks.map((task) => task.id === id ? { ...task, ...update, updatedAt: new Date().toISOString() } : task)
   saveFestivalPosterTasks()
   return festivalPosterTasks.find((task) => task.id === id)
+}
+
+const videoCreditDay = (time) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(time)
+function refundFailedVideo(task) {
+  const current = videoTasks.get(task.id)
+  if (!current?.chargedCredits || current.refunded) return Boolean(current?.refunded)
+  current.refunded = true
+  if (videoCreditDay(current.createdAt) === videoCreditDay(Date.now())) refundCredits(current.userId, current.chargedCredits)
+  return true
 }
 
 function saveVideoTasks() {
@@ -1809,6 +1816,7 @@ app.post('/api/video/references', requireAuth, async (req, res, next) => {
 })
 
 app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
+  let chargedCredits = 0
   try {
     prepareGenerationSkill(req, 'video')
     const { model, prompt: originalVideoPrompt, durationSeconds, resolution, aspectRatio, referenceMode = 'text', imageUrl, firstFrameImageUrl, lastFrameImageUrl, referenceImageUrls = [], referenceVideoUrls = [], omniReferenceTaskType } = req.body || {}
@@ -1823,6 +1831,8 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       if (!Array.isArray(referenceImageUrls) || referenceImageUrls.length > 9) return res.status(400).json({ error: 'MiniMax H3 最多支持 9 张参考图' })
       if (referenceVideoUrls.length) return res.status(400).json({ error: 'MiniMax H3 接口只支持图片参考，不支持视频参考' })
       if (referenceMode === 'image' && !imageUrl) return res.status(400).json({ error: '请添加一张首帧图片' })
+      const chargedUser = spendCredits(req.user.id, seconds)
+      chargedCredits = seconds
       const generated = await requestUpstream('/v1/api/generate', {
         model: 'minimax-h3',
         prompt: String(prompt).trim().slice(0, 30_000),
@@ -1837,9 +1847,11 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       const id = upstreamId(generated)
       if (!id) throw new Error(upstreamError(generated) || 'MiniMax H3 未返回任务 ID')
       const status = minimaxVideoState(generated).status
-      const record = { id, userId: req.user.id, provider: 'minimax', skillSnapshot: req.skillSnapshot, prompt: String(req.skillUserPrompt || prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, ...minimaxVideoState(generated), createdAt: Date.now() }
+      const record = { id, userId: req.user.id, provider: 'minimax', skillSnapshot: req.skillSnapshot, prompt: String(req.skillUserPrompt || prompt).trim().slice(0, 30_000), model, resolution, durationSeconds: seconds, chargedCredits, aspectRatio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceImageUrls, referenceVideos: [], status, ...minimaxVideoState(generated), createdAt: Date.now() }
       videoTasks.set(record.id, record); saveVideoTasks()
-      return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error })
+      if (status === 'FAILED') { record.refunded = true; refundCredits(req.user.id, chargedCredits); saveVideoTasks() }
+      chargedCredits = 0
+      return res.status(status === 'COMPLETED' ? 200 : 202).json({ taskId: record.id, status: record.status, videoUrl: record.videoUrl, error: record.error, user: refundCredits(req.user.id, 0) || chargedUser })
     }
     const modelInfo = {
       'doubao-seedance-2-0-fast-260128': { resolutions: ['480p', '720p'], maximum: 15 },
@@ -1885,12 +1897,26 @@ app.post('/api/video/tasks', requireAuth, async (req, res, next) => {
       if (!['auto', 'reference', 'edit', 'extend'].includes(omniReferenceTaskType)) return res.status(400).json({ error: 'Seedance 2.5 任务类型不支持' })
       input.omni_reference_task_type = omniReferenceTaskType
     }
+    let billableSeconds = seconds
+    if (referenceMode === 'edit') {
+      let source
+      try { source = new URL(referenceVideoUrls[0]); } catch { throw Object.assign(new Error('请重新上传待编辑的视频'), { status: 400 }) }
+      const publicOrigin = new URL(publicVideoUrl('/')).origin
+      const match = source.origin === publicOrigin && /^\/api\/video\/assets\/([a-f0-9-]+\.(?:mp4|mov|webm))$/i.exec(source.pathname)
+      if (!match) throw Object.assign(new Error('请重新上传待编辑的视频后计费'), { status: 400 })
+      const metadata = await probeFilmMedia(path.join(videoAssetsDir, match[1]))
+      billableSeconds = Math.ceil(Number(metadata.format?.duration))
+    }
+    if (!Number.isInteger(billableSeconds) || billableSeconds < 1 || billableSeconds > modelInfo.maximum) throw Object.assign(new Error('请指定可计费的有效视频时长'), { status: 400 })
+    const chargedUser = spendCredits(req.user.id, billableSeconds * 2)
+    chargedCredits = billableSeconds * 2
     const created = await vibbitApi('/tasks', { method: 'POST', body: JSON.stringify({ task_type: 'SEEDANCE_VIDEO_GENERATION', input_info: { input: JSON.stringify(input) } }) })
     if (!created.task_id) throw new Error('Seedance 未返回任务 ID')
-    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, skillSnapshot: req.skillSnapshot, prompt: req.skillUserPrompt || input.prompt, model, resolution, durationSeconds: input.duration_seconds, aspectRatio: input.aspect_ratio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceMode === 'frames' ? [firstFrameImageUrl, lastFrameImageUrl].filter(Boolean) : referenceImageUrls, referenceVideos: referenceVideoUrls, status: 'PENDING', createdAt: Date.now() })
+    videoTasks.set(created.task_id, { id: created.task_id, userId: req.user.id, skillSnapshot: req.skillSnapshot, prompt: req.skillUserPrompt || input.prompt, model, resolution, durationSeconds: input.duration_seconds, chargedCredits, aspectRatio: input.aspect_ratio, referenceMode, referenceImages: referenceMode === 'image' ? [imageUrl] : referenceMode === 'frames' ? [firstFrameImageUrl, lastFrameImageUrl].filter(Boolean) : referenceImageUrls, referenceVideos: referenceVideoUrls, status: 'PENDING', createdAt: Date.now() })
     saveVideoTasks()
-    res.status(202).json({ taskId: created.task_id, status: 'PENDING' })
-  } catch (error) { next(error) }
+    chargedCredits = 0
+    res.status(202).json({ taskId: created.task_id, status: 'PENDING', user: chargedUser })
+  } catch (error) { if (chargedCredits) refundCredits(req.user.id, chargedCredits); next(error) }
 })
 
 app.get('/api/video/tasks', requireAuth, (req, res) => {
@@ -1911,8 +1937,9 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
         // Query the saved provider ID; never resubmit a generation on refresh.
         const result = await requestUpstreamResult(localTask.id)
         const nextTask = { ...localTask, ...minimaxVideoState(result) }
+        if (nextTask.status === 'FAILED') nextTask.refunded = refundFailedVideo(localTask)
         videoTasks.set(localTask.id, nextTask); saveVideoTasks()
-        return res.json({ ...nextTask, taskId: localTask.id })
+        return res.json({ ...nextTask, taskId: localTask.id, ...(nextTask.refunded ? { user: refundCredits(localTask.userId, 0) } : {}) })
       }
       return res.json({ ...localTask, taskId: localTask.id })
     }
@@ -1925,8 +1952,9 @@ app.get('/api/video/tasks/:id', requireAuth, async (req, res, next) => {
     let result = {}
     try { result = JSON.parse(task.task_result?.result || '{}') } catch { result = {} }
     const nextTask = { ...localTask, status: task.status, videoUrl: result.video_url || '', error: result.error_message || '' }
+    if (nextTask.status === 'FAILED') nextTask.refunded = refundFailedVideo(localTask)
     videoTasks.set(req.params.id, nextTask); saveVideoTasks()
-    res.json({ ...nextTask, taskId: task.task_id || req.params.id })
+    res.json({ ...nextTask, taskId: task.task_id || req.params.id, ...(nextTask.refunded ? { user: refundCredits(localTask.userId, 0) } : {}) })
   } catch (error) { next(error) }
 })
 

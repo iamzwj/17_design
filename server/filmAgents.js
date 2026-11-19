@@ -102,6 +102,7 @@ export function normalizeShots(raw,p) {
     const parts=Math.ceil(s.duration/10);
     for(let i=0;i<parts;i++)result.push({...s,...(p.editorialWorkflow ? {outfitByCharacter:Object.fromEntries(castMembers.map(({character,outfit})=>[character.id,outfit.id])),outfitIds:[...new Set(castMembers.map(({outfit})=>outfit.id))]} : {}),id:parts>1?`${s.id}-part${i+1}`:s.id,duration:s.duration/parts,prompt,firstFramePrompt:`${s.time}；${s.firstFramePrompt||prompt}`,tailFramePrompt:s.tailFramePrompt && (!p.editorialWorkflow || s.requiresTailFrame===true)?`${s.time}；${s.tailFramePrompt}`:'',locationId:location?.id,sceneStates:sceneStates(s.time,s.weather),resourceIds:refs,assetIds:refs,revision:p.scriptRevision||1,history:[],splitFrom:parts>1?s.id:undefined});
   }
+  if(p.maxDuration && result.reduce((sum,s)=>sum+s.duration,0)>p.maxDuration)throw Error('整片时长不能超过120秒，请压缩故事');
   if(!p.autoDuration && p.duration != null && Math.abs(result.reduce((sum,s)=>sum+s.duration,0)-p.duration)>1)throw Error('分镜总时长与目标不一致');
   return result;
 }
@@ -159,7 +160,7 @@ export function createFilmAgents({api,save,check}) {
     if (p.storyboardReady) return;
     const narrative = p.context?.narrative;
     const narrativeRules = narrative ? `叙事风格：${narrative.label}。${Object.values(narrative.rules || {}).join('；')}` : '';
-    const instruction = `一次规划完整短片，保持故事事实与因果。${narrationDirection}${castingDirection}${shotSpeechDirection}按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{mode,characterId,characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{gender,age},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,speakerId,narration,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。每句旁白只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
+    const instruction = `一次规划完整短片，保持故事事实与因果。${narrationDirection}${castingDirection}${shotSpeechDirection}按动作推进安排镜头，禁止重复旁白或重复叙事。每句旁白只分配给一个镜头，其他镜头不可重复。按内容决定合理时长，整片最多120秒，每镜1至10秒，最多40镜。保留用户选择的风格、模型和画面比例。${narrativeRules}只返回JSON：{title,script:{summary,narrator:{mode,characterId,characterName,gender,age,voice},scenes:[{id,time,location,action,characters:[],dialogue:[],narration}]},characters:[{id,name,identity:{gender,age},facePrompt,outfits:[{id,name,prompt}]}],scenes:[{id,name,layout,prompt,scriptSceneIds:[id]}],shots:[{id,time,sceneId,characterIds:[id],outfitIds:[id],outfitByCharacter:{角色ID:服装ID},duration,shotSize,angle,composition,action,emotion,light,camera,dialogue,speakerId,narration,ambience,continuity,firstFramePrompt,videoPrompt}]}。剧本场次和镜头的time以白天、夜晚、清晨等开头。场次ID只能属于一个场景；角色只保留跨镜头需要一致的角色，服装每人至少一套。每句旁白只写该镜独有的一句，不得重复其他镜。所有文字字段必须为字符串，没有时用空字符串。`;
     const prepare = result => {
       if (typeof result.title !== 'string' || !result.title.trim()) throw Error('缺少影片标题');
       const script = p.script || normalizeFilmScript(result.script);
@@ -173,6 +174,7 @@ export function createFilmAgents({api,save,check}) {
       for (const scene of scenes) resources.push({id:`${scene.id}-environment`,sourceId:scene.id,name:`${scene.name} · 场景设定`,category:'scenes',type:'environment',agent:'scene',attributes:scene,prompt:scene.prompt,revision:p.scriptRevision||1,history:[]});
       const project = {...p, script, characters:result.characters, scenes, resources, locations:[]};
       const shots = normalizeShots(result.shots, project);
+      if (shots.reduce((sum, shot) => sum + shot.duration, 0) > 120) throw Error("整片时长不能超过120秒，请压缩故事");
       return {script: {...script, narrator: resolveFilmNarrator({...project, shots})}, characters:result.characters, scenes, resources, shots};
     };
     await run(p,'simple-plan','director','script',instruction,{story:p.story,script:p.script || null,ratio:p.ratio,style:p.settings.style},prepare,result=>{

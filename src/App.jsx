@@ -2186,7 +2186,7 @@ export default function App() {
       : ['brand-manual', 'marketing-strategy'].includes(active)
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
-        ? <VideoStudio key={workspaceToken}/>
+        ? <VideoStudio key={workspaceToken} onUserUpdate={setUser}/>
       : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <p role="status">正在恢复对话…</p> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation}/>
 
   async function logout() {

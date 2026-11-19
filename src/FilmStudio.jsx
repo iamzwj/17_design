@@ -81,7 +81,9 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     [busy, setBusy] = useState(false),
     [lastSynced, setLastSynced] = useState(0);
   const p = project?.id === id ? project : null;
-  const videoResolution = filmVideoResolution(form.videoModel, form.videoResolution);
+  const isAdmin = user?.email?.toLowerCase() === "zhangwj159@onewo.com";
+  const selectedVideoModel = isAdmin ? form.videoModel : "minimax-h3";
+  const videoResolution = filmVideoResolution(selectedVideoModel, form.videoResolution);
   useEffect(() => {
     if (!user?.id || !project?.id || project.userId !== user.id) return;
     try {
@@ -149,7 +151,7 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
     if (!form.story.trim() || busy) return;
     const { brandId, skillId, imageModelExplicit, duration, ...filmSettings } = form;
     void brandId; void skillId; void imageModelExplicit; void duration;
-    await action("", { ...filmSettings, videoResolution, requestId: crypto.randomUUID() });
+    await action("", { ...filmSettings, videoModel: selectedVideoModel, videoResolution, requestId: crypto.randomUUID() });
   }
   async function download() {
     try {
@@ -280,8 +282,8 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                   <ComposerSelect
                     portal
                     label="视频模型"
-                    value={form.videoModel}
-                    options={FILM_VIDEO_MODELS}
+                    value={selectedVideoModel}
+                    options={isAdmin ? FILM_VIDEO_MODELS : FILM_VIDEO_MODELS.filter((option) => option.value === "minimax-h3")}
                     onChange={(videoModel) => setForm((current) => ({
                       ...current,
                       videoModel,
@@ -295,14 +297,14 @@ export default function FilmStudio({ user, onLogin, projectId, onCreated, onNew 
                     portal
                     label="视频分辨率"
                     value={videoResolution}
-                    options={filmVideoResolutions(form.videoModel).map((value) => ({ value, label: value === '4k' ? '4K' : value }))}
+                    options={filmVideoResolutions(selectedVideoModel).map((value) => ({ value, label: value === '4k' ? '4K' : value }))}
                     onChange={(value) => field("videoResolution", value)}
                   />
                 </div>
               </div>
               <div className="film-create-footer">
               <p className="film-caption">
-                按模型实际用量计费。
+                不消耗积分，每天最多创建 5 条，每条最长 2 分钟。
               </p>
               <button
                 className="film-primary"

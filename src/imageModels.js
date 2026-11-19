@@ -41,11 +41,8 @@ export function imageQualityForModel(model, quality) {
   return available.some((item) => item.value === quality) ? quality : available.some((item) => item.value === DEFAULT_IMAGE_QUALITY) ? DEFAULT_IMAGE_QUALITY : available[0]?.value || DEFAULT_IMAGE_QUALITY
 }
 
-export function imageCreditCost(model, count = 1) {
-  const creditsPerImage = {
-    [VIP_IMAGE_MODEL]: 4,
-  }[model] || 1
-  return creditsPerImage * Math.max(1, Number(count) || 1)
+export function imageCreditCost(_model, count = 1) {
+  return Math.max(1, Number(count) || 1)
 }
 
 export const IMAGE_MODEL_OPTIONS = [

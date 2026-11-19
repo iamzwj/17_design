@@ -112,9 +112,11 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       !filmVideoResolutions(b.videoModel).length ||
       (b.videoResolution != null && !filmVideoResolutions(b.videoModel).includes(b.videoResolution)) ||
       !["16:9", "9:16"].includes(b.ratio) ||
-      (b.duration != null && (!Number.isInteger(Number(b.duration)) || Number(b.duration) < 15 || Number(b.duration) > 600))
+      (b.duration != null && (!Number.isInteger(Number(b.duration)) || Number(b.duration) < 15 || Number(b.duration) > 120))
     )
       return res.status(400).json({ error: "制作参数无效" });
+    if (req.user.email?.toLowerCase() !== "zhangwj159@onewo.com" && b.videoModel !== "minimax-h3")
+      return res.status(403).json({ error: "普通用户一键成片仅支持 MiniMax H3" });
     const requestId = /^[a-f0-9-]{36}$/.test(b.requestId || "")
       ? b.requestId
       : randomUUID();
@@ -141,7 +143,13 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       return res.status(400).json({ error: "不支持的叙事风格" });
     }
     const context=await prepareContext(req.user,b);
+    const existing = read(requestId);
+    if (existing) return existing.userId === req.user.id ? res.json({ project: existing }) : res.sendStatus(409);
+    const day = timestamp => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(timestamp);
+    const todayCount = fs.readdirSync(root).map(read).filter(project => project?.userId === req.user.id && day(project.createdAt) === day(Date.now())).length;
+    if (todayCount >= 5) return res.status(429).json({ error: "一键成片每天最多创建 5 条" });
     const p = {
+      maxDuration: 120,
       context: narrative ? { ...context, narrative } : context,
       schemaVersion: 2,
       id: requestId,
@@ -252,6 +260,10 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     if(type==='character-reference' && !body.file?.startsWith('asset-character-'))throw Error('角色参考无效');
     if(!allowed.includes(type))throw Error('未知操作');
     if(body.patch?.duration!==undefined && (!Number.isFinite(body.patch.duration)||body.patch.duration<1||body.patch.duration>10))throw Error('镜头时长必须在1至10秒，复杂镜头请拆分');
+    if (p.maxDuration && type === 'edit' && body.patch?.duration !== undefined) {
+      const total = (p.shots || []).reduce((sum, shot) => sum + (shot.id === body.id ? body.patch.duration : Number(shot.duration || 0)), 0);
+      if (total > p.maxDuration) throw Error('成片时长超出上限');
+    }
     if(body.patch?.prompt && (typeof body.patch.prompt!=='string'||body.patch.prompt.length>6000))throw Error('提示词无效');
     if(type==='stage-pause'&&!['script','characters','scenes','storyboard','images','videos','audio','editing'].includes(body.stage))throw Error('阶段无效');
     if(type==='revise' && (typeof body.text!=='string'||!body.text.trim()||body.text.length>2000))throw Error('修改要求无效');
@@ -260,6 +272,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     if(type==='timeline') {
       const tl=body.timeline;
       if(!tl || !Array.isArray(tl.clips) || !tl.clips.length || tl.clips.length>80 || !Array.isArray(tl.tracks)||tl.tracks.length>12 || !Array.isArray(tl.captions)||tl.captions.length>300)throw Error('时间线无效');
+      if (tl.clips.reduce((sum, clip) => sum + Number(clip.duration || 0), 0) > 120) throw Error('成片总时长不能超过 120 秒');
       for(const c of tl.clips) if(!p.shots.some(s=>s.id===c.shotId)||!Number.isFinite(c.duration)||c.duration<0.2||c.duration>15||!Number.isFinite(c.trimIn)||c.trimIn<0||c.trimIn>120)throw Error('片段参数无效');
       for(const t of tl.tracks) if(!p.uploads?.some(u=>u.file===t.file && u.kind==='audio')||![t.start,t.volume].every(Number.isFinite)||t.start<0||t.start>600||t.volume<0||t.volume>2)throw Error('音轨无效');
       for(const c of tl.captions)if(typeof c.text!=='string'||c.text.length>500||!Number.isFinite(c.start)||!Number.isFinite(c.end)||c.start<0||c.end<=c.start||c.end>600)throw Error('字幕参数无效');
