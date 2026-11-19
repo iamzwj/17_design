@@ -151,6 +151,7 @@ export async function getFestivalPosterTask(id) {
   return data
 }
 export const uploadComplianceImage = (payload) => post('/api/compliance/uploads', payload)
+export const uploadChatImage = (payload) => post('/api/chat-images', payload)
 export const generateComplianceReview = (payload) => post('/api/compliance/review', payload)
 export async function generateText(payload) {
   const controller = new AbortController()

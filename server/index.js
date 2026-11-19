@@ -1,3 +1,4 @@
+import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
 import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './languageModels.js'
 import { validateFilmDurationAnalysis } from './filmDurationAnalysis.js'
 import { parseCustomImageSize, validateCustomImageSize } from '../shared/customImageSize.js'
@@ -1346,10 +1347,36 @@ async function handleTextCompletion(req, res, next) {
       return res.status(400).json({ error: 'messages 不能为空' })
     }
     const skill = req.body.__skill
+    if (isImageToPptSkill(skill)) {
+      const taskId = req.body.requestId
+      if (!req.user?.id || !/^[a-f0-9-]{36}$/i.test(taskId || '')) throw Object.assign(new Error('转换任务无效'), { status: 400 })
+      const last = [...messages].reverse().find((message) => message.role === 'user' && Array.isArray(message.content))
+      const images = last?.content.filter((part) => part?.type === 'image_url').map((part) => part.image_url?.url) || []
+      if (images.length !== 1 || !/^\/api\/chat-images\/[a-f0-9-]{36}\.png$/i.test(images[0])) throw Object.assign(new Error('请上传一张图片后再转换'), { status: 400 })
+      const folder = path.join(waterfallDataDir, 'ppt-tasks', taskId)
+      const result = await reconstructPpt({ source: images[0], directory: folder, loadImage: async (source) => { const id = path.basename(source, '.png'); const dir = path.join(waterfallDataDir, 'chat-images'); const owner = JSON.parse(await fs.promises.readFile(path.join(dir, `${id}.json`), 'utf8')); if (owner.userId !== req.user.id) throw Object.assign(new Error('图片不存在或无权访问'), { status: 404 }); return fs.promises.readFile(path.join(dir, `${id}.png`)) },
+        request: (body) => requestLanguageModel(requestTextUpstream, body, { timeout: 60_000 }),
+        runBuilder: (manifest, output) => execFileAsync('python3', [path.join(__dirname, 'vendor/editppt/build_pptx_from_manifest.py'), manifest, '--out', output], { timeout: 60_000, maxBuffer: 1024 * 1024 }) })
+      if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'succeeded', requestId: taskId })
+      await fs.promises.writeFile(path.join(folder, 'owner.json'), JSON.stringify({ userId: req.user.id }), { mode: 0o600 })
+      return res.json({ content: `已生成可编辑 PPT，共重建 ${result.objects} 个元素。复杂图片以独立图片保留，请检查文字和排版。`, pptTaskId: taskId, sources: [] })
+    }
     if (skill && (!skill.markdown || skill.markdown.length > 24000)) throw Object.assign(new Error('Skill 内容过长，请精简到 24,000 字符以内'), { status: 400 })
     const safeMessages = (await Promise.all(messages
       .filter((message) => ['user', 'assistant'].includes(message.role))
-      .map(normalizeTextMessage)))
+      .map(async (message) => {
+        if (message.role !== 'user' || !Array.isArray(message.content)) return normalizeTextMessage(message)
+        const parts = await Promise.all(message.content.map(async (part) => {
+          const source = part?.image_url?.url
+          if (part?.type !== 'image_url' || !/^\/api\/chat-images\/[a-f0-9-]{36}\.png$/i.test(source || '')) return part
+          const id = path.basename(source, '.png'), directory = path.join(waterfallDataDir, 'chat-images')
+          const owner = JSON.parse(await fs.promises.readFile(path.join(directory, `${id}.json`), 'utf8'))
+          if (owner.userId !== req.user?.id) throw Object.assign(new Error('图片不存在或无权访问'), { status: 404 })
+          const buffer = await fs.promises.readFile(path.join(directory, `${id}.png`))
+          return { ...part, image_url: { ...part.image_url, url: `data:image/png;base64,${buffer.toString('base64')}` } }
+        }))
+        return normalizeTextMessage({ ...message, content: parts })
+      })))
       .filter(Boolean)
     if (skill) safeMessages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
@@ -1651,6 +1678,37 @@ for (const task of festivalPosterTasks.filter((item) => item.status === 'running
 
 installTextTasks(app, { dataDir: waterfallDataDir, requireAuth, handleCompletion: handleTextCompletion, resolveSkill: (user, id, localSkill) => String(id).startsWith('external-') ? externalSkills.resolve(user, id, 'chat', localSkill) : skillLibrary.resolve(user, id, 'chat'), prepareInput: (req) => prepareKnowledgeInput(req, req.path.includes('compliance') ? 'compliance' : 'text') })
 
+app.post('/api/chat-images', requireAuth, async (req, res, next) => {
+  try {
+    if (!/^data:image\/(jpeg|png|webp|gif);base64,/i.test(String(req.body?.source || ''))) return res.status(400).json({ error: '请上传有效的图片文件' })
+    const { mimeType, buffer } = await imageSourceToData(req.body.source)
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(mimeType) || !buffer.length || buffer.length > 10 * 1024 * 1024) return res.status(400).json({ error: '请上传不超过 10MB 的图片' })
+    const normalized = await sharp(buffer, { limitInputPixels: 40_000_000 }).rotate().png().toBuffer()
+    const directory = path.join(waterfallDataDir, 'chat-images'), id = randomUUID()
+    await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 })
+    await fs.promises.writeFile(path.join(directory, `${id}.png`), normalized, { mode: 0o600 })
+    await fs.promises.writeFile(path.join(directory, `${id}.json`), JSON.stringify({ userId: req.user.id }), { mode: 0o600 })
+    res.status(201).json({ url: `/api/chat-images/${id}.png` })
+  } catch (error) { next(error) }
+})
+app.get('/api/chat-images/:id', requireAuth, async (req, res, next) => {
+  try {
+    if (!/^[a-f0-9-]{36}\.png$/i.test(req.params.id)) return res.sendStatus(404)
+    const directory = path.join(waterfallDataDir, 'chat-images'), id = path.basename(req.params.id, '.png')
+    const owner = JSON.parse(await fs.promises.readFile(path.join(directory, `${id}.json`), 'utf8'))
+    if (owner.userId !== req.user.id) return res.sendStatus(404)
+    res.set('Cache-Control', 'private, no-store').sendFile(path.join(directory, req.params.id))
+  } catch (error) { if (error.code === 'ENOENT') return res.sendStatus(404); next(error) }
+})
+app.get('/api/ppt-tasks/:id/download', requireAuth, async (req, res, next) => {
+  try {
+    if (!/^[a-f0-9-]{36}$/i.test(req.params.id)) return res.sendStatus(404)
+    const folder = path.join(waterfallDataDir, 'ppt-tasks', req.params.id)
+    const owner = JSON.parse(await fs.promises.readFile(path.join(folder, 'owner.json'), 'utf8'))
+    if (owner.userId !== req.user.id) return res.sendStatus(404)
+    res.set('Cache-Control', 'private, no-store').download(path.join(folder, 'result.pptx'), 'editable.pptx')
+  } catch (error) { if (error.code === 'ENOENT') return res.sendStatus(404); next(error) }
+})
 app.post('/api/text', requireAuth, knowledgeMiddleware('text'), handleTextCompletion)
 // Compliance review remains separate from account-only text chat.
 app.post('/api/compliance/review', (req, res, next) => (req.headers.authorization || req.body.knowledge?.brandId) ? requireAuth(req, res, next) : next(), knowledgeMiddleware('compliance'), handleTextCompletion)

@@ -17,7 +17,7 @@ import ComplianceReport from './ComplianceReport.jsx'
 import { runComplianceConversation } from './complianceConversation.js'
 import { generatePersistentText, textTaskRuntime, waitForTextTask } from './textTasks.js'
 import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, createWaterfallTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, getCurrentAccount, listWaterfallTasks, loginAccount, logoutAccount, reconnectGoogleDrive, requestLoginCode, saveAuthToken, uploadComplianceImage, uploadChatImage, uploadGoogleDriveImage, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
@@ -328,7 +328,9 @@ function waterfallDisplayUrl(slot) {
 
 function QuietReferenceImage({ src }) {
   const [loadedSource, setLoadedSource] = useState(null)
-  return <img className={`quiet-reference-image${loadedSource === src ? ' is-ready' : ''}`} src={src} alt="" loading="lazy" decoding="async" onLoad={() => setLoadedSource(src)} onError={() => setLoadedSource(null)}/>
+  const [privateSource, setPrivateSource] = useState('')
+  useEffect(() => { if (!src?.startsWith('/api/chat-images/')) return; let url = ''; const controller = new AbortController(); fetch(src, { headers: { Authorization: `Bearer ${getAuthToken()}` }, signal: controller.signal }).then((r) => { if (!r.ok) throw new Error('image unavailable'); return r.blob() }).then((blob) => { url = URL.createObjectURL(blob); setPrivateSource(url) }).catch(() => {}); return () => { controller.abort(); if (url) URL.revokeObjectURL(url) } }, [src])
+  return <img className={`quiet-reference-image${loadedSource === src ? ' is-ready' : ''}`} src={src?.startsWith('/api/chat-images/') ? privateSource : src} alt="" loading="lazy" decoding="async" onLoad={() => setLoadedSource(src)} onError={() => setLoadedSource(null)}/>
 }
 
 function WaterfallResultImage({ slot, prompt, urls, onPreview, onRetryLogo }) {
@@ -1307,7 +1309,7 @@ function TextUserMessage({ message, messageRef, onPreview }) {
   const imageAttachments = (message.attachments || []).filter((file) => file.kind === 'image' && file.src)
   const textAttachments = (message.attachments || []).filter((file) => file.kind !== 'image')
   return <div ref={messageRef} className={['user-message', imageAttachments.length ? 'has-image-attachments' : ''].filter(Boolean).join(' ')}>
-    {imageAttachments.length > 0 && <div className="message-refs">{imageAttachments.map((file, index) => <button type="button" onClick={() => onPreview(file.src)} aria-label={`预览上传图片 ${index + 1}`} key={file.name + index}><img src={file.src} alt={file.name}/></button>)}</div>}
+    {imageAttachments.length > 0 && <div className="message-refs">{imageAttachments.map((file, index) => <button type="button" onClick={() => { if (!file.src.startsWith('/api/chat-images/')) onPreview(file.src) }} aria-label={`上传图片 ${index + 1}`} key={file.name + index}><QuietReferenceImage src={file.src}/></button>)}</div>}
     {textAttachments.length > 0 && <div className="text-attachment-list">{textAttachments.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
     <div className="user-message-content">{message.content}</div>
     <MessageCopyButton content={message.content}/>
@@ -1549,7 +1551,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         startTask(task.id, task.startedAt)
         void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then(async (result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
-            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
           if (type === 'strategy' && conversation.activityContext?.format === 'content') {
             const pages = activityContentPages(result.content)
@@ -1600,7 +1602,7 @@ function TextStudio({ type, conversation, onSave, user }) {
 
   async function appendComplianceFiles(fileList) {
     const files = Array.from(fileList || []).slice(0, 4 - attachments.length)
-    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || !complianceFileKind(file))
+    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || (type === 'chat' ? !file.type.startsWith('image/') : !complianceFileKind(file)))
     if (invalid) { setAttachmentError(`${invalid.name} 不支持或超过 12MB`); return }
     try {
       const encoded = await Promise.all(files.map(async (file) => {
@@ -1661,7 +1663,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     if (type === 'chat' && chatSkill.id && !chatSkill.selected) { setAttachmentError('所选 Skill 不可用，请重新选择或重新下载'); return }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
-    const content = submittedInput.trim() || (submittedAttachments.length ? '请审核我上传的文件。' : '')
+    const content = submittedInput.trim() || (submittedAttachments.length ? (type === 'chat' ? '请处理我上传的图片。' : '请审核我上传的文件。') : '')
     const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
     if (type === 'strategy' && activityContext.format === 'image') {
@@ -1709,7 +1711,13 @@ function TextStudio({ type, conversation, onSave, user }) {
     }
     let completed = false
     try {
-      const submittedMessage = { role: 'user', content }
+      const uploadedAttachments = await Promise.all(submittedAttachments.map(async (file) => {
+        if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
+        const { url } = await uploadChatImage({ source: file.src, name: file.name })
+        return { ...file, src: url }
+      }))
+      uploadingImageAttachmentsRef.current = false; setUploadingImages(false)
+      const submittedMessage = { role: 'user', content, ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}) }
       const nextMessages = [...messagesRef.current, submittedMessage]
       updateMessages(nextMessages)
       scrollToLatestResult()
@@ -1721,13 +1729,13 @@ function TextStudio({ type, conversation, onSave, user }) {
         // images attached to this submission. A stale historical thumbnail
         // must never prevent the current review from running.
         const imageFiles = item === submittedMessage ? item.attachments.filter((file) => file.kind === 'image' && file.src) : []
-        const imageInstruction = imageFiles.length ? `\n\n当前消息附带 ${imageFiles.length} 张待审核图片。你必须直接查看图片中的文字、Logo、排版和可见内容并完成审核，不得要求用户再次提供图片或图片文字。` : ''
+        const imageInstruction = imageFiles.length ? `\n\n当前消息附带 ${imageFiles.length} 张图片。请根据用户要求查看并处理图片。` : ''
         const text = [item.content, imageInstruction, ...textFiles.map((file) => `\n\n--- 文件：${file.name} ---\n${file.content}`)].join('')
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS, PRESENTATION_INSTRUCTIONS].filter(Boolean).join('\n\n')
       const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
-      const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
+      const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
       if (type === 'strategy') saveTaskState(completedMessages)
@@ -1748,6 +1756,8 @@ function TextStudio({ type, conversation, onSave, user }) {
         scrollToLatestResult()
       }
     } finally {
+      uploadingImageAttachmentsRef.current = false
+      setUploadingImages(false)
       finishTask(requestId)
       saveTaskState(messagesRef.current, { unreadComplete: completed })
     }
@@ -1771,6 +1781,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {message.skillSnapshot.title}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
+          {message.pptTaskId && <button type="button" className="tool-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}>下载 PPT</button>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
             {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
             <ActivityHtmlResult content={message.content}/>
@@ -1787,14 +1798,14 @@ function TextStudio({ type, conversation, onSave, user }) {
     </div>
     <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
       {type === 'compliance' && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
-      {type === 'compliance' && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
+      {(type === 'compliance' || type === 'chat') && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
       {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
       <textarea rows="3" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} placeholder={copy.placeholder}/><div className="composer-tools">
         {type === 'compliance' ? <div className="tool-group">
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
+        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
