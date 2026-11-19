@@ -817,7 +817,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .text-answer .answer-plain .answer-bullet i { flex: none; }
 
 .ppt-result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
-.text-answer .ppt-copy-action { display: block; margin-top: 8px; }
+.text-answer .ppt-copy-action { display: inline-block; margin-left: 8px; vertical-align: middle; }
 .text-answer .ppt-copy-action .message-copy-button { position: static; display: grid; opacity: 1; transform: none; pointer-events: auto; }
 .ppt-download-button {
   display: inline-flex;

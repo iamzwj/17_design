@@ -459,8 +459,10 @@ function LiveTaskStatus({ startedAt, label = '思考中' }) {
   return <div className="task-elapsed live" role="status"><span className="task-thinking"><i/>{label}</span><LiveElapsed startedAt={startedAt}/></div>
 }
 
-function AnswerText({ content }) {
+function AnswerText({ content, trailing }) {
   const lines = String(content || '').replace(/\r/g, '').split('\n')
+
+  const lastLine = lines.findLastIndex((line) => line.trim())
 
   function inline(value) {
     const clean = String(value).replace(/\s*\[\d+\]/g, '').trim()
@@ -474,7 +476,7 @@ function AnswerText({ content }) {
     if (heading) return <h3 key={index}>{inline(heading[1])}</h3>
     const bullet = line.match(/^(?:[-*•]|\d+[.、])\s+(.+)$/)
     if (bullet) return <p className="answer-bullet" key={index}><i>•</i><span>{inline(bullet[1])}</span></p>
-    return <p key={index}>{inline(line)}</p>
+    return <p key={index}>{inline(line)}{index === lastLine && trailing}</p>
   })}</div>
 }
 
@@ -1790,10 +1792,10 @@ function TextStudio({ type, conversation, onSave, user }) {
           {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
-            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)}/>}
+            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={message.content}/></span> : null}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
-            {message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={message.content}/></span> : <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
+            {!message.pptTaskId && <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
           </>}
           {message.pptTaskId && <div className="ppt-result-actions"><button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button></div>}
           {imageRecords && <ActivityImageResults records={imageRecords}/>}
