@@ -1133,9 +1133,9 @@ async function imageSourceToBuffer(source) {
   return (await imageSourceToData(source)).buffer
 }
 
-async function analyzeImageLayout(sources) {
+async function analyzeImageLayout(sources, question = '') {
   const images = await Promise.all(sources.map(imageSourceToData))
-  const parts = [{ text: `你是品牌物料和门店店招的视觉检查器。逐张查看图片本身，只输出可直接观察到的事实，不做最终合规结论。
+  const parts = [{ text: question ? `请逐张查看图片，结合用户的问题描述相关可见内容，准确转录与问题有关的文字；看不清或无法判断的地方明确说明，不要臆测。用户问题：${question.slice(0, 4000)}` : `你是品牌物料和门店店招的视觉检查器。逐张查看图片本身，只输出可直接观察到的事实，不做最终合规结论。
 
 必须检查并清楚描述：
 1. 图片内所有可辨认文字，尤其是品牌英文名、中文名、Logo 文案、数字和单位；
@@ -1181,7 +1181,7 @@ async function recognizeImageText(source, index) {
   }
 }
 
-async function normalizeTextMessage({ role, content }) {
+async function normalizeTextMessage({ role, content }, generalImages = false) {
   if (typeof content === 'string') return { role, content: content.slice(0, 60_000) }
   if (role !== 'user' || !Array.isArray(content)) return null
 
@@ -1194,14 +1194,14 @@ async function normalizeTextMessage({ role, content }) {
     .slice(0, 4)
 
   const [visionAnalysis, recognizedImages] = await Promise.all([
-    imageSources.length ? analyzeImageLayout(imageSources) : Promise.resolve(''),
+    imageSources.length ? analyzeImageLayout(imageSources, generalImages ? textParts.join('\n') || '请描述图片' : '') : Promise.resolve(''),
     Promise.all(imageSources.map(async (source, index) => {
     const recognizedText = await recognizeImageText(source, index + 1)
-    return `\n\n--- 图片 ${index + 1} 本机识别到的可见文字 ---\n${recognizedText || '本机 OCR 未提供文字（可能不可用或未识别成功），不代表图片文字不可辨认。请依据视觉模型观察审核可识别内容，仅将确实看不清的局部列为待核验；不要称用户未上传图片。'}`
+    return `\n\n--- 图片 ${index + 1} 本机识别到的可见文字 ---\n${recognizedText || (generalImages ? '本机 OCR 未提供文字，请依据视觉观察回答。' : '本机 OCR 未提供文字（可能不可用或未识别成功），不代表图片文字不可辨认。请依据视觉模型观察审核可识别内容，仅将确实看不清的局部列为待核验；不要称用户未上传图片。')}`
     })),
   ])
 
-  const visualEvidence = visionAnalysis ? `\n\n--- 视觉模型对图片结构的客观观察 ---\n${visionAnalysis}\n\n请以视觉观察判断 Logo 遮挡、变形、裁切与排版覆盖，以本机 OCR 仅校对文字。` : ''
+  const visualEvidence = visionAnalysis ? `\n\n--- 视觉模型对图片的观察 ---\n${visionAnalysis}${generalImages ? '' : '\n\n请以视觉观察判断 Logo 遮挡、变形、裁切与排版覆盖，以本机 OCR 仅校对文字。'}` : ''
   const combined = [...textParts, visualEvidence, ...recognizedImages].join('').slice(0, 60_000)
   return combined ? { role, content: combined } : null
 }
@@ -1365,7 +1365,7 @@ async function handleTextCompletion(req, res, next) {
     const safeMessages = (await Promise.all(messages
       .filter((message) => ['user', 'assistant'].includes(message.role))
       .map(async (message) => {
-        if (message.role !== 'user' || !Array.isArray(message.content)) return normalizeTextMessage(message)
+        if (message.role !== 'user' || !Array.isArray(message.content)) return normalizeTextMessage(message, req.body.imageAnalysisMode === 'general')
         const parts = await Promise.all(message.content.map(async (part) => {
           const source = part?.image_url?.url
           if (part?.type !== 'image_url' || !/^\/api\/chat-images\/[a-f0-9-]{36}\.png$/i.test(source || '')) return part
@@ -1375,7 +1375,7 @@ async function handleTextCompletion(req, res, next) {
           const buffer = await fs.promises.readFile(path.join(directory, `${id}.png`))
           return { ...part, image_url: { ...part.image_url, url: `data:image/png;base64,${buffer.toString('base64')}` } }
         }))
-        return normalizeTextMessage({ ...message, content: parts })
+        return normalizeTextMessage({ ...message, content: parts }, req.body.imageAnalysisMode === 'general')
       })))
       .filter(Boolean)
     if (skill) safeMessages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })

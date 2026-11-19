@@ -1604,7 +1604,9 @@ function TextStudio({ type, conversation, onSave, user }) {
 
   async function appendComplianceFiles(fileList) {
     const files = Array.from(fileList || []).slice(0, 4 - attachments.length)
-    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || (type === 'chat' ? !file.type.startsWith('image/') : !complianceFileKind(file)))
+    if (!files.length && fileList?.length) { setAttachmentError('最多上传 4 张图片或文件'); return }
+    if (type === 'chat' && files.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024)) { setAttachmentError('请拖入 10MB 以内的 JPG、PNG、WebP 或 GIF 图片'); return }
+    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || !complianceFileKind(file))
     if (invalid) { setAttachmentError(`${invalid.name} 不支持或超过 12MB`); return }
     try {
       const encoded = await Promise.all(files.map(async (file) => {
@@ -1624,27 +1626,27 @@ function TextStudio({ type, conversation, onSave, user }) {
   }
 
   function handleComplianceDragEnter(event) {
-    if (type !== 'compliance' || !hasSupportedDrag(event.dataTransfer)) return
+    if (!['compliance', 'chat'].includes(type) || !hasSupportedDrag(event.dataTransfer)) return
     event.preventDefault()
     complianceDragDepth.current += 1
     setDraggingComplianceFiles(true)
   }
 
   function handleComplianceDragOver(event) {
-    if (type !== 'compliance' || !hasSupportedDrag(event.dataTransfer)) return
+    if (!['compliance', 'chat'].includes(type) || !hasSupportedDrag(event.dataTransfer)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
   }
 
   function handleComplianceDragLeave(event) {
-    if (type !== 'compliance' || !hasSupportedDrag(event.dataTransfer)) return
+    if (!['compliance', 'chat'].includes(type) || !hasSupportedDrag(event.dataTransfer)) return
     event.preventDefault()
     complianceDragDepth.current = Math.max(0, complianceDragDepth.current - 1)
     if (complianceDragDepth.current === 0) setDraggingComplianceFiles(false)
   }
 
   async function handleComplianceDrop(event) {
-    if (type !== 'compliance') return
+    if (!['compliance', 'chat'].includes(type) || !hasSupportedDrag(event.dataTransfer)) return
     event.preventDefault()
     complianceDragDepth.current = 0
     setDraggingComplianceFiles(false)
@@ -1665,7 +1667,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     if (type === 'chat' && chatSkill.id && !chatSkill.selected) { setAttachmentError('所选 Skill 不可用，请重新选择或重新下载'); return }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
-    const content = submittedInput.trim() || (submittedAttachments.length ? (type === 'chat' ? '请处理我上传的图片。' : '请审核我上传的文件。') : '')
+    const content = submittedInput.trim() || (submittedAttachments.length ? (type === 'chat' ? '请分析我上传的图片。' : '请审核我上传的文件。') : '')
     const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
     if (type === 'strategy' && activityContext.format === 'image') {
@@ -1712,12 +1714,14 @@ function TextStudio({ type, conversation, onSave, user }) {
       return
     }
     let completed = false
+    let uploadComplete = false
     try {
       const uploadedAttachments = await Promise.all(submittedAttachments.map(async (file) => {
         if (file.kind !== 'image' || !file.src?.startsWith('data:image/')) return file
         const { url } = await uploadChatImage({ source: file.src, name: file.name })
         return { ...file, src: url }
       }))
+      uploadComplete = true
       uploadingImageAttachmentsRef.current = false; setUploadingImages(false)
       const submittedMessage = { role: 'user', content, ...(uploadedAttachments.length ? { attachments: uploadedAttachments } : {}) }
       const nextMessages = [...messagesRef.current, submittedMessage]
@@ -1736,7 +1740,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS, PRESENTATION_INSTRUCTIONS].filter(Boolean).join('\n\n')
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' ? { imageAnalysisMode: 'general' } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
@@ -1748,7 +1752,7 @@ function TextStudio({ type, conversation, onSave, user }) {
       }
       completed = true
     } catch (err) {
-      if (needsImageUpload) {
+      if (needsImageUpload && !uploadComplete) {
         setAttachmentError(userError(err.message) || '图片保存失败，请重试')
         setInput((current) => current || submittedInput)
         setAttachments((current) => current.length ? current : submittedAttachments)
@@ -1799,10 +1803,10 @@ function TextStudio({ type, conversation, onSave, user }) {
       </div>}
     </div>
     <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
-      {type === 'compliance' && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
-      {(type === 'compliance' || type === 'chat') && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
+      {['compliance', 'chat'].includes(type) && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
+      {['compliance', 'chat'].includes(type) && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
       {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
-      <textarea rows="3" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} placeholder={copy.placeholder}/><div className="composer-tools">
+      <textarea rows="3" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} placeholder={type === 'chat' ? '告诉我你想做什么，或拖入图片…' : copy.placeholder}/><div className="composer-tools">
         {type === 'compliance' ? <div className="tool-group">
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
