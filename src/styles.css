@@ -845,3 +845,22 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 }
 .ppt-download-button:hover { background: #0d5dcc; }
 .ppt-download-button:focus-visible { outline: 2px solid #559bff; outline-offset: 3px; }
+
+/* Copy controls share the same unobtrusive icon treatment in both themes. */
+.message-copy-button:not(.with-label),
+:root[data-theme='dark'] .message-copy-button:not(.with-label) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.message-copy-button:not(.with-label):hover,
+:root[data-theme='dark'] .message-copy-button:not(.with-label):hover {
+  background: transparent;
+  color: var(--accent);
+}
+.message-copy-button:not(.with-label):focus-visible,
+:root[data-theme='dark'] .message-copy-button:not(.with-label):focus-visible {
+  background: transparent;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
