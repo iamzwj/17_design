@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import './composerSelect.css'
 
-export default function ComposerSelect({ label, value, options, onChange, disabled = false, className = '', placeholder, icon, footer, portal = false }) {
+export default function ComposerSelect({ label, value, options, onChange, disabled = false, className = '', placeholder, icon, footer, portal = false, keepOpenOnSelect = false }) {
   const [open, setOpen] = useState(false)
   const root = useRef(null), trigger = useRef(null), menu = useRef(null)
   const selected = options.find((item) => item.value === value)
@@ -57,7 +57,7 @@ export default function ComposerSelect({ label, value, options, onChange, disabl
     buttons[next]?.focus()
   }
   const menuContent = <div className={`composer-select-menu ${portal ? "film-floating-menu" : ""}`} ref={menu}>
-      <div className="composer-select-options" role="listbox" aria-label={label} onKeyDown={move}>{options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} aria-disabled={option.disabled || undefined} onClick={() => { onChange(option.value); setOpen(false); trigger.current?.focus() }}><span>{option.label}</span>{option.status && <small className="composer-option-status">{option.status}</small>}{option.value === value && <Icon name="check" size={13}/>}</button>)}</div>
+      <div className="composer-select-options" role="listbox" aria-label={label} onKeyDown={move}>{options.map((option) => <button key={option.value} type="button" role="option" aria-selected={option.value === value} disabled={option.disabled} aria-disabled={option.disabled || undefined} onClick={() => { onChange(option.value); if (!(typeof keepOpenOnSelect === 'function' ? keepOpenOnSelect(option.value) : keepOpenOnSelect)) { setOpen(false); trigger.current?.focus() } }}><span>{option.label}</span>{option.status && <small className="composer-option-status">{option.status}</small>}{option.value === value && <Icon name="check" size={13}/>}</button>)}</div>
       {footer && <div className="composer-select-footer">{footer}</div>}
     </div>
   return <div className={`composer-select ${className}`} ref={root}>
