@@ -1,4 +1,4 @@
-.pulin-report{max-width:1180px;margin:0 auto;padding:32px 24px 80px;color:var(--dp-ink)}
+.pulin-report{width:100%;max-width:1180px;min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;margin:0 auto;padding:32px 24px 80px;color:var(--dp-ink)}
 .pulin-report h1{font-size:30px;margin:0 0 8px}.pulin-report h2{font-size:22px;margin:0 0 8px}.pulin-report p{color:var(--dp-secondary)}
 .pr-section{margin-top:24px;padding:26px;border:1px solid rgba(150,150,150,.25);border-radius:20px;background:var(--dp-panel)}
 .pulin-report button,.pr-result a{border:1px solid rgba(160,120,100,.4);border-radius:10px;padding:10px 16px;background:#e87126;color:#fff;cursor:pointer;text-decoration:none}.pulin-report button:disabled{opacity:.45;cursor:not-allowed}

@@ -4,7 +4,7 @@ import './pulinReport.css'
 
 const seasons = [
   { id: 'summer', name: '夏季', clothes: '白色短袖衬衫，深色西裤，黑色皮鞋' },
-  { id: 'spring', name: '春夏', clothes: '白色长袖衬衫，深色西裤，黑色皮鞋，深色合身西装外套' },
+  { id: 'spring', name: '春秋', clothes: '白色长袖衬衫，深色西裤，黑色皮鞋，深色合身西装外套' },
   { id: 'winter', name: '冬季', clothes: '白色长袖衬衫，深色西装和西裤，黑色皮鞋，外穿深色长款大衣' },
 ]
 const initial = { portrait: '', cards: {}, mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
@@ -81,11 +81,12 @@ async function generate(season) {
   if (!reference || state.cards[season.id]?.status === 'running') return
   update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running' } } }))
   try {
-    const collarResponse = await fetch('/pulin-collar-reference.png')
+    const isSpringAutumn = season.id === 'spring'
+    const collarResponse = await fetch(isSpringAutumn ? '/pulin-tie-reference.png' : '/pulin-collar-reference.png')
     if (!collarResponse.ok) throw new Error('着装参考图加载失败，请重试')
     const collarReference = await fileToDataUrl(await collarResponse.blob())
     const result = await createConversationImageTask({
-      prompt: `第一张参考图是人物，第二张是朴邻女士领花实物，仅供服装配饰参考。把第一张照片中的同一个人生成真人写实职业全身肖像，保持原有五官、年龄、肤色和身份特征，不换脸，不卡通。根据人物呈现朴邻职业着装：${season.clothes}。女性严格照第二张图佩戴领花：金棕色布质，两片交叠并向下垂的尖角，顶部有圆形扣饰；不是横向蝴蝶结，不是蝴蝶领结。男性佩戴金色行政长领带，不佩戴女士领花。衣服整洁得体。正面站立，自然姿态，纯浅灰背景，完整头部到鞋子，不加文字。`,
+      prompt: `第一张参考图是人物，第二张是朴邻${isSpringAutumn ? '行政领带' : '女士领花'}实物，仅供服装配饰参考。把第一张照片中的同一个人生成真人写实职业全身肖像，保持原有五官、年龄、肤色和身份特征，不换脸，不卡通。根据人物呈现朴邻${season.name}职业着装：${season.clothes}。${isSpringAutumn ? '人物佩戴第二张图所示金色行政长领带，领带从衬衫领口垂至腰部，不佩戴领花或蝴蝶结。' : '女性严格照第二张图佩戴领花：金棕色布质，两片交叠并向下垂的尖角，顶部有圆形扣饰；不是横向蝴蝶结，不是蝴蝶领结。男性佩戴金色行政长领带，不佩戴女士领花。'}衣服整洁得体。正面站立，自然姿态，纯浅灰背景，完整头部到鞋子，不加文字。`,
       images: [waterfallReferenceForRequest(reference), collarReference], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '3:4', knowledge: {},
     })
     const taskId = result.task.id
