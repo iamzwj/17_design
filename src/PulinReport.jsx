@@ -179,7 +179,7 @@ export default function PulinReport({ user, onLogin }) {
     <header><h1>朴邻战报制作</h1><p>先生成真人着装照，再制作个人或团队战报。</p></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
     <div className="pr-section"><h2>人物着装照</h2><p>上传一张清晰正面照片，系统将根据人物照片生成对应着装。</p>
-      <label className="pr-upload">{view.portrait ? <img src={view.portrait} alt="已上传头像"/> : <span>上传人物头像</span>}<input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label>
+      <label className="pr-upload pr-portrait-upload"><span>上传图片</span><input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label>
       <button disabled={!view.portrait || seasons.some(s => view.cards[s.id]?.status === 'running')} onClick={() => seasons.forEach(s => void generate(s))}>生成三季着装</button>
       <div className="pr-cards">{seasons.map(s => { const c = view.cards[s.id]; return <article key={s.id}><h3>{s.name}着装</h3><div className="pr-image">{c?.url ? <img src={c.url} alt={s.name + '真人着装'}/> : <span>{c?.status === 'running' ? '正在生成…' : '等待生成'}</span>}</div>{c?.error && <p role="alert">{c.error}</p>}<div><button disabled={!view.portrait || c?.status === 'running'} onClick={() => void generate(s)}>{c?.url ? '重新生成' : '单独生成'}</button>{c?.url && <button onClick={() => downloadGeneratedImage(c.url, '朴邻' + s.name + '着装')}>下载</button>}</div></article> })}</div>
     </div>
