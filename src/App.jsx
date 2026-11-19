@@ -1902,7 +1902,7 @@ export default function App() {
     readActivityHistory(savedKey).catch(() => undefined).then(savedActivity => {
       if (!current) return
       const restored = savedActivity
-        ? [...withoutVideoHistory.filter(item => item.type !== 'strategy'), ...savedActivity]
+        ? [...withoutVideoHistory.filter(item => !['strategy', 'pulin-report'].includes(item.type)), ...savedActivity]
         : withoutVideoHistory
       setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
       const url = new URL(window.location.href)
@@ -1983,7 +1983,7 @@ export default function App() {
       const existing = current.find((conversation) => conversation.id === update.id)
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
       const next = [record, ...current.filter((conversation) => conversation.id !== update.id)].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      if (update.type === 'strategy') void saveActivityHistory(conversationStorageKey, next).catch(() => {})
+      if (['strategy', 'pulin-report'].includes(update.type)) void saveActivityHistory(conversationStorageKey, next).catch(() => {})
       try { writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
       return next
     })
@@ -2066,7 +2066,8 @@ export default function App() {
       setImageMode('dialogue')
       writeWorkspaceStorage(IMAGE_MODE_KEY, 'dialogue')
     }
-    setActive(conversation.type)
+    if (conversation.type === 'pulin-report') { setMoreTool('pulin-report'); setActive('more') }
+    else setActive(conversation.type)
     setActiveConversationId(conversation.id)
     setWorkspaceToken((value) => value + 1)
   }
@@ -2167,7 +2168,7 @@ export default function App() {
     : active === 'admin'
       ? <AdminStudio key={workspaceToken}/>
     : active === 'more'
-      ? <MoreTools key={workspaceToken} tool={moreTool} user={user} onLogin={() => openLogin('more')}/>
+      ? <MoreTools key={workspaceToken} tool={moreTool} user={user} conversation={activeConversation} onSave={saveConversation} onLogin={() => openLogin('more')}/>
     : active === 'image'
       ? <ImageStudio key={workspaceToken} conversation={activeConversation} onSave={saveConversation} imageMode={imageMode} waterfallStorageKey={`${WATERFALL_CACHE_PREFIX}${user?.email || 'guest'}`} onUserUpdate={setUser} onRequireLogin={() => openLogin('image')}/>
       : active === 'content'

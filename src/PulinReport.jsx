@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, getAuthToken, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import './pulinReport.css'
 
 const seasons = [
@@ -12,8 +12,9 @@ const listeners = new Set()
 let state = initial
 let loadedKey = ''
 let loadPromise
+const taskStates = new Map()
 const active = new Set()
-function key() { return 'pulin-report:' + getAuthToken().slice(-16) }
+function key(taskId) { return 'pulin-report:' + taskId }
 function database() {
   return new Promise((resolve, reject) => {
     const open = indexedDB.open('dgen-pulin-report', 1)
@@ -33,10 +34,12 @@ async function readDraft(id) {
   })
 }
 let writes = Promise.resolve()
-function update(change) {
-  state = typeof change === 'function' ? change(state) : { ...state, ...change }
-  const snapshot = structuredClone(state)
-  const id = loadedKey
+function update(change, id = loadedKey) {
+  const current = taskStates.get(id) || (id === loadedKey ? state : initial)
+  const next = typeof change === 'function' ? change(current) : { ...current, ...change }
+  taskStates.set(id, next)
+  if (id === loadedKey) state = next
+  const snapshot = structuredClone(next)
   writes = writes.catch(() => {}).then(async () => {
     const db = await database()
     return new Promise((resolve, reject) => {
@@ -46,40 +49,40 @@ function update(change) {
       tx.onerror = () => { db.close(); reject(tx.error) }
     })
   }).catch(() => { state = { ...state, storageError: '本地保存失败，刷新后草稿可能丢失。' }; listeners.forEach(fn => fn(state)) })
-  listeners.forEach(fn => fn(state))
+  if (id === loadedKey) listeners.forEach(fn => fn(state))
 }
-async function initialize() {
-  const id = key()
+async function initialize(taskId) {
+  const id = key(taskId)
   if (loadedKey === id) return
   if (loadPromise) await loadPromise
   loadPromise = (async () => {
-    state = { ...initial, ...(await readDraft(id).catch(() => null)) }
+    state = taskStates.get(id) || { ...initial, ...(await readDraft(id).catch(() => null)) }
+    taskStates.set(id, state)
     loadedKey = id
     listeners.forEach(fn => fn(state))
     for (const [season, card] of Object.entries(state.cards)) {
-      if (card.status === 'running' && card.taskId) void finish(season, card.taskId)
+      if (card.status === 'running' && card.taskId) void finish(season, card.taskId, id)
       else if (card.status === 'running') update(current => ({ ...current, cards: { ...current.cards, [season]: { status: 'error', error: '任务提交状态未确认，请检查生成记录后重试。' } } }))
     }
   })()
   await loadPromise
   loadPromise = null
 }
-async function finish(id, taskId) {
-  const owner = key()
+async function finish(id, taskId, owner) {
   if (active.has(taskId)) return
   active.add(taskId)
   try {
     const result = await waitForConversationImageTask(taskId)
-    if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url: result.urls[0], uniformVersion: 3 } } }))
+    update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url: result.urls[0], uniformVersion: 3 } } }), owner)
   } catch (error) {
-    if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }))
+    update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }), owner)
   } finally { active.delete(taskId) }
 }
-async function generate(season) {
-  const owner = key()
-  const reference = state.portrait
-  if (!reference || state.cards[season.id]?.status === 'running') return
-  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running' } } }))
+async function generate(season, owner = loadedKey) {
+  const draft = taskStates.get(owner) || state
+  const reference = draft.portrait
+  if (!reference || draft.cards[season.id]?.status === 'running') return
+  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running' } } }), owner)
   try {
     const collarResponse = await fetch('/pulin-collar-reference.png')
     if (!collarResponse.ok) throw new Error('着装参考图加载失败，请重试')
@@ -89,11 +92,10 @@ async function generate(season) {
       images: [waterfallReferenceForRequest(reference), collarReference], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '3:4', knowledge: {},
     })
     const taskId = result.task.id
-    if (owner !== loadedKey || owner !== key()) return
-    update(current => ({ ...current, cards: { ...current.cards, [season.id]: { ...current.cards[season.id], status: 'running', taskId } } }))
-    await finish(season.id, taskId)
+    update(current => ({ ...current, cards: { ...current.cards, [season.id]: { ...current.cards[season.id], status: 'running', taskId } } }), owner)
+    await finish(season.id, taskId, owner)
   } catch (error) {
-    if (owner === loadedKey && owner === key()) update(current => ({ ...current, cards: { ...current.cards, [season.id]: { ...current.cards[season.id], status: 'error', error: error.message } } }))
+    update(current => ({ ...current, cards: { ...current.cards, [season.id]: { ...current.cards[season.id], status: 'error', error: error.message } } }), owner)
   }
 }
 function loadImage(source) {
@@ -106,10 +108,12 @@ function loadImage(source) {
   })
 }
 async function makeReport() {
-  const sources = state.mode === 'single' ? [state.cards[state.selected]?.url].filter(Boolean) : state.people
+  const owner = loadedKey
+  const draft = state
+  const sources = draft.mode === 'single' ? [draft.cards[draft.selected]?.url].filter(Boolean) : draft.people
   if (!sources.length) throw new Error('请先选择人物图片')
-  const lines = state.data.split('\n').filter(line => line.trim())
-  if (!state.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
+  const lines = draft.data.split('\n').filter(line => line.trim())
+  if (!draft.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
   if (lines.length > 6 || lines.some(line => line.length > 28)) throw new Error('战报数据最多 6 行，每行最多 28 个字')
   const images = await Promise.all(['/pulin-report-background.png', ...sources].map(loadImage))
   const canvas = document.createElement('canvas')
@@ -119,12 +123,12 @@ async function makeReport() {
   ctx.drawImage(images[0], 0, 0, 1080, 1440)
   ctx.fillStyle = '#bd4a17'
   ctx.font = 'bold 76px sans-serif'
-  ctx.fillText(state.title.slice(0, 12), 76, 140, 920)
+  ctx.fillText(draft.title.slice(0, 12), 76, 140, 920)
   ctx.font = 'bold 28px sans-serif'
   ctx.fillText('朴邻', 930, 140)
   ctx.fillStyle = '#593e33'
   ctx.font = '30px sans-serif'
-  ctx.fillText(state.subtitle.slice(0, 24), 80, 200)
+  ctx.fillText(draft.subtitle.slice(0, 24), 80, 200)
   const portraits = images.slice(1)
   const columns = Math.min(portraits.length, 3)
   const rows = Math.ceil(portraits.length / columns)
@@ -145,9 +149,9 @@ async function makeReport() {
   ctx.fillStyle = '#4e3027'
   ctx.font = 'bold 40px sans-serif'
   lines.forEach((line, i) => ctx.fillText(line, 100, 1000 + i * 58, 880))
-  update({ ...state, report: canvas.toDataURL('image/png') })
+  update(current => ({ ...current, report: canvas.toDataURL('image/png') }), owner)
 }
-export default function PulinReport({ user, onLogin }) {
+export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
   const [picker, setPicker] = useState(false)
@@ -156,10 +160,11 @@ export default function PulinReport({ user, onLogin }) {
     listeners.add(setView)
     let mounted = true
     setReady(false)
-    if (user) { setView(loadedKey === key() ? state : initial); void initialize().then(() => { if (mounted) { setView(state); setReady(true) } }) }
+    if (user) { setView(loadedKey === key(taskId) ? state : initial); void initialize(taskId).then(() => { if (mounted) { setView(state); setReady(true) } }) }
     return () => { mounted = false; listeners.delete(setView) }
-  }, [user])
+  }, [user, taskId])
   async function upload(event, multiple) {
+    const owner = loadedKey
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
@@ -167,9 +172,9 @@ export default function PulinReport({ user, onLogin }) {
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
-      update(multiple ? { ...state, people: urls } : { ...state, portrait: urls[0], cards: {}, selected: '' })
+      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], cards: {}, selected: '' }, owner)
       setError('')
-      if (!multiple) seasons.forEach(season => void generate(season))
+      if (!multiple) { onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true }); seasons.forEach(season => void generate(season, owner)) }
     } catch { setError('图片读取失败，请重试') }
   }
   if (!user) return <section className="pulin-report"><h1>朴邻战报制作</h1><p>登录后即可生成着装照和战报。</p><button onClick={onLogin}>登录</button></section>

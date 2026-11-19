@@ -27,5 +27,5 @@ export function readActivityHistory(key) {
 }
 
 export function saveActivityHistory(key, records) {
-  return activityHistory('readwrite', store => store.put(records.filter(record => record.type === 'strategy'), key))
+  return activityHistory('readwrite', store => store.put(records.filter(record => ['strategy', 'pulin-report'].includes(record.type)), key))
 }
