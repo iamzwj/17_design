@@ -72,5 +72,7 @@ test('activity context retains a large brand rule set and trims optional marketi
   assert.ok(result.prompt.length <= 24000)
   assert.ok(result.prompt.includes('品牌规范'.repeat(3400)))
   assert.ok(result.prompt.includes('研选家服务营销方法'))
+  assert.ok(trace.retrieved.length > 0, 'available capacity should retain relevant marketing evidence')
   assert.ok(trace.retrieved.length < chunks.length)
+  assert.match(result.prompt, /本次选用1份/)
 })

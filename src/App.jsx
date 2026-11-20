@@ -1492,7 +1492,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   const webSearch = type === 'strategy'
   const [draggingComplianceFiles, setDraggingComplianceFiles] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
-  const [runningRequests, setRunningRequests] = useState(() => [...runtime.active.entries()].map(([id, startedAt]) => ({ id, startedAt })))
+  const [runningRequests, setRunningRequests] = useState(() => [...runtime.active.entries()].map(([id, task]) => ({ id, ...(typeof task === 'string' ? { startedAt: task } : task) })))
   const messagesRef = runtime.messages
   const activeRequestsRef = useRef(runtime.active)
   const uploadingImageAttachmentsRef = useRef(false)
@@ -1513,11 +1513,11 @@ function TextStudio({ type, conversation, onSave, user }) {
   }
 
   function activeTaskSnapshot() {
-    return [...activeRequestsRef.current.entries()].map(([id, startedAt]) => ({ id, startedAt }))
+    return [...activeRequestsRef.current.entries()].map(([id, task]) => ({ id, ...(typeof task === 'string' ? { startedAt: task } : task) }))
   }
 
-  function startTask(id, startedAt) {
-    activeRequestsRef.current.set(id, startedAt)
+  function startTask(id, startedAt, taskContext) {
+    activeRequestsRef.current.set(id, { startedAt, ...(taskContext ? { activityContext: taskContext } : {}) })
     setRunningRequests(activeTaskSnapshot())
   }
 
@@ -1556,14 +1556,15 @@ function TextStudio({ type, conversation, onSave, user }) {
     if (conversation.status === 'running' && activeRequestsRef.current.size === 0 && conversation.textTasks?.length) {
       updateMessages(validTextMessages(conversation.messages))
       for (const task of conversation.textTasks) {
-        startTask(task.id, task.startedAt)
+        startTask(task.id, task.startedAt, task.activityContext)
         void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then(async (result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
             updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
-          if (type === 'strategy' && conversation.activityContext?.format === 'content') {
+          if (type === 'strategy' && (task.activityContext || conversation.activityContext)?.format === 'content') {
             const pages = activityContentPages(result.content)
-            await Promise.all(pages.map((page, index) => activityImages.create(page.prompt, { ...conversation.activityContext, format: 'image', pageTitle: `图文第${index + 1}页 · ${page.title}` }, `${task.id}-page-${index + 1}`)))
+            if (!pages.length) setAttachmentError('文案已生成，但配图脚本未返回有效结构。请让 AI 补充逐页配图脚本后重试。')
+            await Promise.all(pages.map((page, index) => activityImages.create(page.prompt, { ...(task.activityContext || conversation.activityContext), format: 'image', pageTitle: `图文第${index + 1}页 · ${page.title}` }, `${task.id}-page-${index + 1}`)))
           }
         }).catch((error) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) updateMessages([...messagesRef.current, { role: 'error', taskId: task.id, content: userError(error.message), failedAt: new Date().toISOString() }])
@@ -1689,7 +1690,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     }
     const startedAt = new Date().toISOString()
     const requestId = crypto.randomUUID()
-    startTask(requestId, startedAt)
+    startTask(requestId, startedAt, type === 'strategy' ? { ...activityContext } : undefined)
     // Clear the composer at submission time so a second task can be composed
     // while this request uploads and is being reviewed.
     setInput(''); setAttachments([]); setAttachmentError('')
@@ -1788,7 +1789,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         const imageRecords = activityImageGroups?.byMessage.get(index)
         if (message.role === 'user') return <Fragment key={index}>
           <TextUserMessage message={message} messageRef={messageRef} onPreview={setPreviewImage}/>
-          {imageRecords && <ActivityImageResults records={imageRecords}/>}
+          {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
@@ -1801,11 +1802,11 @@ function TextStudio({ type, conversation, onSave, user }) {
             {!message.pptTaskId && <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
           </>}
           {message.pptTaskId && <div className="ppt-result-actions"><button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button></div>}
-          {imageRecords && <ActivityImageResults records={imageRecords}/>}
+          {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </div>
       })}
         {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
-        {activityImageGroups?.unmatched.length > 0 && <ActivityImageResults records={activityImageGroups.unmatched}/>}
+        {activityImageGroups?.unmatched.length > 0 && <ActivityImageResults records={activityImageGroups.unmatched} onRetry={activityImages.retry}/>}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>

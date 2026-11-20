@@ -21,13 +21,13 @@ export function useActivityImages(conversationId, enabled) {
           const boot = await knowledgeRequest('/bootstrap')
           const identity = boot.brands.find(b => b.name === record.context.identity)
           const marketing = boot.brands.find(b => b.name === '营销活动')
-          const result = await createConversationImageTask({ prompt: record.prompt, clientRequestId: record.id, images: [], model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION, quality: DEFAULT_IMAGE_QUALITY, aspectRatio: '3:4', knowledge: { brandId: identity?.id || marketing?.id, activityContext: record.context, ...(identity ? { enforceBrandColors: true } : {}) } })
+          const result = await createConversationImageTask({ prompt: record.prompt, clientRequestId: record.submissionId || record.id, images: [], model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION, quality: DEFAULT_IMAGE_QUALITY, aspectRatio: '3:4', knowledge: { brandId: identity?.id || marketing?.id, activityContext: record.context, ...(identity ? { enforceBrandColors: true } : {}) } })
           taskId = result.task.id
           write(rows => rows.map(r => r.id === record.id ? { ...r, taskId, status: 'running' } : r))
         }
         const result = await waitForConversationImageTask(taskId)
         write(rows => rows.map(r => r.id === record.id ? { ...r, taskId, status: 'succeeded', urls: result.urls } : r))
-      } catch (error) { write(rows => rows.map(r => r.id === record.id ? { ...r, status: 'failed', error: error.message } : r)) }
+      } catch (error) { const message = /品牌颜色规范尚未发布/.test(error.message) ? `${error.message} 请在知识库中发布该品牌的标准色后重试。` : error.message; write(rows => rows.map(r => r.id === record.id ? { ...r, status: 'failed', error: message, retryable: Boolean(error.terminal && r.taskId) } : r)) }
     })().finally(() => running.delete(runtimeKey))
     running.set(runtimeKey, operation)
     return operation
@@ -35,12 +35,15 @@ export function useActivityImages(conversationId, enabled) {
   useEffect(() => {
     const sync = () => setRecords(read(key))
     window.addEventListener('dgen-activity-images', sync)
-    if (enabled) for (const record of read(key).filter(r => ['submitting', 'running'].includes(r.status))) void execute(record)
+    if (enabled) for (const record of read(key).filter(r => ['submitting', 'running'].includes(r.status))) {
+      if (!record.taskId && !running.has(`${key}:${record.id}`)) { write(rows => rows.map(r => r.id === record.id ? { ...r, status: 'failed', retryable: false, error: '提交结果暂时无法确认，请先查看生成记录，避免重复扣费。' } : r)); continue }
+      void execute(record)
+    }
     return () => window.removeEventListener('dgen-activity-images', sync)
     // The durable key owns this runtime; switching modules resumes the same server task.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled])
-  return { records, create: async (prompt, context, recordId) => { const existing = recordId && read(key).find(r => r.id === recordId); if (existing) { if (['submitting', 'running'].includes(existing.status)) await execute(existing); return }; const record = { id: recordId || crypto.randomUUID(), prompt, context: { ...context }, status: 'submitting', createdAt: Date.now() }; write(rows => [...rows, record]); await execute(record) } }
+  return { records, retry: async (id) => { const previous = read(key).find(r => r.id === id); if (!previous?.retryable) return; const next = { ...previous, taskId: null, submissionId: crypto.randomUUID(), status: 'submitting', error: '', retryable: false }; write(rows => rows.map(r => r.id === id ? next : r)); await execute(next) }, create: async (prompt, context, recordId) => { const existing = recordId && read(key).find(r => r.id === recordId); if (existing) { if (['submitting', 'running'].includes(existing.status)) await execute(existing); return }; const record = { id: recordId || crypto.randomUUID(), prompt, context: { ...context }, status: 'submitting', createdAt: Date.now() }; write(rows => [...rows, record]); await execute(record) } }
 }
 
 export function groupActivityImages(messages, records) {
@@ -65,16 +68,23 @@ export function groupActivityImages(messages, records) {
   return { byMessage, unmatched }
 }
 
-export function ActivityImageResults({ records }) {
+export function ActivityImageResults({ records, onRetry }) {
   if (!records.length) return null
-  return <div className="activity-image-results">{records.map(r => <article key={r.id}><header><b>{r.context.pageTitle || '活动图片'}</b><span>{r.context.identity || '按需求创作'} · {r.context.scope || '未指定属地'}</span></header>{['running', 'submitting'].includes(r.status) ? <p role="status">正在生成图片，切换模块后可回来查看…</p> : r.status === 'failed' ? <p role="alert">{r.error}</p> : r.urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={r.prompt}/></a>)}</article>)}</div>
+  return <div className="activity-image-results">{records.map(r => <article key={r.id}><header><b>{r.context.pageTitle || '活动图片'}</b><span>{r.context.identity || '按需求创作'} · {r.context.scope || '未指定属地'}</span></header>{['running', 'submitting'].includes(r.status) ? <p role="status">正在生成图片，切换模块后可回来查看…</p> : r.status === 'failed' ? <div><p role="alert">{r.error}</p>{r.retryable && onRetry && <button type="button" onClick={() => onRetry(r.id)}>重新生成（消耗积分）</button>}</div> : r.urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt={r.prompt}/></a>)}</article>)}</div>
 }
 
 export function activityContentPages(content) {
-  try {
-    const value = JSON.parse(String(content || '').match(/```json\s*([\s\S]*?)```/i)?.[1] || '{}')
-    return Array.isArray(value.pages) ? value.pages.filter(p => typeof p.title === 'string' && typeof p.prompt === 'string').slice(0, 6) : []
-  } catch { return [] }
+  const text = String(content || '')
+  const candidates = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map(match => match[1])
+  candidates.push(text.trim())
+  for (const candidate of candidates) {
+    try {
+      const value = JSON.parse(candidate)
+      const pages = Array.isArray(value.pages) ? value.pages.filter(p => typeof p.title === 'string' && p.title.trim() && typeof p.prompt === 'string' && p.prompt.trim()).slice(0, 6) : []
+      if (pages.length) return pages
+    } catch { /* Try the next complete JSON block. */ }
+  }
+  return []
 }
 export function activityVisibleText(content) {
   let text = String(content || '')
