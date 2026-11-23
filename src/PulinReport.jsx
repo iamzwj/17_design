@@ -81,7 +81,8 @@ async function initialize(taskId) {
     loadedKey = id
     listeners.forEach(fn => fn(state))
     if (state.reportStatus === 'running') {
-      if (state.reportTaskId) void finishTeamReport(state.reportTaskId, id)
+      if (state.teamPipeline && !state.reportTaskId) void runTeamPipeline(id)
+      else if (state.reportTaskId) void finishTeamReport(state.reportTaskId, id)
       else update({ reportStatus: 'error', reportError: '提交状态未确认，请先检查生成记录再重试。' }, id)
     }
     for (const [season, card] of Object.entries(state.cards)) {
@@ -97,7 +98,8 @@ export async function resumePulinReportTasks(taskId) {
   const draft = taskStates.get(owner) || await readDraft(owner).catch(() => null)
   if (!draft) return
   taskStates.set(owner, draft)
-  if (draft.reportStatus === 'running' && draft.reportTaskId) void finishTeamReport(draft.reportTaskId, owner)
+  if (draft.reportStatus === 'running' && draft.teamPipeline && !draft.reportTaskId) void runTeamPipeline(owner)
+  else if (draft.reportStatus === 'running' && draft.reportTaskId) void finishTeamReport(draft.reportTaskId, owner)
   const cards = Object.entries(draft.cards || {})
   for (const [season, card] of cards) {
     if (card.status === 'running' && card.taskId) void finish(season, card.taskId, owner)
@@ -205,6 +207,41 @@ async function cropPortraitPhoto(url, half) {
   canvas.getContext('2d').drawImage(image, x, y, width, height, 0, 0, canvas.width, canvas.height)
   return canvas.toDataURL('image/jpeg', 0.92)
 }
+async function runTeamPipeline(owner) {
+  const runtime = 'team-pipeline:' + owner
+  if (active.has(runtime)) return
+  active.add(runtime)
+  try {
+    let job = taskStates.get(owner).teamPipeline
+    const response = await fetch('/pulin-collar-reference.png')
+    if (!response.ok) throw new Error('品牌BI领花参考图加载失败')
+    const collar = await fileToDataUrl(await response.blob())
+    for (let index = 0; index < job.sources.length; index++) {
+      if (job.people[index]?.url) continue
+      update({reportProgress:`正在生成春秋形象 ${index + 1}/${job.sources.length}`},owner)
+      let taskId=job.people[index]?.taskId
+      if (!taskId) {
+        const result=await createConversationImageTask({prompt:'只生成参考图中这一个人的春秋全身形象，严格保留五官、年龄、肤色、发型及身份，不新增人物。人物参考只用于身份，服装统一按朴邻品牌BI：深色合身西装、白衬衫、黑皮鞋。按既有男女规则识别，不按发型长短判断。男性金色行政领带，下半段和尖端藏在扣好的西装内；女性严格使用第二张BI参考图的金棕色领花，顶部圆扣、两片交叠向下尖角，禁止领带、蝴蝶结和丝巾。完整头到鞋，纯浅灰背景，不加文字。',images:[await compressReference(job.sources[index]),collar],model:'gpt-image-2.5',resolution:'1k',quality:'high',aspectRatio:'9:16',knowledge:{}})
+        taskId=result.task.id
+        job.people[index]={taskId}
+        update({teamPipeline:structuredClone(job)},owner)
+      }
+      const result=await waitForConversationImageTask(taskId)
+      if (!result.urls?.[0]) throw new Error(`第${index+1}个人物形象没有返回图片`)
+      job.people[index]={taskId,url:result.urls[0]}
+      update(current=>({...current,teamPipeline:structuredClone(job),wardrobeHistory:[...wardrobePhotos(current),{id:result.urls[0],url:result.urls[0],seasonId:'spring'}]}),owner)
+    }
+    update({reportProgress:'正在组合已生成的春秋人物形象'},owner)
+    if (!job.groupTaskId) {
+      const images=await Promise.all(job.people.map((person,index)=>teamIdentityReference(person.url,index)))
+      const result=await createConversationImageTask({prompt:`参考图是已经按品牌BI生成的${images.length}个人物。仅调整站位与姿态组合为合照，恰好${images.length}人，不新增、不重复，逐一保持编号对应的面貌和已生成的春秋制服、领带及领花，不再次换装或设计配饰。部分站立部分坐在黑色椅子，头到鞋完整。纯#00ff00背景，无阴影无文字。`,images,model:'gpt-image-2.5',resolution:'2k',quality:'high',aspectRatio:'1:1',knowledge:{},removeBackground:true,backgroundColor:'#00ff00'})
+      job.groupTaskId=result.task.id
+      update({teamPipeline:structuredClone(job),reportTaskId:result.task.id},owner)
+    }
+    await finishTeamReport(job.groupTaskId,owner)
+  } catch(error) {update({reportStatus:'error',reportError:error.message},owner)}
+  finally {active.delete(runtime)}
+}
 async function makeReport() {
   const owner = loadedKey
   const draft = state
@@ -216,6 +253,11 @@ async function makeReport() {
   if (draft.mode === 'single' && (!draft.title.trim() || !draft.data.trim())) throw new Error('请填写战报标题和数据')
   if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
   update({ reportStatus: 'running', reportError: '', report: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', teamCutout: draft.mode === 'multiple' } }, owner)
+  if (draft.mode === 'multiple') {
+    update({teamPipeline:{sources,people:[]},reportTaskId:null},owner)
+    await runTeamPipeline(owner)
+    return
+  }
   if (draft.mode === 'multiple' || draft.people.length) {
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
@@ -479,7 +521,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       {view.mode === 'single' && <><label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => { update({ ...state, subtitle: e.target.value }); registerDraft() }}/></label>
       <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
-      </>}<div className="pr-report-submit"><button disabled={view.reportStatus === 'running'} onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>
+      </>}<div className="pr-report-submit"><button disabled={view.reportStatus === 'running'} onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>{view.reportStatus === 'running' ? (view.reportProgress || '正在生成团队战报…') : '生成战报'}</button>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>
       {view.reportError && <p role="alert">{view.reportError}</p>}
       </div><aside className="pr-report-preview">{view.reportStatus === 'running' ? <div className="pr-result-pending" role="status">正在生成战报…</div> : view.report && <div className="pr-result"><button type="button" className="pr-report-image" aria-label="预览生成的战报" onClick={() => setPreview({url:view.report,title:'朴邻战报'})}><img src={view.report} alt="生成的朴邻战报"/></button><div className="pr-result-actions"><a href={view.report} download="朴邻战报.png">下载战报</a><button type="button" onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>重新生成</button></div>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>}</aside></div>
     </div>
