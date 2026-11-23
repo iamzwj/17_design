@@ -13,7 +13,7 @@ const seasons = [
 ]
 const halfSeasons = seasons.map(season => ({ ...season, id: `${season.id}-half`, half: true }))
 const allSeasons = [...seasons, ...halfSeasons]
-const initial = { portrait: '', gender: '', framing: 'full', cards: {}, wardrobeHistory: [], selectedWardrobe: [], mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '', region: '', performance: '', team: '', perPerson: '', inventory: '', rentals: '', newHomes: '' }
+const initial = { portrait: '', gender: '', framing: 'full', cards: {}, wardrobeHistory: [], selectedWardrobe: [], mode: 'multiple', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '', region: '', performance: '', team: '', perPerson: '', inventory: '', rentals: '', newHomes: '' }
 function wardrobePhotos(draft) {
   const photos = [...(draft.wardrobeHistory || [])];
   for (const [seasonId, card] of Object.entries(draft.cards || {})) {
