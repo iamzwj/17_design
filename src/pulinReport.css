@@ -92,3 +92,12 @@
 .pr-report-preview{position:sticky;top:20px;min-width:0}
 .pr-report-preview .pr-result{margin-top:0;max-width:none}
 @media(max-width:900px){.pr-report-layout{grid-template-columns:minmax(0,1fr)}.pr-report-preview{position:static}.pr-report-preview .pr-result{max-width:500px}}
+
+.pr-result-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pulin-report .pr-result-actions button{background:transparent;color:var(--dp-ink);border-color:var(--dp-rule)}
+.pulin-report .pr-result-actions button:hover:not(:disabled){background:var(--dp-muted-surface)}
+.pulin-report .pr-result-actions button:focus-visible{outline:2px solid #e87126;outline-offset:2px}
+
+.pulin-report .pr-report-image{display:block;width:100%;padding:0;border:0;background:transparent;overflow:hidden}
+.pr-report-image img{display:block;width:100%;border-radius:12px}
+.pr-result-pending{display:grid;place-items:center;min-height:340px;aspect-ratio:826/1903;border:1px solid var(--dp-rule);border-radius:12px;background:var(--dp-muted-surface);color:var(--dp-secondary)}

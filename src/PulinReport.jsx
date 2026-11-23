@@ -191,14 +191,15 @@ async function cropPortraitPhoto(url, half) {
 async function makeReport() {
   const owner = loadedKey
   const draft = state
+  if (draft.reportStatus === 'running') return
   const chosen = wardrobePhotos(draft).filter(photo => (draft.selectedWardrobe || []).includes(photo.id)).map(photo=>photo.url)
   const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : draft.people.slice(0,1)) : [...chosen, ...draft.people].slice(0,10)
   if (!sources.length) throw new Error('请先选择人物形象照')
   if (draft.mode === 'multiple' && sources.length > 8) throw new Error('团队战报最多支持 8 张人物参考照，请减少形象照后重试')
   if (draft.mode === 'single' && (!draft.title.trim() || !draft.data.trim())) throw new Error('请填写战报标题和数据')
+  if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
+  update({ reportStatus: 'running', reportError: '', report: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', teamCutout: draft.mode === 'multiple' } }, owner)
   if (draft.mode === 'multiple' || draft.people.length) {
-    if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
-    update({ reportStatus: 'running', reportError: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', teamCutout: draft.mode === 'multiple' } }, owner)
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
       const compressedSources = await Promise.all(sources.map(source => compressReference(source)))
@@ -217,7 +218,8 @@ async function makeReport() {
     } catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
     return
   }
-  await renderSingleReport(sources[0], draft, owner)
+  try { await renderSingleReport(sources[0], draft, owner) }
+  catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
 }
 async function renderSingleReport(source, draft, owner) {
   const sources = [source]
@@ -459,7 +461,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
       </>}<div className="pr-report-submit"><button disabled={view.reportStatus === 'running'} onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>
       {view.reportError && <p role="alert">{view.reportError}</p>}
-      </div><aside className="pr-report-preview">{view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}</aside></div>
+      </div><aside className="pr-report-preview">{view.reportStatus === 'running' ? <div className="pr-result-pending" role="status">正在生成战报…</div> : view.report && <div className="pr-result"><button type="button" className="pr-report-image" aria-label="预览生成的战报" onClick={() => setPreview({url:view.report,title:'朴邻战报'})}><img src={view.report} alt="生成的朴邻战报"/></button><div className="pr-result-actions"><a href={view.report} download="朴邻战报.png">下载战报</a><button type="button" onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>重新生成</button></div>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>}</aside></div>
     </div>
     {historyOpen && <div className="pr-overlay" onClick={() => setHistoryOpen(false)}><div className="pr-modal pr-history-modal" role="dialog" aria-modal="true" aria-label="着装照历史记录" onClick={e => e.stopPropagation()}><header><h2>着装照历史记录</h2><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></header><div className="pr-history-filters" aria-label="筛选构图">{[['all','全部'],['half','半身'],['full','全身']].map(([value,label]) => <button key={value} type="button" aria-pressed={historyFilter === value} onClick={() => setHistoryFilter(value)}>{label}</button>)}</div><div className="pr-history-grid">{history.map(photo => <button key={photo.id} type="button" onClick={() => setPreview({url:photo.url,title:wardrobeName(photo)})}><img src={photo.url} alt={wardrobeName(photo)}/><span>{wardrobeName(photo)}</span></button>)}</div>{!history.length && <p>{wardrobePhotos(view).length ? '当前筛选没有照片，请切换“全部”查看' : '当前对话尚无已保存的着装照，生成完成后会自动出现在这里'}</p>}</div></div>}
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
