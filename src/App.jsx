@@ -1,3 +1,4 @@
+import { activityFormatDraft } from './activityDraft.js'
 import { skillDisplayName } from './skillDisplayName.js'
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
@@ -1479,7 +1480,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   const activityImages = useActivityImages(conversationId.current, type === 'strategy')
   const [runtime] = useState(() => textTaskRuntime(conversationId.current, validTextMessages(conversation?.messages)))
   const [messages, setMessages] = useState(() => runtime.messages.current)
-  const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(readWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
+  const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(readWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversation?.id || "new"}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
   const [textModels, setTextModels] = useState(null)
   const [selectedTextModel, setSelectedTextModel] = useState('gemini-4-carbon')
   const usesTextModel = type !== 'compliance' && !(type === 'strategy' && activityContext.format === 'image')
@@ -1506,10 +1507,14 @@ function TextStudio({ type, conversation, onSave, user }) {
   useEffect(() => {
     if (type !== 'strategy') return
     try {
-      writeWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversationId.current}`, JSON.stringify(activityContext))
+      writeWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversation?.id || "new"}`, JSON.stringify(activityContext))
     } catch { /* Conversation history persists the context separately. */ }
   }, [activityContext, type])
-  const [input, setInput] = useState('')
+  const activityDraftKey = `dgen-activity-draft:${getAuthToken().slice(-12)}:${brandScope || "all"}:${conversation?.id || "new"}`
+  const [input, setInput] = useState(() => type === 'strategy' ? readWorkspaceStorage(activityDraftKey) || '' : '')
+  useEffect(() => {
+    if (type === 'strategy') writeWorkspaceStorage(activityDraftKey, input)
+  }, [activityDraftKey, input, type])
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
   const [brand, setBrand] = useState(conversation?.brand === 'general' ? '' : conversation?.brand || '')
@@ -1807,7 +1812,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     <div className="conversation" ref={conversationScrollRef}>
       {messages.length === 0 && runningRequests.length === 0 && !activityImageGroups?.unmatched.length ? <div className="welcome text-welcome">
         <div className={`text-orb ${type}`}><Icon name={type === 'compliance' ? 'shield' : 'spark'} size={38}/></div>
-        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}
+        <div className="eyebrow">{copy.eyebrow}</div><h1>{copy.title}</h1><p>{copy.subtitle}</p>{type === 'strategy' && <ActivityStrategy brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={prompt => setInput(current => activityFormatDraft(current, prompt))}/>}
       </div> : <div className="message-list text-list">{messages.map((message, index) => {
         const messageRef = runningRequests.length === 0 && index === messages.length - 1 ? focusRef : null
         const imageRecords = activityImageGroups?.byMessage.get(index)
@@ -1834,7 +1839,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
     </div>
-    <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={setInput}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
+    <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={prompt => setInput(current => activityFormatDraft(current, prompt))}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
       {['compliance', 'chat'].includes(type) && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
       {['compliance', 'chat'].includes(type) && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
       {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}

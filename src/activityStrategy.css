@@ -89,3 +89,12 @@
 
 .activity-color-warning { margin: 0 0 10px; color: var(--dp-secondary); font-size: 12px; line-height: 1.5; }
 .activity-color-warning a { color: var(--accent); margin: 0 3px; }
+
+.activity-brief { margin: 12px 0; text-align: left; color: var(--dp-ink); }
+.activity-brief summary { cursor: pointer; font-size: 12px; padding: 8px 0; }
+.activity-brief summary span { margin-left: 10px; color: var(--dp-secondary); font-size: 11px; }
+.activity-brief-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0; }
+.activity-brief-fields label { display: grid; gap: 6px; min-width: 0; font-size: 12px; }
+.activity-brief-fields input { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--dp-rule); border-radius: 8px; background: var(--dp-panel); color: var(--dp-ink); font: inherit; }
+.activity-brief-fields input:focus-visible { outline: 2px solid var(--dp-color-accent); outline-offset: 2px; }
+@media(max-width:520px) { .activity-brief-fields { grid-template-columns: 1fr; } .activity-brief summary span { display: block; margin: 6px 0 0; } }
