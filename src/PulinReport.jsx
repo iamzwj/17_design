@@ -153,7 +153,7 @@ async function makeReport() {
   const owner = loadedKey
   const draft = state
   const chosen = wardrobePhotos(draft).filter(photo => (draft.selectedWardrobe || []).includes(photo.id)).map(photo=>photo.url)
-  const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : [draft.cards[draft.selected]?.url].filter(Boolean)) : [...chosen, ...draft.people].slice(0,6)
+  const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : [draft.cards[draft.selected]?.url].filter(Boolean)) : [...chosen, ...draft.people].slice(0,10)
   if (!sources.length) throw new Error('请先选择人物图片')
   const lines = draft.data.split('\n').filter(line => line.trim())
   if (!draft.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
@@ -173,10 +173,10 @@ async function makeReport() {
   ctx.font = '30px sans-serif'
   ctx.fillText(draft.subtitle.slice(0, 24), 80, 200)
   const portraits = images.slice(1)
-  const columns = Math.min(portraits.length, 3)
+  const columns = Math.min(portraits.length, portraits.length > 6 ? 4 : 3)
   const rows = Math.ceil(portraits.length / columns)
   const width = Math.min(430, 900 / columns)
-  const height = rows === 1 ? Math.min(620, width * 1.4) : 315
+  const height = rows === 1 ? Math.min(620, width * 1.4) : Math.min(315, (700 - (rows - 1) * 12) / rows)
   const start = (1080 - width * columns) / 2
   portraits.forEach((image, i) => {
     const x = start + (i % columns) * width
@@ -212,7 +212,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
-    if (multiple && files.length > 6) { setError('多人战报最多支持 6 张照片'); return }
+    if (multiple && files.length + (state.selectedWardrobe || []).length > 10) { setError('多人战报最多支持 10 张照片（含已选着装照）'); return }
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
@@ -273,7 +273,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     </div>
     <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
       <button onClick={() => setPicker(true)}>选择着装照</button><p>已选择 {(view.selectedWardrobe || []).length} 张</p>
-      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
+      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 10 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
       {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
       <label>战报标题<input maxLength={12} value={view.title} onChange={e => update({ ...state, title: e.target.value })}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => update({ ...state, subtitle: e.target.value })}/></label>
@@ -282,6 +282,6 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择六张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 6 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择十张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 10 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
   </section>
 }
