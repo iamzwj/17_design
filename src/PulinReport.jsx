@@ -77,6 +77,9 @@ async function initialize(taskId) {
   if (loadPromise) await loadPromise
   loadPromise = (async () => {
     state = taskStates.get(id) || { ...initial, ...(await readDraft(id).catch(() => null)) }
+    if (state.reportStatus === 'done' && state.reportReview === '正在核对人物与构图…' && !active.has('report:' + state.reportReviewTaskId)) {
+      state = { ...state, reportReview: '人物核对未完成，请检查人物相貌和人数。' }
+    }
     taskStates.set(id, state)
     loadedKey = id
     listeners.forEach(fn => fn(state))
@@ -198,7 +201,7 @@ async function makeReport() {
   if (draft.mode === 'single' && (!draft.title.trim() || !draft.data.trim())) throw new Error('请填写战报标题和数据')
   if (draft.mode === 'multiple' || draft.people.length) {
     if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
-    update({ reportStatus: 'running', reportError: '', reportReview: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', reviewSources: sources } }, owner)
+    update({ reportStatus: 'running', reportError: '', reportReview: '', reportReviewTaskId: null, reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', reviewSources: sources } }, owner)
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
       const compressedSources = await Promise.all(sources.map(source => compressReference(source)))
@@ -262,22 +265,24 @@ async function finishTeamReport(taskId, owner) {
     if (!draft) throw new Error('无法恢复战报数据，请重新生成')
     if (draft.mode === 'single') await renderSingleReport(output.urls[0], draft, owner)
     else {
-      let review = ''
-      if (draft.reviewSources?.length) {
-        try {
-          const images = await Promise.all([output.urls[0], ...draft.reviewSources].map(source => compressReference(source, 1200)))
-          const result = await reviewPulinTeam({ images })
-          review = result.review
-        } catch {
-          review = '人物与构图核对暂时不可用，请检查人物相貌和人数。'
-        }
+      const reviewPromise = draft.reviewSources?.length
+        ? Promise.all([output.urls[0], ...draft.reviewSources].map(source => compressReference(source, 1200)))
+          .then(images => reviewPulinTeam({ images }))
+          .then(result => result.review)
+          .catch(() => '人物与构图核对暂时不可用，请检查人物相貌和人数。')
+        : null
+      await renderTeamReport(output.urls[0], draft, owner, reviewPromise ? '正在核对人物与构图…' : '', taskId)
+      if (reviewPromise) {
+        const review = await reviewPromise
+        update(current => current.reportReviewTaskId === taskId && current.reportStatus === 'done'
+          ? { ...current, reportReview: review }
+          : current, owner)
       }
-      await renderTeamReport(output.urls[0], draft, owner, review)
     }
   } catch (error) { update({ reportStatus: 'error', reportError: error.message, reportTaskId: null }, owner) }
   finally { active.delete(runtimeKey) }
 }
-async function renderTeamReport(url, draft, owner, review) {
+async function renderTeamReport(url, draft, owner, review, taskId) {
   const [image, background] = await Promise.all([loadImage(url), loadImage('/pulin-team-background.jpg')])
   const canvas = document.createElement('canvas')
   canvas.width = 826; canvas.height = 1903
@@ -329,7 +334,7 @@ async function renderTeamReport(url, draft, owner, review) {
     ctx.font = 'bold 31px sans-serif'
     ctx.fillText(value || '—', x + 90, 1644, 168)
   })
-  update({report: canvas.toDataURL('image/png'), reportStatus:'done', reportTaskId:null, reportReview:review}, owner)
+  update({report: canvas.toDataURL('image/png'), reportStatus:'done', reportTaskId:null, reportReview:review, reportReviewTaskId:taskId}, owner)
 }
 export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
