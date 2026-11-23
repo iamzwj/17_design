@@ -1,7 +1,7 @@
 import {maleUniformAccessory} from './pulinUniformRules.js';
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest, reviewPulinTeam } from './api.js'
 import { imageDropProps } from './imageDropUpload.js'
 import ImagePreview from './ImagePreview.jsx'
 import './pulinReport.css'
@@ -181,10 +181,10 @@ async function makeReport() {
   if (draft.mode === 'single' && (!draft.title.trim() || !draft.data.trim())) throw new Error('请填写战报标题和数据')
   if (draft.mode === 'multiple' || draft.people.length) {
     if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
-    update({ reportStatus: 'running', reportError: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '' } }, owner)
+    update({ reportStatus: 'running', reportError: '', reportReview: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', reviewSources: sources } }, owner)
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
-      const result = await createConversationImageTask({ prompt: (draft.mode === 'single' ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。' : '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物位于标题下方及舞台上方，不遮挡顶部文字。画面下半部保持空白，不增加任何文字或数字。统一春秋着装，白色衬衫和深色西装，默认橙色领带；仅长发且女性特征明显的人物使用橙色领花，不能确定时使用领带。'), images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
+      const result = await createConversationImageTask({ prompt: (draft.mode === 'single' ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。' : '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物、脚部和椅子全部限制在画面上方50%，顶部标题完整可见。画面下方50%至100%只保留深棕金色简洁背景，不能出现人物、椅子、光环、文字和数字，供后期排版。统一春秋着装，白色衬衫和深色西装，默认橙色领带；仅长发且女性特征明显的人物使用橙色领花，不能确定时使用领带。'), images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
       update({ reportTaskId: result.task.id }, owner)
       await finishTeamReport(result.task.id, owner)
     } catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
@@ -242,22 +242,76 @@ async function finishTeamReport(taskId, owner) {
     const draft = taskStates.get(owner)?.reportDraft
     if (!draft) throw new Error('无法恢复战报数据，请重新生成')
     if (draft.mode === 'single') await renderSingleReport(output.urls[0], draft, owner)
-    else await renderTeamReport(output.urls[0], draft, owner)
+    else {
+      let review = ''
+      if (draft.reviewSources?.length) {
+        try {
+          const toData = async source => {
+            const image = await loadImage(source)
+            const canvas = document.createElement('canvas')
+            const scale = Math.min(1, 1200 / Math.max(image.width, image.height))
+            canvas.width = Math.round(image.width * scale)
+            canvas.height = Math.round(image.height * scale)
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+            return canvas.toDataURL('image/jpeg', 0.8)
+          }
+          const images = await Promise.all([output.urls[0], ...draft.reviewSources].map(toData))
+          const result = await reviewPulinTeam({ images })
+          review = result.review
+        } catch {
+          review = '人物与构图核对暂时不可用，请检查人物相貌和人数。'
+        }
+      }
+      await renderTeamReport(output.urls[0], draft, owner, review)
+    }
   } catch (error) { update({ reportStatus: 'error', reportError: error.message, reportTaskId: null }, owner) }
   finally { active.delete(runtimeKey) }
 }
-async function renderTeamReport(url, draft, owner) {
-  const image = await loadImage(url), canvas = document.createElement('canvas')
+async function renderTeamReport(url, draft, owner, review) {
+  const [image, background] = await Promise.all([loadImage(url), loadImage('/pulin-team-background.jpg')])
+  const canvas = document.createElement('canvas')
   canvas.width = 826; canvas.height = 1903
-  const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0, 826, 1903)
-  ctx.textAlign = 'center'; ctx.fillStyle = '#f2c893'
-  ctx.font = 'bold 42px sans-serif'; ctx.fillText(draft.region, 413, 1055, 740)
-  ctx.fillStyle = '#fff'; ctx.font = '32px sans-serif'; ctx.fillText('全年累计业绩突破', 413, 1140)
-  ctx.fillStyle = '#f5d0a2'; ctx.font = 'bold 96px sans-serif'; ctx.fillText(draft.performance + ' 元', 413, 1260, 740)
-  ctx.font = '28px sans-serif'; ctx.fillText('团队效率成绩单', 413, 1350); ctx.fillText(draft.team || '', 413, 1400, 740)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(image, 0, 0, 826, 1903)
+  const boundary = 985
+  const sourceY = background.height * boundary / canvas.height
+  ctx.drawImage(background, 0, sourceY, background.width, background.height - sourceY, 0, boundary, canvas.width, canvas.height - boundary)
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#f2c893'
+  ctx.font = 'bold 42px sans-serif'
+  ctx.fillText(draft.region, 413, 1050, 650)
+  ctx.strokeStyle = '#d6a76f'
+  ctx.beginPath()
+  ctx.moveTo(28, 1031); ctx.lineTo(100, 1031)
+  ctx.moveTo(726, 1031); ctx.lineTo(798, 1031)
+  ctx.stroke()
+  ctx.fillStyle = '#fff'
+  ctx.font = '36px sans-serif'
+  ctx.fillText('全年累计业绩突破', 413, 1157, 740)
+  const rawPerformance = String(draft.performance || '').trim()
+  const compact = rawPerformance.replace(/,/g, '')
+  const performance = /^\d+(?:\.\d+)?$/.test(compact)
+    ? compact.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    : rawPerformance
+  ctx.fillStyle = '#f5d0a2'
+  ctx.font = 'bold 106px sans-serif'
+  ctx.fillText(performance + ' 元', 413, 1315, 700)
+  ctx.font = '30px sans-serif'
+  ctx.fillText('团队效率成绩单', 413, 1415, 700)
+  ctx.font = 'bold 30px sans-serif'
+  ctx.fillText(draft.team || '', 413, 1475, 740)
   const items = [['人均业绩', draft.perPerson], ['累计存量单量', draft.inventory], ['累计租赁单量', draft.rentals], ['累计新房单量', draft.newHomes]]
-  items.forEach(([label, value], i) => { const x=22+i*198; ctx.strokeStyle='#d6a76f';ctx.strokeRect(x,1450,182,150);ctx.fillStyle='#f5d0a2';ctx.font='21px sans-serif';ctx.fillText(label,x+91,1500,170);ctx.font='bold 31px sans-serif';ctx.fillText(value || '—',x+91,1560,170) })
-  update({report: canvas.toDataURL('image/png'), reportStatus:'done', reportTaskId:null}, owner)
+  items.forEach(([label, value], i) => {
+    const x = 27 + i * 198
+    ctx.strokeStyle = '#d6a76f'
+    ctx.strokeRect(x, 1525, 180, 150)
+    ctx.fillStyle = '#f5d0a2'
+    ctx.font = '21px sans-serif'
+    ctx.fillText(label, x + 90, 1570, 168)
+    ctx.font = 'bold 31px sans-serif'
+    ctx.fillText(value || '—', x + 90, 1644, 168)
+  })
+  update({report: canvas.toDataURL('image/png'), reportStatus:'done', reportTaskId:null, reportReview:review}, owner)
 }
 export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
@@ -358,6 +412,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
       </>}<div className="pr-report-submit"><button disabled={view.reportStatus === 'running'} onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>
       {view.reportError && <p role="alert">{view.reportError}</p>}
+      {view.report && view.reportReview && <p role="status">{view.reportReview}</p>}
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
     {historyOpen && <div className="pr-overlay" onClick={() => setHistoryOpen(false)}><div className="pr-modal pr-history-modal" role="dialog" aria-modal="true" aria-label="着装照历史记录" onClick={e => e.stopPropagation()}><header><h2>着装照历史记录</h2><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></header><div className="pr-history-filters" aria-label="筛选构图">{[['all','全部'],['half','半身'],['full','全身']].map(([value,label]) => <button key={value} type="button" aria-pressed={historyFilter === value} onClick={() => setHistoryFilter(value)}>{label}</button>)}</div><div className="pr-history-grid">{history.map(photo => <button key={photo.id} type="button" onClick={() => setPreview({url:photo.url,title:wardrobeName(photo)})}><img src={photo.url} alt={wardrobeName(photo)}/><span>{wardrobeName(photo)}</span></button>)}</div>{!history.length && <p>{wardrobePhotos(view).length ? '当前筛选没有照片，请切换“全部”查看' : '当前对话尚无已保存的着装照，生成完成后会自动出现在这里'}</p>}</div></div>}
