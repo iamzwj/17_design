@@ -270,6 +270,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [historyFilter, setHistoryFilter] = useState('all')
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState('')
+  const [reportError, setReportError] = useState('')
   useEffect(() => {
     listeners.add(setView)
     let mounted = true
@@ -355,7 +356,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       {view.mode === 'single' && <><label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => { update({ ...state, subtitle: e.target.value }); registerDraft() }}/></label>
       <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
-      </>}<button disabled={view.reportStatus === 'running'} onClick={() => makeReport().catch(e => setError(e.message))}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>
+      </>}<div className="pr-report-submit"><button disabled={view.reportStatus === 'running'} onClick={() => { setReportError(''); makeReport().catch(e => setReportError(e.message)) }}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>{reportError && <p role="alert" className="pr-error">{reportError}</p>}</div>
       {view.reportError && <p role="alert">{view.reportError}</p>}
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>

@@ -81,3 +81,8 @@
 .pulin-report .pr-tabs { gap: 10px; padding: 6px; border: 1px solid var(--dp-rule); border-radius: 14px; }
 .pulin-report .pr-tabs button { min-height: 50px; min-width: 154px; padding: 12px 22px; font-size: 16px; font-weight: 650; }
 @media(max-width: 520px) { .pulin-report .pr-tabs { width: 100%; } .pulin-report .pr-tabs button { flex: 1; min-width: 0; padding-inline: 10px; } }
+
+.pr-team-primary,:root[data-theme="dark"] .pr-team-primary{border-color:var(--dp-rule)}
+.pr-report-submit{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}
+.pr-report-submit>.pr-error{margin:0;line-height:1.5}
+@media(max-width:600px){.pr-report-submit{gap:10px}}
