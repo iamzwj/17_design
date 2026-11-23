@@ -272,7 +272,15 @@ async function renderTeamReport(url, draft, owner, review) {
   const canvas = document.createElement('canvas')
   canvas.width = 826; canvas.height = 1903
   const ctx = canvas.getContext('2d')
-  ctx.drawImage(image, 0, 0, 826, 1903)
+  // Center-crop the generated image to the poster aspect ratio without stretching faces.
+  const scale = Math.max(canvas.width / image.width, canvas.height / image.height)
+  const width = image.width * scale
+  const height = image.height * scale
+  ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
+  // Restore the original title and logo so the model cannot distort the branding.
+  const headerHeight = 335
+  const headerSourceHeight = background.height * headerHeight / canvas.height
+  ctx.drawImage(background, 0, 0, background.width, headerSourceHeight, 0, 0, canvas.width, headerHeight)
   const boundary = 985
   const sourceY = background.height * boundary / canvas.height
   ctx.drawImage(background, 0, sourceY, background.width, background.height - sourceY, 0, boundary, canvas.width, canvas.height - boundary)
