@@ -13,7 +13,7 @@ const seasons = [
 ]
 const halfSeasons = seasons.map(season => ({ ...season, id: `${season.id}-half`, half: true }))
 const allSeasons = [...seasons, ...halfSeasons]
-const initial = { portrait: '', gender: '', framing: 'full', cards: {}, wardrobeHistory: [], selectedWardrobe: [], mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
+const initial = { portrait: '', gender: '', framing: 'full', cards: {}, wardrobeHistory: [], selectedWardrobe: [], mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '', region: '', performance: '', team: '', perPerson: '', inventory: '', rentals: '', newHomes: '' }
 function wardrobePhotos(draft) {
   const photos = [...(draft.wardrobeHistory || [])];
   for (const [seasonId, card] of Object.entries(draft.cards || {})) {
@@ -55,8 +55,8 @@ function update(change, id = loadedKey) {
   const current = taskStates.get(id) || (id === loadedKey ? state : initial)
   const next = typeof change === 'function' ? change(current) : { ...current, ...change }
   taskStates.set(id, next)
-  const wasRunning = Object.values(current.cards || {}).some(card => card.status === 'running')
-  const isRunning = Object.values(next.cards || {}).some(card => card.status === 'running')
+  const wasRunning = (current.reportStatus === 'running' || Object.values(current.cards || {}).some(card => card.status === 'running'))
+  const isRunning = (next.reportStatus === 'running' || Object.values(next.cards || {}).some(card => card.status === 'running'))
   if (wasRunning !== isRunning) window.dispatchEvent(new CustomEvent('pulin-report-status', { detail: { id: id.slice('pulin-report:'.length), status: isRunning ? 'running' : 'idle' } }))
   if (id === loadedKey) state = next
   const snapshot = structuredClone(next)
@@ -80,6 +80,10 @@ async function initialize(taskId) {
     taskStates.set(id, state)
     loadedKey = id
     listeners.forEach(fn => fn(state))
+    if (state.reportStatus === 'running') {
+      if (state.reportTaskId) void finishTeamReport(state.reportTaskId, id)
+      else update({ reportStatus: 'error', reportError: '提交状态未确认，请先检查生成记录再重试。' }, id)
+    }
     for (const [season, card] of Object.entries(state.cards)) {
       if (card.status === 'running' && card.taskId) void finish(season, card.taskId, id)
       else if (card.status === 'running') update(current => ({ ...current, cards: { ...current.cards, [season]: { status: 'error', error: '任务提交状态未确认，请检查生成记录后重试。' } } }))
@@ -93,13 +97,14 @@ export async function resumePulinReportTasks(taskId) {
   const draft = taskStates.get(owner) || await readDraft(owner).catch(() => null)
   if (!draft) return
   taskStates.set(owner, draft)
+  if (draft.reportStatus === 'running' && draft.reportTaskId) void finishTeamReport(draft.reportTaskId, owner)
   const cards = Object.entries(draft.cards || {})
   for (const [season, card] of cards) {
     if (card.status === 'running' && card.taskId) void finish(season, card.taskId, owner)
     else if (card.status === 'running') update(current => ({ ...current, cards: { ...current.cards, [season]: { status: 'error', error: '任务提交状态未确认，请检查生成记录后重试。' } } }), owner)
   }
   const current = taskStates.get(owner)
-  window.dispatchEvent(new CustomEvent('pulin-report-status', { detail: { id: taskId, status: Object.values(current.cards || {}).some(card => card.status === 'running') ? 'running' : 'idle' } }))
+  window.dispatchEvent(new CustomEvent('pulin-report-status', { detail: { id: taskId, status: (current.reportStatus === 'running' || Object.values(current.cards || {}).some(card => card.status === 'running')) ? 'running' : 'idle' } }))
 }
 async function finish(id, taskId, owner) {
   if (active.has(taskId)) return
@@ -172,6 +177,18 @@ async function makeReport() {
   const chosen = wardrobePhotos(draft).filter(photo => (draft.selectedWardrobe || []).includes(photo.id)).map(photo=>photo.url)
   const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : [draft.cards[draft.selected]?.url].filter(Boolean)) : [...chosen, ...draft.people].slice(0,10)
   if (!sources.length) throw new Error('请先选择人物图片')
+  if (draft.mode === 'multiple' && sources.length > 8) throw new Error('团队战报最多支持 8 张人物参考照，请减少照片后重试')
+  if (draft.mode === 'multiple') {
+    if (!draft.region?.trim() || !draft.performance?.trim()) throw new Error('请填写片区和累计业绩')
+    update({ reportStatus: 'running', reportError: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '' } }, owner)
+    try {
+      const background = await fetch('/pulin-team-background.jpg').then(r => r.blob()).then(fileToDataUrl)
+      const result = await createConversationImageTask({ prompt: '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物位于标题下方及舞台上方，不遮挡顶部文字。画面下半部保持空白，不增加任何文字或数字。', images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
+      update({ reportTaskId: result.task.id }, owner)
+      await finishTeamReport(result.task.id, owner)
+    } catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
+    return
+  }
   const lines = draft.data.split('\n').filter(line => line.trim())
   if (!draft.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
   if (lines.length > 6 || lines.some(line => line.length > 28)) throw new Error('战报数据最多 6 行，每行最多 28 个字')
@@ -211,6 +228,31 @@ async function makeReport() {
   lines.forEach((line, i) => ctx.fillText(line, 100, 1000 + i * 58, 880))
   update(current => ({ ...current, report: canvas.toDataURL('image/png') }), owner)
 }
+async function finishTeamReport(taskId, owner) {
+  const runtimeKey = `report:${taskId}`
+  if (active.has(runtimeKey)) return
+  active.add(runtimeKey)
+  try {
+    const output = await waitForConversationImageTask(taskId)
+    const draft = taskStates.get(owner)?.reportDraft
+    if (!draft) throw new Error('无法恢复战报数据，请重新生成')
+    await renderTeamReport(output.urls[0], draft, owner)
+  } catch (error) { update({ reportStatus: 'error', reportError: error.message, reportTaskId: null }, owner) }
+  finally { active.delete(runtimeKey) }
+}
+async function renderTeamReport(url, draft, owner) {
+  const image = await loadImage(url), canvas = document.createElement('canvas')
+  canvas.width = 826; canvas.height = 1903
+  const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0, 826, 1903)
+  ctx.textAlign = 'center'; ctx.fillStyle = '#f2c893'
+  ctx.font = 'bold 42px sans-serif'; ctx.fillText(draft.region, 413, 1055, 740)
+  ctx.fillStyle = '#fff'; ctx.font = '32px sans-serif'; ctx.fillText('全年累计业绩突破', 413, 1140)
+  ctx.fillStyle = '#f5d0a2'; ctx.font = 'bold 96px sans-serif'; ctx.fillText(draft.performance + ' 元', 413, 1260, 740)
+  ctx.font = '28px sans-serif'; ctx.fillText('团队效率成绩单', 413, 1350); ctx.fillText(draft.team || '', 413, 1400, 740)
+  const items = [['人均业绩', draft.perPerson], ['累计存量单量', draft.inventory], ['累计租赁单量', draft.rentals], ['累计新房单量', draft.newHomes]]
+  items.forEach(([label, value], i) => { const x=22+i*198; ctx.strokeStyle='#d6a76f';ctx.strokeRect(x,1450,182,150);ctx.fillStyle='#f5d0a2';ctx.font='21px sans-serif';ctx.fillText(label,x+91,1500,170);ctx.font='bold 31px sans-serif';ctx.fillText(value || '—',x+91,1560,170) })
+  update({report: canvas.toDataURL('image/png'), reportStatus:'done', reportTaskId:null}, owner)
+}
 export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
@@ -231,7 +273,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
-    if (multiple && files.length + (state.selectedWardrobe || []).length > 10) { setError('多人战报最多支持 10 张照片（含已选着装照）'); return }
+    if (multiple && files.length + (state.selectedWardrobe || []).length > 8) { setError('多人战报最多支持 8 张照片（含已选着装照）'); return }
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
@@ -295,16 +337,18 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     </div>
     <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
       <button onClick={() => setPicker(true)}>选择着装照</button><p>已选择 {(view.selectedWardrobe || []).length} 张</p>
-      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 10 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
+      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 8 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
       {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
-      <label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
+      {view.mode === 'multiple' && <div className="pr-team-fields">{[['region','片区','如西安朴邻-XA18西安一片区'],['performance','累计业绩（元）','如10,054,060'],['team','团队构成','如22名资产管家+5名社区经理+1名片区总监'],['perPerson','人均业绩','如4.1万元/月'],['inventory','累计存量单量','如179单'],['rentals','累计租赁单量','如502单'],['newHomes','累计新房单量','如41单']].map(([key,label,placeholder]) => <label key={key}>{label}<input value={view[key] || ''} placeholder={placeholder} onChange={e => { update({[key]:e.target.value}); registerDraft() }}/></label>)}</div>}
+      {view.mode === 'single' && <><label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => { update({ ...state, subtitle: e.target.value }); registerDraft() }}/></label>
       <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
-      <button onClick={() => makeReport().catch(e => setError(e.message))}>生成战报</button>
+      </>}<button disabled={view.reportStatus === 'running'} onClick={() => makeReport().catch(e => setError(e.message))}>{view.reportStatus === 'running' ? '正在生成团队战报…' : '生成战报'}</button>
+      {view.reportError && <p role="alert">{view.reportError}</p>}
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
     {historyOpen && <div className="pr-overlay" onClick={() => setHistoryOpen(false)}><div className="pr-modal pr-history-modal" role="dialog" aria-modal="true" aria-label="着装照历史记录" onClick={e => e.stopPropagation()}><header><h2>着装照历史记录</h2><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></header><div className="pr-history-filters" aria-label="筛选构图">{[['all','全部'],['half','半身'],['full','全身']].map(([value,label]) => <button key={value} type="button" aria-pressed={historyFilter === value} onClick={() => setHistoryFilter(value)}>{label}</button>)}</div><div className="pr-history-grid">{history.map(photo => <button key={photo.id} type="button" onClick={() => setPreview({url:photo.url,title:wardrobeName(photo)})}><img src={photo.url} alt={wardrobeName(photo)}/><span>{wardrobeName(photo)}</span></button>)}</div>{!history.length && <p>{wardrobePhotos(view).length ? '当前筛选没有照片，请切换“全部”查看' : '当前对话尚无已保存的着装照，生成完成后会自动出现在这里'}</p>}</div></div>}
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择十张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 10 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择八张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 8 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
   </section>
 }

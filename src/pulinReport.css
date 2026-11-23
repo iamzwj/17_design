@@ -53,3 +53,4 @@
 .pulin-report .pr-history-filters button{background:transparent;color:var(--dp-ink);border:1px solid var(--dp-rule)}
 .pulin-report .pr-history-filters button[aria-pressed=true]{background:#e87126;color:#fff;border-color:#e87126}
 .pulin-report .pr-history-filters button:focus-visible{outline:2px solid #e87126;outline-offset:3px}
+.pr-team-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.pr-team-fields label{display:grid;gap:7px;color:var(--dp-ink)}.pr-team-fields input{width:100%;min-width:0;padding:10px;border:1px solid var(--dp-rule);border-radius:8px;background:var(--dp-panel);color:var(--dp-ink)}@media(max-width:600px){.pr-team-fields{grid-template-columns:1fr}}
