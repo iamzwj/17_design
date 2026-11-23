@@ -1,7 +1,7 @@
 import {maleUniformAccessory} from './pulinUniformRules.js';
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest, reviewPulinTeam } from './api.js'
+import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, reviewPulinTeam } from './api.js'
 import { imageDropProps } from './imageDropUpload.js'
 import ImagePreview from './ImagePreview.jsx'
 import './pulinReport.css'
@@ -125,7 +125,7 @@ async function generate(season, owner = loadedKey) {
   if (!reference || !['female', 'male'].includes(draft.gender) || draft.cards[season.id]?.status === 'running') return
   update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running', cropToFraming: true, gender: draft.gender } } }), owner)
   try {
-    const images = [waterfallReferenceForRequest(reference)]
+    const images = [await compressReference(reference)]
     const female = draft.gender === 'female'
     if (female) {
       const collarResponse = await fetch('/pulin-collar-reference.png')
@@ -158,6 +158,23 @@ function loadImage(source) {
     image.src = source
   })
 }
+async function compressReference(source, maxEdge = 1600) {
+  const image = await loadImage(source)
+  const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const context = canvas.getContext('2d', { alpha: false })
+  if (!context) throw new Error('无法处理人物参考图，请重新选择照片')
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  try {
+    return canvas.toDataURL('image/jpeg', 0.86)
+  } catch {
+    throw new Error('无法处理人物参考图，请重新选择照片')
+  }
+}
 async function cropPortraitPhoto(url, half) {
   const image = await loadImage(url)
   const canvas = document.createElement('canvas')
@@ -184,7 +201,9 @@ async function makeReport() {
     update({ reportStatus: 'running', reportError: '', reportReview: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '', reviewSources: sources } }, owner)
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
-      const result = await createConversationImageTask({ prompt: (draft.mode === 'single' ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。' : '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物、脚部和椅子全部限制在画面上方50%，顶部标题完整可见。画面下方50%至100%只保留深棕金色简洁背景，不能出现人物、椅子、光环、文字和数字，供后期排版。统一春秋着装，白色衬衫和深色西装，默认橙色领带；仅长发且女性特征明显的人物使用橙色领花，不能确定时使用领带。'), images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
+      const compressedSources = await Promise.all(sources.map(source => compressReference(source)))
+      update(current => ({ ...current, reportDraft: { ...current.reportDraft, reviewSources: compressedSources } }), owner)
+      const result = await createConversationImageTask({ prompt: (draft.mode === 'single' ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。' : '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物、脚部和椅子全部限制在画面上方50%，顶部标题完整可见。画面下方50%至100%只保留深棕金色简洁背景，不能出现人物、椅子、光环、文字和数字，供后期排版。统一春秋着装，白色衬衫和深色西装，默认橙色领带；仅长发且女性特征明显的人物使用橙色领花，不能确定时使用领带。'), images: [background, ...compressedSources], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
       update({ reportTaskId: result.task.id }, owner)
       await finishTeamReport(result.task.id, owner)
     } catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
@@ -246,16 +265,7 @@ async function finishTeamReport(taskId, owner) {
       let review = ''
       if (draft.reviewSources?.length) {
         try {
-          const toData = async source => {
-            const image = await loadImage(source)
-            const canvas = document.createElement('canvas')
-            const scale = Math.min(1, 1200 / Math.max(image.width, image.height))
-            canvas.width = Math.round(image.width * scale)
-            canvas.height = Math.round(image.height * scale)
-            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
-            return canvas.toDataURL('image/jpeg', 0.8)
-          }
-          const images = await Promise.all([output.urls[0], ...draft.reviewSources].map(toData))
+          const images = await Promise.all([output.urls[0], ...draft.reviewSources].map(source => compressReference(source, 1200)))
           const result = await reviewPulinTeam({ images })
           review = result.review
         } catch {
