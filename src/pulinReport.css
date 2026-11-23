@@ -54,3 +54,10 @@
 .pulin-report .pr-history-filters button[aria-pressed=true]{background:#e87126;color:#fff;border-color:#e87126}
 .pulin-report .pr-history-filters button:focus-visible{outline:2px solid #e87126;outline-offset:3px}
 .pr-team-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.pr-team-fields label{display:grid;gap:7px;color:var(--dp-ink)}.pr-team-fields input{width:100%;min-width:0;padding:10px;border:1px solid var(--dp-rule);border-radius:8px;background:var(--dp-panel);color:var(--dp-ink)}@media(max-width:600px){.pr-team-fields{grid-template-columns:1fr}}
+.pulin-report .pr-team-upload { width: min(100%, 380px); height: auto; min-height: 104px; padding: 18px 20px; justify-content: flex-start; gap: 15px; border-color: rgba(232,113,38,.65); background: rgba(232,113,38,.04); }
+.pr-team-upload-icon { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 10px; background: rgba(232,113,38,.12); color: #e9782b; font-size: 27px; line-height: 1; }
+.pr-team-upload-copy { min-width: 0; display: grid; gap: 7px; text-align: left; }
+.pr-team-upload-copy strong { color: var(--dp-ink); font-size: 14px; line-height: 1.4; }
+.pr-team-upload-copy small { color: var(--dp-secondary); font-size: 12px; line-height: 1.5; }
+.pr-team-upload:focus-within { outline: 2px solid var(--dp-color-accent); outline-offset: 3px; }
+@media(max-width:600px) { .pulin-report .pr-team-upload { padding: 14px; min-height: 88px; } }
