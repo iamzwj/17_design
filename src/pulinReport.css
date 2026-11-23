@@ -62,3 +62,12 @@
 .pr-team-upload:focus-within { outline: 2px solid var(--dp-color-accent); outline-offset: 3px; }
 @media(max-width:600px) { .pulin-report .pr-team-upload { padding: 14px; min-height: 88px; } }
 .pr-source-modal{max-width:460px}.pr-source-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}.pulin-report .pr-source-options button{min-height:58px;background:var(--dp-panel);color:var(--dp-ink);border:1px solid var(--dp-rule)}.pulin-report .pr-source-options button:hover{border-color:var(--dp-color-accent)}.pr-modal .pr-cards button[aria-pressed=true]{outline:3px solid var(--dp-color-accent);outline-offset:2px;border-color:var(--dp-color-accent);background:var(--theme-selected-surface)}.pr-modal .pr-cards button:focus-visible,.pr-source-options button:focus-visible{outline:3px solid var(--dp-color-accent);outline-offset:3px}@media(max-width:520px){.pr-source-options{grid-template-columns:1fr}}
+
+/* Team report hierarchy: primary result followed by its scorecard. */
+.pr-team-fields{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:24px 0}
+.pr-team-primary,.pr-team-score{min-width:0;padding:22px;border:1px solid var(--dp-rule);border-radius:14px;background:var(--dp-panel)}
+.pr-team-primary{border-color:rgba(191,124,54,.45);background:color-mix(in srgb,var(--dp-panel) 94%,#c98b4d)}
+.pr-team-heading{display:grid;gap:5px;margin-bottom:18px}.pr-team-heading span{color:#a75c21;font-size:11px;font-weight:700;letter-spacing:.08em}.pr-team-heading h3{margin:0;color:var(--dp-ink);font-size:17px}.pr-team-heading p{margin:0;color:var(--dp-secondary);font-size:12px;line-height:1.5}
+.pr-team-primary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pr-team-fields label{font-size:13px;font-weight:600;line-height:1.5}.pr-team-fields input{box-sizing:border-box;min-height:44px;font-size:14px}.pr-team-primary input{min-height:52px;font-size:16px;font-weight:600}.pr-team-composition{margin-bottom:16px}.pr-team-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+:root[data-theme="dark"] .pr-team-primary{background:#211b17;border-color:#684b32}:root[data-theme="dark"] .pr-team-heading span{color:#edb67d}
+@media(max-width:1100px){.pr-team-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.pr-team-primary,.pr-team-score{padding:16px}.pr-team-primary-grid,.pr-team-metrics{grid-template-columns:1fr}.pr-team-primary-grid{gap:12px}}
