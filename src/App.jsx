@@ -1864,6 +1864,7 @@ export default function App() {
     return () => window.removeEventListener('dgen-storage-unavailable', warn)
   }, [])
   const localPreviewParams = new URLSearchParams(window.location.search)
+  const directPulinReport = localPreviewParams.get('module') === 'pulin-report'
   const directAvatarTool = localPreviewParams.get('tool') === 'avatar'
   const directCompliance = localPreviewParams.get('module') === 'compliance'
   const directContent = localPreviewParams.get('module') === 'content'
@@ -1876,17 +1877,17 @@ export default function App() {
   const [user, setUser] = useState(null)
   useEffect(() => { if (authState !== 'checking') applyAccentTheme(readAccentTheme(user)) }, [authState, user?.id, user?.identity])
   const [loginPromptModule, setLoginPromptModule] = useState(null)
-  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'strategy' ? 'strategy' : localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : directAvatarTool ? 'more' : 'image')
+  const [active, setActive] = useState(() => localPreviewParams.get('module') === 'strategy' ? 'strategy' : localPreviewParams.get('module') === 'film' ? 'film' : directSkills ? directSkills : directKnowledgeSection ? directKnowledgeSection : directContent ? 'content' : directCompliance ? 'compliance' : (directAvatarTool || directPulinReport) ? 'more' : 'image')
   useEffect(() => {
     const url = new URL(window.location.href)
     if (active !== 'film') url.searchParams.delete('filmProject')
     if (active === 'strategy' || active === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === active)) url.searchParams.set('module', active)
-    else if (url.searchParams.get('module') === 'strategy' || url.searchParams.get('module') === 'film' || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
+    else if (url.searchParams.get('module') === 'strategy' || url.searchParams.get('module') === 'film' || (url.searchParams.get('module') === 'pulin-report' && active !== 'more') || KNOWLEDGE_SECTIONS.some((item) => item.id === url.searchParams.get('module'))) {
       for (const key of ['module', 'brand', 'document', 'version', 'material', 'filmProject', 'conversation']) url.searchParams.delete(key)
     }
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
   }, [active])
-  const [moreTool, setMoreTool] = useState('please-day')
+  const [moreTool, setMoreTool] = useState(() => directPulinReport ? 'pulin-report' : 'please-day')
   const [imageMode, setImageMode] = useState(() => readWorkspaceStorage(IMAGE_MODE_KEY) === 'dialogue' ? 'dialogue' : 'waterfall')
   const [pendingImageMode, setPendingImageMode] = useState(null)
   const [theme, setTheme] = useState(() => {
@@ -1936,9 +1937,10 @@ export default function App() {
         : withoutVideoHistory
       setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
       const url = new URL(window.location.href)
-      const linkedStrategy = url.searchParams.get('conversation')
-      const record = url.searchParams.get('module') === 'strategy' &&
-        restored.find(c => c.id === linkedStrategy && c.type === 'strategy' && !c.archived && !c.deleted)
+      const linkedId = url.searchParams.get('conversation')
+      const linkedType = url.searchParams.get('module')
+      const record = ['strategy', 'pulin-report'].includes(linkedType) &&
+        restored.find(c => c.id === linkedId && c.type === linkedType && !c.archived && !c.deleted)
       setActiveConversationId(record ? record.id : null)
       if (record) setWorkspaceToken(value => value + 1)
       setHistoryReady(savedKey)
@@ -2006,7 +2008,7 @@ export default function App() {
     const { activate, openNew, ...conversationUpdate } = update
     if (activate && activeWorkspace.current === workspaceToken) {
       setActiveConversationId(update.id)
-      if (update.type === 'strategy') { const url = new URL(window.location.href); url.searchParams.set('module', 'strategy'); url.searchParams.set('conversation', update.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
+      if (['strategy', 'pulin-report'].includes(update.type)) { const url = new URL(window.location.href); url.searchParams.set('module', update.type); url.searchParams.set('conversation', update.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
     }
     if (openNew) setWorkspaceToken((value) => value + 1)
     setConversations((current) => {
@@ -2084,7 +2086,7 @@ export default function App() {
   }
 
   function selectConversation(conversation) {
-    if (conversation.type === 'strategy') { const url = new URL(window.location.href); url.searchParams.set('module', 'strategy'); url.searchParams.set('conversation', conversation.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
+    if (['strategy', 'pulin-report'].includes(conversation.type)) { const url = new URL(window.location.href); url.searchParams.set('module', conversation.type); url.searchParams.set('conversation', conversation.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
     setFilmDeepLink(null)
     setArchiveViewOpen(false)
     if (conversation.unreadComplete || conversation.messages?.some(isFailureMessage)) {
