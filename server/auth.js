@@ -8,7 +8,7 @@ const EMAIL_PATTERN = /^[^\s@]+@onewo\.com$/i
 const CODE_TTL = 10 * 60 * 1000
 const SHORT_SESSION_TTL = 12 * 60 * 60 * 1000
 const REMEMBER_SESSION_TTL = 30 * 24 * 60 * 60 * 1000
-const DEFAULT_CREDITS = 50
+const DEFAULT_CREDITS = 100
 const ADMIN_EMAIL = 'zhangwj159@onewo.com'
 // This account is seeded once so it can log in without the registration flow.
 // Store only a slow password hash here; a user-selected password is never reset on restart.
@@ -21,6 +21,7 @@ const BUILTIN_USERS = [
 ]
 const DAILY_CREDIT_OVERRIDES = new Map([
   ['zhangwj159@onewo.com', 999],
+  ['yem15@onewo.com', 500],
 ])
 export const REGISTRATION_WHITELIST = new Set([
   'caoyh21@onewo.com', 'chenj529@onewo.com', 'chent05@onewo.com', 'huangpd01@onewo.com', 'shenxx09@onewo.com', 'tangf16@onewo.com', 'wangyc48@onewo.com',

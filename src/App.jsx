@@ -630,7 +630,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
       <div className="sidebar-bottom" onMouseEnter={keepAccountMenuOpen} onMouseLeave={scheduleAccountMenuClose}>
         {user && accountExpanded && <div className="account-dropdown" onMouseEnter={keepAccountMenuOpen}>
           <div className="account-menu-email"><Icon name="mail" size={15}/><span>{user.email}{user.identity && <small> · {ACCOUNT_IDENTITY_LABELS[user.identity]}</small>}</span></div>
-          <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 50}</b></div>
+          <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 100}</b></div>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
           <AccentTheme user={user}/>
@@ -643,7 +643,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           </div>}
           <button className="account-logout" onClick={onLogout}><Icon name="logout" size={16}/><span>退出登录</span><Icon name="chevron" size={14}/></button>
         </div>}
-        {user ? <button className="account" onMouseEnter={keepAccountMenuOpen} onClick={() => { keepAccountMenuOpen(); setAccountExpanded((value) => !value) }}><span>{user.email.slice(0, 2).toUpperCase()}</span><b>{user.email.split('@')[0]}<small>积分 {user.credits ?? 50}</small></b></button> : <button className="guest-account" onClick={onLogin}><Icon name="lock" size={16}/><span>登录以使用 AI 功能</span></button>}
+        {user ? <button className="account" onMouseEnter={keepAccountMenuOpen} onClick={() => { keepAccountMenuOpen(); setAccountExpanded((value) => !value) }}><span>{user.email.slice(0, 2).toUpperCase()}</span><b>{user.email.split('@')[0]}<small>积分 {user.credits ?? 100}</small></b></button> : <button className="guest-account" onClick={onLogin}><Icon name="lock" size={16}/><span>登录以使用 AI 功能</span></button>}
       </div>
     </aside>
   </>
@@ -899,7 +899,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', imageTaskId: null, runningStartedAt: startedAt, unreadComplete: false, activate: true })
     setPrompt(''); setReferences([]); setLoading(true); setRunningStartedAt(startedAt); setError('')
     const creditCost = imageCreditCost(model)
-    onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 50) - creditCost) } : current)
+    onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 100) - creditCost) } : current)
     try {
       const requestPrompt = editSnapshot
         ? `请基于提供的第一张图片继续编辑。保持用户没有要求改变的主体、构图、风格、光影与细节，只执行这项修改：${text}`
@@ -932,7 +932,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         const { user: refreshedUser } = await getCurrentAccount()
         onUserUpdate(refreshedUser)
       } catch {
-        onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 50) + creditCost } : current)
+        onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 100) + creditCost } : current)
       }
       if (!isCurrent()) return
       setError(userError(err.message))
