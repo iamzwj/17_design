@@ -49,3 +49,7 @@
 
 .pr-gender-hint { color: #b45213; font-size: 12px; line-height: 1.5; }
 :root[data-theme="dark"] .pr-gender-hint { color: #ffb37a; }
+
+.pulin-report .pr-history-filters button{background:transparent;color:var(--dp-ink);border:1px solid var(--dp-rule)}
+.pulin-report .pr-history-filters button[aria-pressed=true]{background:#e87126;color:#fff;border-color:#e87126}
+.pulin-report .pr-history-filters button:focus-visible{outline:2px solid #e87126;outline-offset:3px}
