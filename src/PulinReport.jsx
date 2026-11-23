@@ -114,7 +114,7 @@ async function finish(id, taskId, owner) {
     const url = (taskStates.get(owner)?.cards[id]?.cropToFraming)
       ? await cropPortraitPhoto(result.urls[0], id.endsWith('-half'))
       : result.urls[0]
-    update(current => ({ ...current, wardrobeHistory: [...wardrobePhotos(current), {id:url,url,seasonId:id,batchId:current.wardrobeBatchId || 'legacy'}], cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
+    update(current => ({ ...current, wardrobeHistory: [...wardrobePhotos(current), {id:url,url,seasonId:id,batchId:current.wardrobeBatchId || 'legacy'}], cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3, gender: current.cards[id]?.gender || current.gender } } }), owner)
   } catch (error) {
     update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }), owner)
   } finally { active.delete(taskId) }
@@ -123,7 +123,7 @@ async function generate(season, owner = loadedKey) {
   const draft = taskStates.get(owner) || state
   const reference = draft.portrait
   if (!reference || !['female', 'male'].includes(draft.gender) || draft.cards[season.id]?.status === 'running') return
-  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running', cropToFraming: true } } }), owner)
+  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running', cropToFraming: true, gender: draft.gender } } }), owner)
   try {
     const images = [waterfallReferenceForRequest(reference)]
     const female = draft.gender === 'female'
@@ -297,7 +297,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const anyGenerating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
   const visibleSeasons = view.framing === 'half' ? halfSeasons : seasons
   const generating = visibleSeasons.some(season => view.cards[season.id]?.status === 'running')
-  const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3)
+  const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3 || (view.cards[season.id]?.gender && view.cards[season.id].gender !== view.gender))
   const canGenerate = Boolean(view.portrait && view.gender)
   const selectedPhotos = wardrobePhotos(view).filter(photo => photo.url && (view.selectedWardrobe || []).includes(photo.id))
   const history = wardrobePhotos(view).filter(photo => photo.url).filter(photo => historyFilter === 'all' || (photo.seasonId?.endsWith('-half') ? 'half' : 'full') === historyFilter)
@@ -317,14 +317,14 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
         <div className="pr-portrait-actions">
           {view.portrait && !view.gender && <span className="pr-gender-hint">请选择男款或女款着装</span>}
           <fieldset className="pr-segments" aria-label="性别" disabled={anyGenerating}>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => { setError(''); update(current=>({...current,gender:'male',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''})) }}/>男</label>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => { setError(''); update(current=>({...current,gender:'female',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''})) }}/>女</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => { setError(''); update(current=>({...current,gender:'male'})) }}/>男</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => { setError(''); update(current=>({...current,gender:'female'})) }}/>女</label>
           </fieldset>
           <fieldset className="pr-segments" aria-label="照片构图">
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身</label>
           </fieldset>
-          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={generating} onClick={() => { if (!view.portrait) { setError('请先上传人物形象照'); return } if (!view.gender) { setError('请选择男款或女款着装后生成'); return } setError(''); pendingSeasons.forEach(season => void generate(season)) }}>{generating ? '生成中…' : '生成'}</button>}
+          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={generating} onClick={() => { if (!view.portrait) { setError('请先上传人物形象照'); return } if (!view.gender) { setError('请选择男款或女款着装后生成'); return } setError(''); pendingSeasons.forEach(season => void generate(season)) }}>{generating ? '生成中…' : visibleSeasons.some(season => view.cards[season.id]?.url) ? '生成所选款式' : '生成'}</button>}
         </div>
       </div>
       <div className={`pr-cards pr-uniform-results${view.framing === 'half' ? ' pr-half-results' : ''}`}>{visibleSeasons.map(season => {
