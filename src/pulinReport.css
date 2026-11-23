@@ -23,3 +23,21 @@
 .pr-modal .pr-cards button{padding:10px;border:1px solid rgba(150,150,150,.25);border-radius:12px}.pr-modal .pr-cards button:hover{border-color:#e87126}.pr-modal .pr-cards b{font-size:13px}
 @media(max-width:600px){.pulin-report{padding:8px 14px 55px}.pr-section{padding:18px}.pr-portrait-row{align-items:flex-start;flex-wrap:wrap}.pr-portrait-row .pr-upload{width:56px;height:56px}.pr-generate-all{margin-left:72px}.pr-cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.pr-cards article{padding:7px}.pr-cards h3{font-size:12px}.pr-cards article>div:last-child{flex-direction:column}.pulin-report .pr-cards article button{font-size:11px;padding:8px 4px}.pr-steps{gap:8px}.pr-steps i{width:18px}}
 .pr-portrait-row .pr-portrait-upload{padding:0;background:rgba(232,113,38,.07);border:1px dashed rgba(232,113,38,.55);font-weight:400}.pr-version-note{margin:8px 0 0!important;color:#dc8a46!important;font-size:11px;line-height:1.4}
+
+.pr-portrait-upload img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.pr-gender{display:flex;flex-wrap:wrap;gap:6px 12px;min-width:0;margin:4px 0 0;padding:0;border:0}
+.pr-gender legend{padding:0;margin-bottom:4px;font-size:12px;font-weight:600}
+.pr-section .pr-gender label{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:12px;color:var(--dp-ink)}
+.pr-section .pr-gender input[type=radio]{appearance:auto;width:14px;height:14px;margin:0;accent-color:#e87126}
+
+.pr-framing{flex:none}
+.pr-uniform-results .pr-image{width:100%;height:auto;max-height:none;aspect-ratio:9/16}
+.pr-half-results .pr-image{aspect-ratio:5/7}
+.pulin-report .pr-uniform-results .pr-photo-preview{display:block;width:100%;height:100%;padding:0;border:0;border-radius:inherit;background:transparent;cursor:zoom-in}
+.pr-uniform-results .pr-image img{display:block;width:100%;height:100%;object-fit:cover}
+.pulin-report .pr-portrait-row button.pr-portrait-upload{border-style:solid;cursor:zoom-in}
+.pr-photo-preview:focus-visible{outline:2px solid #e87126;outline-offset:-3px}
+.pr-uniform-results article>.pr-card-actions:empty{display:none}
+.pr-card-actions:empty{display:none}
+.pulin-report .pr-portrait-row .pr-generate-all{margin-left:0;background:#e87126;color:#fff;border-color:#e87126}
+@media(max-width:600px){.pr-framing{margin-left:72px}}

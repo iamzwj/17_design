@@ -1,6 +1,8 @@
-import {imageDropProps} from './imageDropUpload.js';
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
+import { imageDropProps } from './imageDropUpload.js'
+import ImagePreview from './ImagePreview.jsx'
 import './pulinReport.css'
 
 const seasons = [
@@ -8,7 +10,9 @@ const seasons = [
   { id: 'spring', name: '春秋', clothes: '白色长袖衬衫，深色西裤，黑色皮鞋，深色合身西装外套' },
   { id: 'winter', name: '冬季', clothes: '白色长袖衬衫，深色西装和西裤，黑色皮鞋，外穿深色长款大衣' },
 ]
-const initial = { portrait: '', cards: {}, mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
+const halfSeasons = seasons.map(season => ({ ...season, id: `${season.id}-half`, half: true }))
+const allSeasons = [...seasons, ...halfSeasons]
+const initial = { portrait: '', gender: '', framing: 'full', cards: {}, mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
 const listeners = new Set()
 let state = initial
 let loadedKey = ''
@@ -74,7 +78,10 @@ async function finish(id, taskId, owner) {
   active.add(taskId)
   try {
     const result = await waitForConversationImageTask(taskId)
-    update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url: result.urls[0], uniformVersion: 3 } } }), owner)
+    const url = (taskStates.get(owner)?.cards[id]?.cropToFraming)
+      ? await cropPortraitPhoto(result.urls[0], id.endsWith('-half'))
+      : result.urls[0]
+    update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
   } catch (error) {
     update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }), owner)
   } finally { active.delete(taskId) }
@@ -82,15 +89,25 @@ async function finish(id, taskId, owner) {
 async function generate(season, owner = loadedKey) {
   const draft = taskStates.get(owner) || state
   const reference = draft.portrait
-  if (!reference || draft.cards[season.id]?.status === 'running') return
-  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running' } } }), owner)
+  if (!reference || !['female', 'male'].includes(draft.gender) || draft.cards[season.id]?.status === 'running') return
+  update(current => ({ ...current, cards: { ...current.cards, [season.id]: { status: 'running', cropToFraming: true } } }), owner)
   try {
-    const collarResponse = await fetch('/pulin-collar-reference.png')
-    if (!collarResponse.ok) throw new Error('着装参考图加载失败，请重试')
-    const collarReference = await fileToDataUrl(await collarResponse.blob())
+    const images = [waterfallReferenceForRequest(reference)]
+    const female = draft.gender === 'female'
+    if (female) {
+      const collarResponse = await fetch('/pulin-collar-reference.png')
+      if (!collarResponse.ok) throw new Error('着装参考图加载失败，请重试')
+      images.push(await fileToDataUrl(await collarResponse.blob()))
+    }
+    const accessory = female
+      ? '使用女款制服。领口只佩戴第二张参考图中的金棕色领花：两片交叠向下的尖角，顶部圆形扣饰。禁止长领带和横向蝴蝶结。'
+      : '使用男款制服。领口只佩戴一条金色行政长领带，单条长形垂至腰部，禁止领花和蝴蝶结。'
+    const framing = season.half
+      ? '两寸竖版证件照构图，画面从胸部上沿到头顶以上，领口配饰完整可见，肩膀和面部居中，留少量头顶空间。'
+      : '9:16 竖版全身构图，完整头部到鞋子，左右各留边，四肢和衣物远离画面边缘。'
     const result = await createConversationImageTask({
-      prompt: `第一张参考图是人物，第二张是朴邻女士领花实物，仅供女性服装配饰参考。先根据第一张人物照片判断使用男款还是女款，生成同一个人的真人写实职业全身肖像，保持五官、年龄、肤色和身份特征，不换脸，不卡通。${season.name}着装：${season.clothes}。女性三季均佩戴第二张参考图中的金棕色领花：两片交叠向下的尖角，顶部圆形扣饰，不是横向蝴蝶结，不佩戴男式长领带；男性三季均佩戴金色行政长领带，不佩戴女士领花。正面站立，自然姿态，浅灰背景，完整头部到鞋子，不加文字。`,
-      images: [waterfallReferenceForRequest(reference), collarReference], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '3:4', knowledge: {},
+      prompt: `第一张参考图仅用于还原人物。生成同一个人的真人写实职业肖像，保持五官、年龄、肤色和身份特征，不换脸，不卡通。${season.name}着装：${season.clothes}。${accessory}正面站立，自然姿态，浅灰背景。${framing}不加文字。`,
+      images, model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: season.half ? '3:4' : '9:16', knowledge: {},
     })
     const taskId = result.task.id
     update(current => ({ ...current, cards: { ...current.cards, [season.id]: { ...current.cards[season.id], status: 'running', taskId } } }), owner)
@@ -107,6 +124,19 @@ function loadImage(source) {
     image.onerror = () => reject(new Error('图片读取失败，请重新选择'))
     image.src = source
   })
+}
+async function cropPortraitPhoto(url, half) {
+  const image = await loadImage(url)
+  const canvas = document.createElement('canvas')
+  canvas.width = half ? 750 : 576
+  canvas.height = half ? 1050 : 1024
+  const ratio = canvas.width / canvas.height
+  const width = Math.min(image.width, image.height * ratio)
+  const height = width / ratio
+  const x = (image.width - width) / 2
+  const y = half ? 0 : (image.height - height) / 2
+  canvas.getContext('2d').drawImage(image, x, y, width, height, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.92)
 }
 async function makeReport() {
   const owner = loadedKey
@@ -156,6 +186,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [preview, setPreview] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
     listeners.add(setView)
@@ -175,20 +206,61 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       const urls = await Promise.all(files.map(fileToDataUrl))
       update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], cards: {}, selected: '' }, owner)
       setError('')
-      if (!multiple) { onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true }); seasons.forEach(season => void generate(season, owner)) }
+      if (!multiple) onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
     } catch { setError('图片读取失败，请重试') }
   }
   if (!user) return <section className="pulin-report"><h1>朴邻战报制作</h1><p>登录后即可生成着装照和战报。</p><button onClick={onLogin}>登录</button></section>
   if (!ready) return <section className="pulin-report" role="status">正在读取战报草稿…</section>
+  const generating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
+  const visibleSeasons = view.framing === 'half' ? halfSeasons : seasons
+  const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3)
+  const selectedSeason = allSeasons.find(season => season.id === view.selected)
+  const canGenerate = Boolean(view.portrait && view.gender)
   return <section className="pulin-report">
     <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
-    <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，自动生成三季真人着装。</p>
-      <div className="pr-portrait-row"><label {...imageDropProps} className="pr-upload pr-portrait-upload"><span>＋</span><input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label><div className="pr-portrait-info"><strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong><small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small><label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={seasons.some(s => view.cards[s.id]?.status === 'running')} onChange={e => upload(e, false)}/></label></div><button className="pr-generate-all" disabled={!view.portrait || seasons.some(s => view.cards[s.id]?.status === 'running')} onClick={() => seasons.forEach(s => void generate(s))}>重新生成三季</button></div>
-      <div className="pr-cards">{seasons.map(s => { const c = view.cards[s.id]; return <article key={s.id}><h3>{s.name}着装</h3><div className="pr-image">{c?.url && c.uniformVersion === 3 ? <img src={c.url} alt={s.name + '真人着装'}/> : <span>{c?.status === 'running' ? '正在生成…' : c?.url ? '着装规范已更新，请重新生成' : '上传头像后生成'}</span>}</div>{c?.url && c.uniformVersion !== 3 && <p className="pr-version-note">着装规范已更新，请重新生成</p>}{c?.error && <p role="alert">{c.error}</p>}<div><button disabled={!view.portrait || c?.status === 'running'} onClick={() => void generate(s)}>{c?.url ? '重新生成' : '单独生成'}</button>{c?.url && <button onClick={() => downloadGeneratedImage(c.url, '朴邻' + s.name + '着装')}>下载</button>}</div></article> })}</div>
+    <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，选择性别后生成三季真人着装。</p>
+      <div className="pr-portrait-row">
+        {view.portrait
+          ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的头像" onClick={() => setPreview({ url: view.portrait, title: '人物头像' })}><img src={view.portrait} alt="已上传的头像"/></button>
+          : <label {...imageDropProps} className="pr-upload pr-portrait-upload"><span aria-hidden="true">＋</span><input type="file" accept="image/*" aria-label="上传人物头像" disabled={generating} onChange={e => upload(e, false)}/></label>}
+        <div className="pr-portrait-info">
+          <strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong>
+          <small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small>
+          <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={generating} onChange={e => upload(e, false)}/></label>
+          <fieldset className="pr-gender" disabled={generating}>
+            <legend>性别</legend>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update({ gender: 'female', cards: {}, selected: '' })}/>女 · 领花</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update({ gender: 'male', cards: {}, selected: '' })}/>男 · 领带</label>
+          </fieldset>
+        </div>
+        <fieldset className="pr-gender pr-framing">
+          <legend>照片版本</legend>
+          <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
+          <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身（胸部以上）</label>
+        </fieldset>
+        {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={!canGenerate || generating} onClick={() => pendingSeasons.forEach(season => void generate(season))}>{generating ? '生成中…' : '生成'}</button>}
+      </div>
+      <div className={`pr-cards pr-uniform-results${view.framing === 'half' ? ' pr-half-results' : ''}`}>{visibleSeasons.map(season => {
+        const card = view.cards[season.id]
+        const photo = card?.uniformVersion === 3 ? card.url : ''
+        const title = '朴邻' + season.name + (season.half ? '半身' : '全身') + '着装'
+        return <article key={season.id}>
+          <h3>{season.name}着装</h3>
+          <div className="pr-image">{photo
+            ? <button type="button" className="pr-photo-preview" aria-label={'预览' + title} onClick={() => setPreview({ url: photo, title })}><img src={photo} alt={season.name + '真人着装'}/></button>
+            : <span>{card?.status === 'running' ? '正在生成…' : card?.url ? '着装规范已更新，请重新生成' : card?.error ? '生成失败' : '待生成'}</span>}
+          </div>
+          {card?.error && <p role="alert">{card.error}</p>}
+          <div className="pr-card-actions">
+            {photo && <button onClick={() => void downloadGeneratedImage(photo, title)}>下载</button>}
+            {(photo || card?.error) && <button disabled={!canGenerate || generating} onClick={() => void generate(season)}>{photo ? '重新生成' : '重试'}</button>}
+          </div>
+        </article>
+      })}</div>
     </div>
     <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single' })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
-      {view.mode === 'single' ? <><button onClick={() => setPicker(true)}>选择着装照</button>{view.selected && <p>已选择{seasons.find(s => s.id === view.selected)?.name}着装</p>}</> : <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
+      {view.mode === 'single' ? <><button onClick={() => setPicker(true)}>选择着装照</button>{view.selected && <p>已选择{selectedSeason?.name}{selectedSeason?.half ? '半身' : '全身'}着装</p>}</> : <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
       {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
       <label>战报标题<input maxLength={12} value={view.title} onChange={e => update({ ...state, title: e.target.value })}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => update({ ...state, subtitle: e.target.value })}/></label>
@@ -196,6 +268,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <button onClick={() => makeReport().catch(e => setError(e.message))}>生成战报</button>
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>关闭</button></header><div className="pr-cards">{seasons.map(s => <button key={s.id} disabled={!view.cards[s.id]?.url || view.cards[s.id]?.uniformVersion !== 3} onClick={() => { update({ ...state, selected: s.id }); setPicker(false) }}>{view.cards[s.id]?.url && view.cards[s.id]?.uniformVersion === 3 ? <img src={view.cards[s.id].url} alt=""/> : <span>请重新生成</span>}<b>{s.name}</b></button>)}</div></div></div>}
+    {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>关闭</button></header><div className="pr-cards">{allSeasons.map(s => <button key={s.id} disabled={!view.cards[s.id]?.url || view.cards[s.id]?.uniformVersion !== 3} onClick={() => { update({ ...state, selected: s.id }); setPicker(false) }}>{view.cards[s.id]?.url && view.cards[s.id]?.uniformVersion === 3 ? <img src={view.cards[s.id].url} alt=""/> : <span>请重新生成</span>}<b>{s.name}{s.half ? '半身' : '全身'}</b></button>)}</div></div></div>}
   </section>
 }
