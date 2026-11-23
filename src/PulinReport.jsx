@@ -211,8 +211,9 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   }
   if (!user) return <section className="pulin-report"><h1>朴邻战报制作</h1><p>登录后即可生成着装照和战报。</p><button onClick={onLogin}>登录</button></section>
   if (!ready) return <section className="pulin-report" role="status">正在读取战报草稿…</section>
-  const generating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
+  const anyGenerating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
   const visibleSeasons = view.framing === 'half' ? halfSeasons : seasons
+  const generating = visibleSeasons.some(season => view.cards[season.id]?.status === 'running')
   const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3)
   const selectedSeason = allSeasons.find(season => season.id === view.selected)
   const canGenerate = Boolean(view.portrait && view.gender)
@@ -223,14 +224,14 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <div className="pr-portrait-row">
         {view.portrait
           ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的头像" onClick={() => setPreview({ url: view.portrait, title: '人物头像' })}><img src={view.portrait} alt="已上传的头像"/></button>
-          : <label {...imageDropProps} className="pr-upload pr-portrait-upload"><span aria-hidden="true">＋</span><input type="file" accept="image/*" aria-label="上传人物头像" disabled={generating} onChange={e => upload(e, false)}/></label>}
+          : <label {...imageDropProps} className="pr-upload pr-portrait-upload"><span aria-hidden="true">＋</span><input type="file" accept="image/*" aria-label="上传人物头像" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>}
         <div className="pr-portrait-info">
           <strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong>
           <small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small>
-          <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={generating} onChange={e => upload(e, false)}/></label>
+          <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>
         </div>
         <div className="pr-portrait-actions">
-          <fieldset className="pr-segments" aria-label="性别" disabled={generating}>
+          <fieldset className="pr-segments" aria-label="性别" disabled={anyGenerating}>
             <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update({ gender: 'male', cards: {}, selected: '' })}/>男</label>
             <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update({ gender: 'female', cards: {}, selected: '' })}/>女</label>
           </fieldset>
