@@ -25,12 +25,16 @@
 .pr-portrait-row .pr-portrait-upload{padding:0;background:rgba(232,113,38,.07);border:1px dashed rgba(232,113,38,.55);font-weight:400}.pr-version-note{margin:8px 0 0!important;color:#dc8a46!important;font-size:11px;line-height:1.4}
 
 .pr-portrait-upload img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
-.pr-gender{display:flex;flex-wrap:wrap;gap:6px 12px;min-width:0;margin:4px 0 0;padding:0;border:0}
-.pr-gender legend{padding:0;margin-bottom:4px;font-size:12px;font-weight:600}
-.pr-section .pr-gender label{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:12px;color:var(--dp-ink)}
-.pr-section .pr-gender input[type=radio]{appearance:auto;width:14px;height:14px;margin:0;accent-color:#e87126}
-
-.pr-framing{flex:none}
+.pr-portrait-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pr-segments{display:flex;align-items:center;gap:2px;min-width:0;margin:0;padding:3px;border:1px solid var(--dp-rule);border-radius:10px;background:rgba(145,145,145,.1)}
+.pr-section .pr-segments label{position:relative;display:grid;place-items:center;min-width:34px;min-height:34px;margin:0;padding:0 8px;border-radius:7px;color:var(--dp-secondary);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.pr-section .pr-segments input[type=radio]{position:absolute;width:1px;height:1px;margin:0;opacity:0}
+.pr-segments label:hover,.pr-segments label:has(input:checked){color:var(--dp-ink)}
+.pr-segments label:has(input:checked){background:var(--dp-panel-solid);box-shadow:inset 0 0 0 1px #e87126}
+.pr-segments label:has(input:focus-visible){outline:2px solid #e87126;outline-offset:2px}
+.pr-segments:disabled{opacity:.55}
+.pr-segments:disabled label{cursor:not-allowed}
+@media(max-width:720px){.pr-portrait-row{flex-wrap:wrap}.pr-portrait-actions{flex-basis:100%}}
 .pr-uniform-results .pr-image{width:100%;height:auto;max-height:none;aspect-ratio:9/16}
 .pr-half-results .pr-image{aspect-ratio:5/7}
 .pulin-report .pr-uniform-results .pr-photo-preview{display:block;width:100%;height:100%;padding:0;border:0;border-radius:inherit;background:transparent;cursor:zoom-in}
@@ -40,4 +44,3 @@
 .pr-uniform-results article>.pr-card-actions:empty{display:none}
 .pr-card-actions:empty{display:none}
 .pulin-report .pr-portrait-row .pr-generate-all{margin-left:0;background:#e87126;color:#fff;border-color:#e87126}
-@media(max-width:600px){.pr-framing{margin-left:72px}}

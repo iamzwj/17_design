@@ -219,7 +219,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   return <section className="pulin-report">
     <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
-    <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，选择性别后生成三季真人着装。</p>
+    <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，生成三季真人着装。</p>
       <div className="pr-portrait-row">
         {view.portrait
           ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的头像" onClick={() => setPreview({ url: view.portrait, title: '人物头像' })}><img src={view.portrait} alt="已上传的头像"/></button>
@@ -228,18 +228,18 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
           <strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong>
           <small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small>
           <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={generating} onChange={e => upload(e, false)}/></label>
-          <fieldset className="pr-gender" disabled={generating}>
-            <legend>性别</legend>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update({ gender: 'female', cards: {}, selected: '' })}/>女 · 领花</label>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update({ gender: 'male', cards: {}, selected: '' })}/>男 · 领带</label>
-          </fieldset>
         </div>
-        <fieldset className="pr-gender pr-framing">
-          <legend>照片版本</legend>
-          <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
-          <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身（胸部以上）</label>
-        </fieldset>
-        {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={!canGenerate || generating} onClick={() => pendingSeasons.forEach(season => void generate(season))}>{generating ? '生成中…' : '生成'}</button>}
+        <div className="pr-portrait-actions">
+          <fieldset className="pr-segments" aria-label="性别" disabled={generating}>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update({ gender: 'male', cards: {}, selected: '' })}/>男</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update({ gender: 'female', cards: {}, selected: '' })}/>女</label>
+          </fieldset>
+          <fieldset className="pr-segments" aria-label="照片构图">
+            <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
+            <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身</label>
+          </fieldset>
+          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={!canGenerate || generating} onClick={() => pendingSeasons.forEach(season => void generate(season))}>{generating ? '生成中…' : '生成'}</button>}
+        </div>
       </div>
       <div className={`pr-cards pr-uniform-results${view.framing === 'half' ? ' pr-half-results' : ''}`}>{visibleSeasons.map(season => {
         const card = view.cards[season.id]
