@@ -249,15 +249,16 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
           <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>
         </div>
         <div className="pr-portrait-actions">
+          {view.portrait && !view.gender && <span className="pr-gender-hint">请选择男款或女款着装</span>}
           <fieldset className="pr-segments" aria-label="性别" disabled={anyGenerating}>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update(current=>({...current,gender:'male',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''}))}/>男</label>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update(current=>({...current,gender:'female',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''}))}/>女</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => { setError(''); update(current=>({...current,gender:'male',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''})) }}/>男</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => { setError(''); update(current=>({...current,gender:'female',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''})) }}/>女</label>
           </fieldset>
           <fieldset className="pr-segments" aria-label="照片构图">
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身</label>
           </fieldset>
-          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={!canGenerate || generating} onClick={() => pendingSeasons.forEach(season => void generate(season))}>{generating ? '生成中…' : '生成'}</button>}
+          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={generating} onClick={() => { if (!view.portrait) { setError('请先上传人物头像'); return } if (!view.gender) { setError('请选择男款或女款着装后生成'); return } setError(''); pendingSeasons.forEach(season => void generate(season)) }}>{generating ? '生成中…' : '生成'}</button>}
         </div>
       </div>
       <div className={`pr-cards pr-uniform-results${view.framing === 'half' ? ' pr-half-results' : ''}`}>{visibleSeasons.map(season => {
