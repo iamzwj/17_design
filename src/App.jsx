@@ -743,6 +743,8 @@ function Topbar({ onMenu }) {
   </header>
 }
 
+const imageConversationRuns = new Map()
+
 function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onUserUpdate, onRequireLogin }) {
   const skillState = useGenerationSkill('image')
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
@@ -779,12 +781,22 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   useEffect(() => {
     if (!conversation || conversation.id !== conversationId.current) return
     if (conversation.status === 'running' && !activeRequestRef.current) {
+      if (!conversation.imageTaskId && imageConversationRuns.has(conversationId.current)) {
+        setMessages(conversation.messages || [])
+        setLoading(true)
+        setRunningStartedAt(conversation.runningStartedAt || null)
+        return
+      }
       if (conversation.imageTaskId) {
         activeRequestRef.current = true
+        const run = imageConversationRuns.get(conversationId.current) || { taskId: conversation.imageTaskId }
+        imageConversationRuns.set(conversationId.current, run)
+        const isCurrent = () => imageConversationRuns.get(conversationId.current) === run
         setMessages(conversation.messages || [])
         setLoading(true)
         setRunningStartedAt(conversation.runningStartedAt || null)
         void waitForConversationImageTask(conversation.imageTaskId).then((result) => {
+          if (!isCurrent()) return
           if (result.user) onUserUpdate(result.user)
           const urls = result.urls || []
           const nextEditImage = urls[0] || conversation.editImage || null
@@ -793,11 +805,12 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
           setEditImage(nextEditImage)
           onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: nextEditImage, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: true })
         }).catch((err) => {
+          if (!isCurrent()) return
           const failedMessages = [...(conversation.messages || []), { role: 'error', content: userError(err.message), elapsedMs: Date.now() - new Date(conversation.runningStartedAt || Date.now()).getTime(), failedAt: new Date().toISOString() }]
           setMessages(failedMessages)
           setError(userError(err.message))
           onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: conversation.ratio || DEFAULT_IMAGE_ASPECT_RATIO, imageModel: conversation.imageModel || DEFAULT_IMAGE_MODEL, imageResolution: conversation.imageResolution || DEFAULT_IMAGE_RESOLUTION, imageQuality: imageQualityForModel(conversation.imageModel || DEFAULT_IMAGE_MODEL, conversation.imageQuality || DEFAULT_IMAGE_QUALITY), editImage: conversation.editImage || null, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
-        }).finally(() => { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) })
+        }).finally(() => { if (isCurrent()) { imageConversationRuns.delete(conversationId.current); activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) } })
         return
       }
       const failedAt = new Date().toISOString()
@@ -820,6 +833,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
   }, [conversation])
 
   useEffect(() => {
+    if (loading) return undefined
     const failedMessages = messages.filter(isFailureMessage)
     if (!failedMessages.length) return undefined
     const cleanUp = () => {
@@ -832,7 +846,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     if (!nextDeadline || nextDeadline <= Date.now()) { cleanUp(); return undefined }
     const timer = window.setTimeout(cleanUp, nextDeadline - Date.now())
     return () => window.clearTimeout(timer)
-  }, [editImage, messages, model, onSave, quality, ratio, resolution])
+  }, [editImage, loading, messages, model, onSave, quality, ratio, resolution])
 
   async function appendFiles(fileList) {
     const referenceLimit = (editImage ? 3 : 4) - (skillState.selected?.referenceCount || 0)
@@ -864,12 +878,17 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
 
   async function submit(customPrompt) {
     const text = (customPrompt || prompt).trim()
-    if (!text || loading) return
+    if (!text) return
     if (references.length + (editImage ? 1 : 0) + (skillState.selected?.referenceCount || 0) > 4) { setError('所选 Skill 需要一张参考图位置，请先减少上传参考图'); return }
     const selectedRatio = normalizedImageRatio(model, resolution, ratio)
     const selectedQuality = imageQualityForModel(model, quality)
     if (selectedRatio !== ratio) setRatio(selectedRatio)
     if (selectedQuality !== quality) setQuality(selectedQuality)
+    const previousRun = imageConversationRuns.get(conversationId.current)
+    const run = { taskId: null }
+    imageConversationRuns.set(conversationId.current, run)
+    const isCurrent = () => imageConversationRuns.get(conversationId.current) === run
+    if (previousRun?.taskId) void cancelWaterfallTask(previousRun.taskId).catch(() => {})
     const referenceSnapshot = references
     const editSnapshot = editImage
     const startedAt = new Date().toISOString()
@@ -877,7 +896,7 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
     activeRequestRef.current = true
     setMessages(userMessages)
     scrollToLatestResult()
-    onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', runningStartedAt: startedAt, unreadComplete: false, activate: true })
+    onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', imageTaskId: null, runningStartedAt: startedAt, unreadComplete: false, activate: true })
     setPrompt(''); setReferences([]); setLoading(true); setRunningStartedAt(startedAt); setError('')
     const creditCost = imageCreditCost(model)
     onUserUpdate((current) => current ? { ...current, credits: Math.max(0, (current.credits ?? 50) - creditCost) } : current)
@@ -893,9 +912,12 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
         resolution,
         quality: selectedQuality,
       })
+      run.taskId = created.task.id
+      if (!isCurrent()) { void cancelWaterfallTask(created.task.id).catch(() => {}); return }
       if (created.user) onUserUpdate(created.user)
       onSave({ id: conversationId.current, type: 'image', messages: userMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'running', imageTaskId: created.task.id, runningStartedAt: startedAt, unreadComplete: false })
       const result = await waitForConversationImageTask(created.task.id)
+      if (!isCurrent()) return
       if (result.user) onUserUpdate(result.user)
       const nextEditImage = result.urls[0] || null
       const elapsedMs = Date.now() - new Date(startedAt).getTime()
@@ -905,18 +927,20 @@ function ImageStudio({ conversation, onSave, imageMode, waterfallStorageKey, onU
       setEditImage(nextEditImage)
       onSave({ id: conversationId.current, type: 'image', messages: completedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: nextEditImage, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: true })
     } catch (err) {
+      if (!isCurrent()) return
       try {
         const { user: refreshedUser } = await getCurrentAccount()
         onUserUpdate(refreshedUser)
       } catch {
         onUserUpdate((current) => current ? { ...current, credits: (current.credits ?? 50) + creditCost } : current)
       }
+      if (!isCurrent()) return
       setError(userError(err.message))
       const failedMessages = [...userMessages, { role: 'error', content: userError(err.message), elapsedMs: Date.now() - new Date(startedAt).getTime(), failedAt: new Date().toISOString() }]
       setMessages(failedMessages)
       scrollToLatestResult()
       onSave({ id: conversationId.current, type: 'image', messages: failedMessages, ratio: selectedRatio, imageModel: model, imageResolution: resolution, imageQuality: selectedQuality, editImage: editSnapshot, status: 'idle', imageTaskId: null, runningStartedAt: null, unreadComplete: false })
-    } finally { activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) }
+    } finally { if (isCurrent()) { imageConversationRuns.delete(conversationId.current); activeRequestRef.current = false; setLoading(false); setRunningStartedAt(null) } }
   }
 
   const empty = messages.length === 0
@@ -1440,7 +1464,7 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
           <ImageSettings model={model} ratio={ratio} ratios={imageRatioOptions(model, resolution)} onRatio={setRatio} resolution={resolution} onResolution={(nextResolution) => { setResolution(nextResolution); setRatio((current) => normalizedImageRatio(model, nextResolution, current)) }} quality={quality} onQuality={setQuality}/>
           <GenerationSkillPicker target="image" state={skillState}/><KnowledgeContext tool="image"/>
         </div>
-        <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? '生成中' : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim() || loading}><Icon name="arrowUp" size={18}/></button></div>
+        <div className="generation-submit"><span className="generation-credit-cost">消耗 <b>{imageCreditCost(model)}</b> 分</span><button className="send-button" aria-label={loading ? `重新生成，消耗 ${imageCreditCost(model)} 积分` : `生成，消耗 ${imageCreditCost(model)} 积分`} onClick={() => submit()} disabled={!prompt.trim()}><Icon name="arrowUp" size={18}/></button></div>
       </div>
     </div>
     {error && <small className="composer-note error">{error}</small>}
