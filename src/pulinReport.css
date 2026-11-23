@@ -71,3 +71,6 @@
 .pr-team-primary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.pr-team-fields label{font-size:13px;font-weight:600;line-height:1.5}.pr-team-fields input{box-sizing:border-box;min-height:44px;font-size:14px}.pr-team-primary input{min-height:52px;font-size:16px;font-weight:600}.pr-team-composition{margin-bottom:16px}.pr-team-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 :root[data-theme="dark"] .pr-team-primary{background:#211b17;border-color:#684b32}:root[data-theme="dark"] .pr-team-heading span{color:#edb67d}
 @media(max-width:1100px){.pr-team-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.pr-team-primary,.pr-team-score{padding:16px}.pr-team-primary-grid,.pr-team-metrics{grid-template-columns:1fr}.pr-team-primary-grid{gap:12px}}
+
+/* Keep the report sections visually integrated with the surrounding form. */
+.pr-team-primary,.pr-team-score,:root[data-theme="dark"] .pr-team-primary { background: transparent; }
