@@ -250,17 +250,17 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const canGenerate = Boolean(view.portrait && view.gender)
   const history = wardrobePhotos(view).filter(photo => photo.url).filter(photo => historyFilter === 'all' || (photo.seasonId?.endsWith('-half') ? 'half' : 'full') === historyFilter)
   return <section className="pulin-report">
-    <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
+    <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传形象照生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
-    <div className="pr-section"><button type="button" className="pr-history-trigger" onClick={() => setHistoryOpen(true)}>历史记录</button><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，生成三季真人着装。</p>
+    <div className="pr-section"><button type="button" className="pr-history-trigger" onClick={() => setHistoryOpen(true)}>历史记录</button><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面形象照，生成三季真人着装。</p>
       <div className="pr-portrait-row">
         {view.portrait
-          ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的头像" onClick={() => setPreview({ url: view.portrait, title: '人物头像' })}><img src={view.portrait} alt="已上传的头像"/></button>
-          : <label {...imageDropProps} className="pr-upload pr-portrait-upload"><span aria-hidden="true">＋</span><input type="file" accept="image/*" aria-label="上传人物头像" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>}
+          ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的形象照" onClick={() => setPreview({ url: view.portrait, title: '人物形象照' })}><img src={view.portrait} alt="已上传的形象照"/></button>
+          : <label {...imageDropProps} className="pr-upload pr-portrait-upload"><span aria-hidden="true">＋</span><input type="file" accept="image/*" aria-label="上传人物形象照" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>}
         <div className="pr-portrait-info">
-          <strong>{view.portrait ? '头像已上传' : '上传人物头像'}</strong>
+          <strong>{view.portrait ? '形象照已上传' : '上传人物形象照'}</strong>
           <small>建议使用正面、光线均匀的清晰照片，单张不超过 10MB</small>
-          <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换头像' : '选择照片'}<input type="file" accept="image/*" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>
+          <label {...imageDropProps} className="pr-file-button">{view.portrait ? '更换形象照' : '选择形象照'}<input type="file" accept="image/*" disabled={anyGenerating} onChange={e => upload(e, false)}/></label>
         </div>
         <div className="pr-portrait-actions">
           {view.portrait && !view.gender && <span className="pr-gender-hint">请选择男款或女款着装</span>}
@@ -272,7 +272,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'half'} onChange={() => update({ framing: 'half' })}/>半身</label>
           </fieldset>
-          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={generating} onClick={() => { if (!view.portrait) { setError('请先上传人物头像'); return } if (!view.gender) { setError('请选择男款或女款着装后生成'); return } setError(''); pendingSeasons.forEach(season => void generate(season)) }}>{generating ? '生成中…' : '生成'}</button>}
+          {pendingSeasons.length > 0 && <button className="pr-generate-all" disabled={generating} onClick={() => { if (!view.portrait) { setError('请先上传人物形象照'); return } if (!view.gender) { setError('请选择男款或女款着装后生成'); return } setError(''); pendingSeasons.forEach(season => void generate(season)) }}>{generating ? '生成中…' : '生成'}</button>}
         </div>
       </div>
       <div className={`pr-cards pr-uniform-results${view.framing === 'half' ? ' pr-half-results' : ''}`}>{visibleSeasons.map(season => {
