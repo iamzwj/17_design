@@ -1,5 +1,5 @@
 import {maleUniformAccessory} from './pulinUniformRules.js';
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
 import { imageDropProps } from './imageDropUpload.js'
@@ -175,7 +175,7 @@ async function makeReport() {
   const owner = loadedKey
   const draft = state
   const chosen = wardrobePhotos(draft).filter(photo => (draft.selectedWardrobe || []).includes(photo.id)).map(photo=>photo.url)
-  const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : [draft.cards[draft.selected]?.url].filter(Boolean)) : [...chosen, ...draft.people].slice(0,10)
+  const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : draft.people.slice(0,1)) : [...chosen, ...draft.people].slice(0,10)
   if (!sources.length) throw new Error('请先选择人物形象照')
   if (draft.mode === 'multiple' && sources.length > 8) throw new Error('团队战报最多支持 8 张人物参考照，请减少形象照后重试')
   if (draft.mode === 'multiple') {
@@ -257,6 +257,8 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [sourcePicker, setSourcePicker] = useState(false)
+  const reportFileRef = useRef(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyFilter, setHistoryFilter] = useState('all')
   const [preview, setPreview] = useState(null)
@@ -273,11 +275,11 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
-    if (multiple && files.length + (state.selectedWardrobe || []).length > 8) { setError('多人战报最多支持 8 张形象照（含已选着装照）'); return }
+    if (multiple && state.mode === 'multiple' && files.length + (state.selectedWardrobe || []).length > 8) { setError('多人战报最多支持 8 张形象照（含已选着装照）'); return }
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
-      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), wardrobeBatchId: crypto.randomUUID(), cards: {}, selected: '' }, owner)
+      update(current => multiple ? { ...current, people: urls, ...(current.mode === 'single' ? { selectedWardrobe: [] } : {}) } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), wardrobeBatchId: crypto.randomUUID(), cards: {}, selected: '' }, owner)
       setError('')
       onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
     } catch { setError('图片读取失败，请重试') }
@@ -335,10 +337,10 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
         </article>
       })}</div>
     </div>
-    <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物形象照并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
-      <button onClick={() => setPicker(true)}>选择着装照</button><p>已选择 {(view.selectedWardrobe || []).length} 张</p>
-      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload pr-team-upload"><span className="pr-team-upload-icon" aria-hidden="true">＋</span><span className="pr-team-upload-copy"><strong>上传人物形象照</strong><small>最多 8 人，支持多选</small></span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
-      {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
+    <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物形象照并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1), people: (state.selectedWardrobe || []).length ? [] : (state.people || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
+      <p>已选择 {(view.selectedWardrobe || []).length + (view.people || []).length} 张</p>
+      <button type="button" className="pr-upload pr-team-upload" onClick={() => setSourcePicker(true)}><span className="pr-team-upload-icon" aria-hidden="true">＋</span><span className="pr-team-upload-copy"><strong>上传人物形象照</strong><small>{view.mode === 'single' ? '选择 1 张照片' : '最多 8 人，支持多选'}</small></span></button><input ref={reportFileRef} type="file" accept="image/*" multiple={view.mode === 'multiple'} hidden onChange={e => upload(e, true)}/>
+      <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>
       {view.mode === 'multiple' && <div className="pr-team-fields">{[['region','片区','如西安朴邻-XA18西安一片区'],['performance','累计业绩（元）','如10,054,060'],['team','团队构成','如22名资产管家+5名社区经理+1名片区总监'],['perPerson','人均业绩','如4.1万元/月'],['inventory','累计存量单量','如179单'],['rentals','累计租赁单量','如502单'],['newHomes','累计新房单量','如41单']].map(([key,label,placeholder]) => <label key={key}>{label}<input value={view[key] || ''} placeholder={placeholder} onChange={e => { update({[key]:e.target.value}); registerDraft() }}/></label>)}</div>}
       {view.mode === 'single' && <><label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => { update({ ...state, subtitle: e.target.value }); registerDraft() }}/></label>
@@ -349,6 +351,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     </div>
     {historyOpen && <div className="pr-overlay" onClick={() => setHistoryOpen(false)}><div className="pr-modal pr-history-modal" role="dialog" aria-modal="true" aria-label="着装照历史记录" onClick={e => e.stopPropagation()}><header><h2>着装照历史记录</h2><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></header><div className="pr-history-filters" aria-label="筛选构图">{[['all','全部'],['half','半身'],['full','全身']].map(([value,label]) => <button key={value} type="button" aria-pressed={historyFilter === value} onClick={() => setHistoryFilter(value)}>{label}</button>)}</div><div className="pr-history-grid">{history.map(photo => <button key={photo.id} type="button" onClick={() => setPreview({url:photo.url,title:wardrobeName(photo)})}><img src={photo.url} alt={wardrobeName(photo)}/><span>{wardrobeName(photo)}</span></button>)}</div>{!history.length && <p>{wardrobePhotos(view).length ? '当前筛选没有照片，请切换“全部”查看' : '当前对话尚无已保存的着装照，生成完成后会自动出现在这里'}</p>}</div></div>}
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择八张（含上传形象照）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 8 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
+    {sourcePicker && <div className="pr-overlay" onClick={() => setSourcePicker(false)}><div className="pr-modal pr-source-modal" role="dialog" aria-modal="true" aria-label="选择照片来源" onClick={e => e.stopPropagation()}><header><h2>选择照片来源</h2><button type="button" onClick={() => setSourcePicker(false)}>关闭</button></header><div className="pr-source-options"><button type="button" onClick={() => { setSourcePicker(false); reportFileRef.current?.click() }}>上传本地照片</button><button type="button" onClick={() => { setSourcePicker(false); setPicker(true) }}>选择已生成照片</button></div></div></div>}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择八张（含上传形象照）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 8 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next,...(current.mode==='single'?{people:[]}:{})}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
   </section>
 }
