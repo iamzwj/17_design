@@ -1392,20 +1392,28 @@ async function handleTextCompletion(req, res, next) {
     const context = req.body.__knowledge
     const sources = [...webResult.sources, ...(context?.sources || [])]
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(webResult.sources, webResult.available) : '', context?.prompt].filter(Boolean).join('\n\n')
-    if (context && combinedSystemPrompt.length > 18000) throw Object.assign(new Error('品牌规则与系统指令超过长度预算，请精简后重试'), { status: 400 })
+    // Preserve full brand policies; the retrieval layer budgets optional references.
     const selectedModel = req.body.textModel
     if (selectedModel !== undefined && !textModelHealth().models.some(({ value }) => value === selectedModel)) {
       throw Object.assign(new Error('所选模型当前不可用，请重新选择'), { status: 400 })
     }
     const complete = async (body) => {
       if (!selectedModel) return requestLanguageModel(requestTextUpstream, body)
-      const result = await requestTextUpstream('/v1/chat/completions', { ...body, model: selectedModel }, selectedModel === 'gemini-4-carbon' ? 180_000 : 90_000)
-      return { ...result, model: result.model || selectedModel }
+      try {
+        const result = await requestTextUpstream('/v1/chat/completions', { ...body, model: selectedModel }, selectedModel === 'gemini-4-carbon' ? 180_000 : 90_000)
+        if (result?.error) throw new Error(result.error.message || String(result.error))
+        if (!completionText(result)?.trim()) throw new Error('语言模型未返回结果')
+        return { ...result, model: result.model || selectedModel }
+      } catch (error) {
+        if ([400, 413].includes(error.status)) throw error
+        console.error('selected-text-model-fallback', { model: selectedModel, status: error.status, message: error.message })
+        return requestLanguageModel(requestTextUpstream, body)
+      }
     }
     const upstreamRequest = {
       stream: false,
       messages: [
-        ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt.slice(0, 18_000) }] : []),
+        ...(combinedSystemPrompt ? [{ role: 'system', content: combinedSystemPrompt }] : []),
         ...safeMessages,
       ],
     }
