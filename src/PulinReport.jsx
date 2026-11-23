@@ -55,6 +55,9 @@ function update(change, id = loadedKey) {
   const current = taskStates.get(id) || (id === loadedKey ? state : initial)
   const next = typeof change === 'function' ? change(current) : { ...current, ...change }
   taskStates.set(id, next)
+  const wasRunning = Object.values(current.cards || {}).some(card => card.status === 'running')
+  const isRunning = Object.values(next.cards || {}).some(card => card.status === 'running')
+  if (wasRunning !== isRunning) window.dispatchEvent(new CustomEvent('pulin-report-status', { detail: { id: id.slice('pulin-report:'.length), status: isRunning ? 'running' : 'idle' } }))
   if (id === loadedKey) state = next
   const snapshot = structuredClone(next)
   writes = writes.catch(() => {}).then(async () => {
@@ -84,6 +87,19 @@ async function initialize(taskId) {
   })()
   await loadPromise
   loadPromise = null
+}
+export async function resumePulinReportTasks(taskId) {
+  const owner = key(taskId)
+  const draft = taskStates.get(owner) || await readDraft(owner).catch(() => null)
+  if (!draft) return
+  taskStates.set(owner, draft)
+  const cards = Object.entries(draft.cards || {})
+  for (const [season, card] of cards) {
+    if (card.status === 'running' && card.taskId) void finish(season, card.taskId, owner)
+    else if (card.status === 'running') update(current => ({ ...current, cards: { ...current.cards, [season]: { status: 'error', error: '任务提交状态未确认，请检查生成记录后重试。' } } }), owner)
+  }
+  const current = taskStates.get(owner)
+  window.dispatchEvent(new CustomEvent('pulin-report-status', { detail: { id: taskId, status: Object.values(current.cards || {}).some(card => card.status === 'running') ? 'running' : 'idle' } }))
 }
 async function finish(id, taskId, owner) {
   if (active.has(taskId)) return

@@ -554,8 +554,9 @@ function BrandIcon({ alt = '' }) {
 }
 
 function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onLogout, onLogin }) {
-  const pinned = conversations.filter((conversation) => conversation.pinned)
-  const regular = conversations.filter((conversation) => !conversation.pinned)
+  const byRecent = (a, b) => (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0)
+  const pinned = conversations.filter((conversation) => conversation.pinned).sort(byRecent)
+  const regular = conversations.filter((conversation) => !conversation.pinned).sort(byRecent)
   const [pinnedOpen, setPinnedOpen] = useState(() => readWorkspaceStorage("dgen-sidebar-pinned-open") !== "false")
   const [historyOpen, setHistoryOpen] = useState(() => readWorkspaceStorage("dgen-sidebar-history-open") !== "false")
   const toggleHistory = (open, setOpen, key) => { const next = !open; setOpen(next); writeWorkspaceStorage(key, String(next)) }
@@ -1995,6 +1996,24 @@ export default function App() {
     const timer = setInterval(() => { sync(); syncArchives() }, 15000)
     return () => { live = false; clearInterval(timer) }
   }, [user, authState, conversationStorageKey, historyReady]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user || historyReady !== conversationStorageKey) return
+    const statusChanged = event => {
+      const { id, status } = event.detail || {}
+      if (!id) return
+      updateConversations(current => {
+        const item = current.find(record => record.id === id && record.type === 'pulin-report')
+        if (!item || (item.status || 'idle') === status) return current
+        return current.map(record => record.id === id ? { ...record, status, ...(status === 'running' ? { updatedAt: new Date().toISOString() } : {}) } : record)
+      })
+    }
+    window.addEventListener('pulin-report-status', statusChanged)
+    let active = true
+    const ids = conversations.filter(item => item.type === 'pulin-report' && item.status === 'running').map(item => item.id)
+    if (ids.length) void import('./PulinReport.jsx').then(({ resumePulinReportTasks }) => { if (active) ids.forEach(id => void resumePulinReportTasks(id)) })
+    return () => { active = false; window.removeEventListener('pulin-report-status', statusChanged) }
+  }, [user, historyReady, conversationStorageKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function recordFilm(project) {
     updateConversations((current) => mergeFilmHistory(current, [{
