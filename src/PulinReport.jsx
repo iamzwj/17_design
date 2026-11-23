@@ -175,6 +175,23 @@ async function compressReference(source, maxEdge = 1600) {
     throw new Error('无法处理人物参考图，请重新选择照片')
   }
 }
+async function teamIdentityReference(source, index) {
+  const image = await loadImage(source)
+  const canvas = document.createElement('canvas')
+  canvas.width = 1400; canvas.height = 1600
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1400, 1600)
+  const scale = Math.min(850 / image.width, 1450 / image.height)
+  ctx.drawImage(image, (850-image.width*scale)/2, 110, image.width*scale, image.height*scale)
+  // Portrait uploads are centered: retain the complete source and add a larger
+  // upper-body detail, so full-length references do not reduce faces to pixels.
+  const cropWidth = Math.min(image.width, image.height * .65)
+  const cropHeight = Math.min(image.height, cropWidth * 1.3)
+  ctx.drawImage(image, (image.width-cropWidth)/2, 0, cropWidth, cropHeight, 870, 110, 510, 663)
+  ctx.fillStyle = '#111'; ctx.font = 'bold 38px sans-serif'
+  ctx.fillText(`人物 ${index + 1} / 同一人的原图与上半身细节`, 35, 65)
+  return canvas.toDataURL('image/jpeg', .95)
+}
 async function cropPortraitPhoto(url, half) {
   const image = await loadImage(url)
   const canvas = document.createElement('canvas')
@@ -202,14 +219,14 @@ async function makeReport() {
   if (draft.mode === 'multiple' || draft.people.length) {
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
-      const compressedSources = await Promise.all(sources.map(source => compressReference(source)))
-      const teamPrompt = `只生成一组真人摄影风格团队人物抠图。参考图共有 ${compressedSources.length} 张，每张对应一个不同的人，画面必须恰好出现 ${compressedSources.length} 人，每人仅出现一次，禁止新增人物或复制人物。逐一保持每人的五官、年龄、肤色、发型与身份特征，不要美化或替换面貌。穿深色正式西装、白色衬衫和橙色领带或领花，部分站立、部分坐在简洁的黑色椅子上，人物完整，从头到鞋无遮挡，构图紧凑，边缘留白。背景必须是纯色 #00ff00 绿色，无渐变、无阴影、无舞台、无文字、无装饰，不能穿绿色。`
+      const compressedSources = await Promise.all(sources.map((source,index) => draft.mode === 'multiple' ? teamIdentityReference(source,index) : compressReference(source)))
+      const teamPrompt = `只生成一组真人摄影风格团队人物抠图。参考图共有 ${compressedSources.length} 张，每张参考板编号对应一个不同的人；同一板中的原图和放大细节是同一个人，不能算成两个人。人物按编号从后排左至右、再前排左至右排列，面部必须严格对应同编号原图，不得平均五官、套用同一张脸或以相似人物替代。画面必须恰好出现 ${compressedSources.length} 人，每人仅出现一次，禁止新增人物或复制人物。逐一保持每人的五官、年龄、肤色、发型与身份特征，不要美化或替换面貌。穿深色正式西装、白色衬衫和橙色领带或领花，部分站立、部分坐在简洁的黑色椅子上，人物完整，从头到鞋无遮挡，构图紧凑，边缘留白。背景必须是纯色 #00ff00 绿色，无渐变、无阴影、无舞台、无文字、无装饰，不能穿绿色。`
       const result = await createConversationImageTask({
         prompt: draft.mode === 'single'
           ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。'
           : teamPrompt,
         images: draft.mode === 'single' ? [background, ...compressedSources] : compressedSources,
-        model: 'gpt-image-2.5', resolution: '1k', quality: 'high',
+        model: 'gpt-image-2.5', resolution: draft.mode === 'multiple' ? '2k' : '1k', quality: 'high',
         aspectRatio: draft.mode === 'single' ? '9:16' : '1:1', knowledge: {},
         ...(draft.mode === 'multiple' ? { removeBackground: true, backgroundColor: '#00ff00' } : {}),
       })
