@@ -870,3 +870,20 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .history-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
 .history-toggle:hover { color: var(--ink); }
 .history-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+}
+.auth-send-code:disabled { opacity: .6; }
+
+
+/* Keep primary navigation rows on one shared icon, label and arrow grid. */
+.primary-tools > .more-tool-nav { min-width: 0; width: 100%; }
+.primary-tools > button,
+.primary-tools > .more-tool-nav > button {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) 14px;
+  column-gap: 9px;
+}
+.primary-tools > button > b,
+.primary-tools > .more-tool-nav > button > b { min-width: 0; text-align: left; }
+.primary-tools > .more-tool-nav > button > svg:last-child { margin-left: 0; justify-self: end; }
