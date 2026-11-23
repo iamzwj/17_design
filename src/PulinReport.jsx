@@ -12,7 +12,18 @@ const seasons = [
 ]
 const halfSeasons = seasons.map(season => ({ ...season, id: `${season.id}-half`, half: true }))
 const allSeasons = [...seasons, ...halfSeasons]
-const initial = { portrait: '', gender: '', framing: 'full', cards: {}, mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
+const initial = { portrait: '', gender: '', framing: 'full', cards: {}, wardrobeHistory: [], selectedWardrobe: [], mode: 'single', people: [], selected: '', title: '业绩战报', subtitle: '', data: '', report: '' }
+function wardrobePhotos(draft) {
+  const photos = [...(draft.wardrobeHistory || [])];
+  for (const [seasonId, card] of Object.entries(draft.cards || {})) {
+    if (card.url && !photos.some(photo => photo.url === card.url)) photos.push({id:card.url,url:card.url,seasonId});
+  }
+  return photos;
+}
+function wardrobeName(photo) {
+  const season=allSeasons.find(item=>item.id===photo.seasonId);
+  return season ? `${season.name}${season.half ? '半身' : '全身'}` : '人物着装照';
+}
 const listeners = new Set()
 let state = initial
 let loadedKey = ''
@@ -81,7 +92,7 @@ async function finish(id, taskId, owner) {
     const url = (taskStates.get(owner)?.cards[id]?.cropToFraming)
       ? await cropPortraitPhoto(result.urls[0], id.endsWith('-half'))
       : result.urls[0]
-    update(current => ({ ...current, cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
+    update(current => ({ ...current, wardrobeHistory: [...wardrobePhotos(current), {id:url,url,seasonId:id}].filter((photo,index,list)=>list.findIndex(item=>item.url===photo.url)===index), cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
   } catch (error) {
     update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }), owner)
   } finally { active.delete(taskId) }
@@ -141,7 +152,8 @@ async function cropPortraitPhoto(url, half) {
 async function makeReport() {
   const owner = loadedKey
   const draft = state
-  const sources = draft.mode === 'single' ? [draft.cards[draft.selected]?.url].filter(Boolean) : draft.people
+  const chosen = wardrobePhotos(draft).filter(photo => (draft.selectedWardrobe || []).includes(photo.id)).map(photo=>photo.url)
+  const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : [draft.cards[draft.selected]?.url].filter(Boolean)) : [...chosen, ...draft.people].slice(0,6)
   if (!sources.length) throw new Error('请先选择人物图片')
   const lines = draft.data.split('\n').filter(line => line.trim())
   if (!draft.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
@@ -204,7 +216,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
-      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], cards: {}, selected: '' }, owner)
+      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), cards: {}, selected: '' }, owner)
       setError('')
       if (!multiple) onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
     } catch { setError('图片读取失败，请重试') }
@@ -215,7 +227,6 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const visibleSeasons = view.framing === 'half' ? halfSeasons : seasons
   const generating = visibleSeasons.some(season => view.cards[season.id]?.status === 'running')
   const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3)
-  const selectedSeason = allSeasons.find(season => season.id === view.selected)
   const canGenerate = Boolean(view.portrait && view.gender)
   return <section className="pulin-report">
     <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
@@ -232,8 +243,8 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
         </div>
         <div className="pr-portrait-actions">
           <fieldset className="pr-segments" aria-label="性别" disabled={anyGenerating}>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update({ gender: 'male', cards: {}, selected: '' })}/>男</label>
-            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update({ gender: 'female', cards: {}, selected: '' })}/>女</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'male'} onChange={() => update(current=>({...current,gender:'male',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''}))}/>男</label>
+            <label><input type="radio" name="pulin-uniform-gender" checked={view.gender === 'female'} onChange={() => update(current=>({...current,gender:'female',wardrobeHistory:wardrobePhotos(current),cards:{},selected:''}))}/>女</label>
           </fieldset>
           <fieldset className="pr-segments" aria-label="照片构图">
             <label><input type="radio" name="pulin-uniform-framing" checked={view.framing === 'full'} onChange={() => update({ framing: 'full' })}/>全身</label>
@@ -260,8 +271,9 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
         </article>
       })}</div>
     </div>
-    <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single' })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
-      {view.mode === 'single' ? <><button onClick={() => setPicker(true)}>选择着装照</button>{view.selected && <p>已选择{selectedSeason?.name}{selectedSeason?.half ? '半身' : '全身'}着装</p>}</> : <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
+    <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物照片并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
+      <button onClick={() => setPicker(true)}>选择着装照</button><p>已选择 {(view.selectedWardrobe || []).length} 张</p>
+      {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 6 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
       {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
       <label>战报标题<input maxLength={12} value={view.title} onChange={e => update({ ...state, title: e.target.value })}/></label>
       <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => update({ ...state, subtitle: e.target.value })}/></label>
@@ -270,6 +282,6 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
-    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>关闭</button></header><div className="pr-cards">{allSeasons.map(s => <button key={s.id} disabled={!view.cards[s.id]?.url || view.cards[s.id]?.uniformVersion !== 3} onClick={() => { update({ ...state, selected: s.id }); setPicker(false) }}>{view.cards[s.id]?.url && view.cards[s.id]?.uniformVersion === 3 ? <img src={view.cards[s.id].url} alt=""/> : <span>请重新生成</span>}<b>{s.name}{s.half ? '半身' : '全身'}</b></button>)}</div></div></div>}
+    {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择六张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 6 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
   </section>
 }
