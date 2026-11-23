@@ -1,3 +1,4 @@
+import {imageDropProps} from './imageDropUpload.js';
 import { userError } from './userErrors.js'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
@@ -130,7 +131,7 @@ export default function PleaseDayAvatarStudio() {
       <div className="please-day-frame-tabs" role="tablist" aria-label="选择头像框版本">
         {FRAME_OPTIONS.map((frame) => <button key={frame.id} type="button" role="tab" aria-selected={frame.id === frameId} className={frame.id === frameId ? 'active' : ''} onClick={() => setFrameId(frame.id)}>{frame.label}</button>)}
       </div>
-      <main className="please-day-preview glass-strong">
+      <main {...imageDropProps} className="please-day-preview glass-strong">
           <div className={`please-day-canvas-wrap ${avatar ? 'has-avatar' : ''}`}>
             <canvas ref={canvasRef} aria-label="朴里节头像预览" onPointerDown={beginDrag} onPointerMove={moveAvatar} onPointerUp={stopDrag} onPointerCancel={stopDrag} onWheel={(event) => { if (!avatar) return; event.preventDefault(); adjustZoom(zoom - event.deltaY * .001) }}/>
             {!avatar && <button className="please-day-empty" type="button" onClick={() => uploadRef.current?.click()}><Icon name="upload" size={20}/><b>上传头像</b></button>}

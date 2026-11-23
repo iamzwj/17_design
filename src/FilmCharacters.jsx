@@ -1,3 +1,4 @@
+import {imageDropProps} from './imageDropUpload.js';
 import { userError } from './userErrors.js'
 import { useEffect, useRef, useState } from "react";
 import FilmMedia from "./FilmMedia.jsx";
@@ -20,14 +21,14 @@ export function readImage(file) {
 
 function UploadButton({ label, disabled, onFile }) {
   const input = useRef(null);
-  return <>
+  return <span {...imageDropProps}>
     <button type="button" disabled={disabled} onClick={() => input.current.click()}>{label}</button>
-    <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
+    <input ref={input} disabled={disabled} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
       const file = event.target.files[0];
       event.target.value = "";
       if (file) onFile(file);
     }}/>
-  </>;
+  </span>;
 }
 
 export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
