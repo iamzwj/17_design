@@ -128,7 +128,6 @@ export async function getAdminOverview() {
 }
 
 export const generateImage = (payload) => post('/api/image', payload)
-export const reviewPulinTeam = (payload) => post('/api/pulin/team-review', payload)
 export const createFestivalPosterTask = (payload) => post('/api/festival-posters/tasks', payload)
 export const generateFestivalPosterImages = (id, plans) => post(`/api/festival-posters/tasks/${encodeURIComponent(id)}/generate`, { plans })
 export async function listFestivalPosterTasks() {
