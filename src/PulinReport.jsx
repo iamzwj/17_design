@@ -92,7 +92,7 @@ async function finish(id, taskId, owner) {
     const url = (taskStates.get(owner)?.cards[id]?.cropToFraming)
       ? await cropPortraitPhoto(result.urls[0], id.endsWith('-half'))
       : result.urls[0]
-    update(current => ({ ...current, wardrobeHistory: [...wardrobePhotos(current), {id:url,url,seasonId:id}].filter((photo,index,list)=>list.findIndex(item=>item.url===photo.url)===index), cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
+    update(current => ({ ...current, wardrobeHistory: [...wardrobePhotos(current).filter(photo => photo.seasonId !== id || (photo.batchId || 'legacy') !== (current.wardrobeBatchId || 'legacy')), {id:url,url,seasonId:id,batchId:current.wardrobeBatchId || 'legacy'}], cards: { ...current.cards, [id]: { status: 'done', url, uniformVersion: 3 } } }), owner)
   } catch (error) {
     update(current => ({ ...current, cards: { ...current.cards, [id]: { ...current.cards[id], status: 'error', error: error.message } } }), owner)
   } finally { active.delete(taskId) }
@@ -198,6 +198,8 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState('all')
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -216,7 +218,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
     if (files.some(file => !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024)) { setError('请选择 10MB 以内的图片'); return }
     try {
       const urls = await Promise.all(files.map(fileToDataUrl))
-      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), cards: {}, selected: '' }, owner)
+      update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), wardrobeBatchId: crypto.randomUUID(), cards: {}, selected: '' }, owner)
       setError('')
       if (!multiple) onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
     } catch { setError('图片读取失败，请重试') }
@@ -228,10 +230,14 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const generating = visibleSeasons.some(season => view.cards[season.id]?.status === 'running')
   const pendingSeasons = visibleSeasons.filter(season => view.cards[season.id]?.uniformVersion !== 3)
   const canGenerate = Boolean(view.portrait && view.gender)
+  const history = wardrobePhotos(view).filter((photo, index, list) => {
+    const batchId = photo.batchId || 'legacy'
+    return !list.slice(index + 1).some(item => item.seasonId === photo.seasonId && (item.batchId || 'legacy') === batchId)
+  }).filter(photo => historyFilter === 'all' || (photo.seasonId?.endsWith('-half') ? 'half' : 'full') === historyFilter)
   return <section className="pulin-report">
     <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传头像生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
-    <div className="pr-section"><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，生成三季真人着装。</p>
+    <div className="pr-section"><button type="button" className="pr-history-trigger" onClick={() => setHistoryOpen(true)}>历史记录</button><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面头像，生成三季真人着装。</p>
       <div className="pr-portrait-row">
         {view.portrait
           ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的头像" onClick={() => setPreview({ url: view.portrait, title: '人物头像' })}><img src={view.portrait} alt="已上传的头像"/></button>
@@ -281,6 +287,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <button onClick={() => makeReport().catch(e => setError(e.message))}>生成战报</button>
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>
+    {historyOpen && <div className="pr-overlay" onClick={() => setHistoryOpen(false)}><div className="pr-modal pr-history-modal" role="dialog" aria-modal="true" aria-label="着装照历史记录" onClick={e => e.stopPropagation()}><header><h2>着装照历史记录</h2><button type="button" onClick={() => setHistoryOpen(false)}>关闭</button></header><div className="pr-history-filters" aria-label="筛选构图">{[['all','全部'],['half','半身'],['full','全身']].map(([value,label]) => <button key={value} type="button" aria-pressed={historyFilter === value} onClick={() => setHistoryFilter(value)}>{label}</button>)}</div><div className="pr-history-grid">{history.map(photo => <button key={photo.id} type="button" onClick={() => setPreview({url:photo.url,title:wardrobeName(photo)})}><img src={photo.url} alt={wardrobeName(photo)}/><span>{wardrobeName(photo)}</span></button>)}</div>{!history.length && <p>暂无符合条件的着装照</p>}</div></div>}
     {preview && createPortal(<ImagePreview url={preview.url} prompt={preview.title} onClose={() => setPreview(null)}/>, document.body)}
     {picker && <div className="pr-overlay" onClick={() => setPicker(false)}><div className="pr-modal" role="dialog" aria-modal="true" aria-label="选择着装照" onClick={e => e.stopPropagation()}><header><h2>选择着装照</h2><button onClick={() => setPicker(false)}>完成</button></header><p>{view.mode === 'single' ? '单人模式：选择一张' : '多人模式：最多选择十张（含上传照片）'}</p><div className="pr-cards">{wardrobePhotos(view).map(photo => <button key={photo.id} aria-pressed={(view.selectedWardrobe || []).includes(photo.id)} onClick={() => { update(current => { const chosen=current.selectedWardrobe || []; const next=current.mode==='single' ? [photo.id] : chosen.includes(photo.id) ? chosen.filter(id=>id!==photo.id) : chosen.length + current.people.length < 10 ? [...chosen,photo.id] : chosen; return {...current,selected:'',selectedWardrobe:next}; }); if(view.mode==='single')setPicker(false); }}><img src={photo.url} alt={wardrobeName(photo)}/><b>{(view.selectedWardrobe || []).includes(photo.id) ? '✓ ' : ''}{wardrobeName(photo)}</b></button>)}</div>{!wardrobePhotos(view).length && <p>当前对话还没有生成的人物着装照。</p>}</div></div>}
   </section>
