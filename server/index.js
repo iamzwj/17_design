@@ -1,3 +1,4 @@
+import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
 import { LANGUAGE_MODELS, languageImageParts, requestLanguageModel } from './languageModels.js'
@@ -789,23 +790,7 @@ function chromaKeyRgb(value) {
 async function removeChromaBackground(imageBuffer, backgroundColor) {
   const key = chromaKeyRgb(backgroundColor)
   const { data, info } = await sharp(imageBuffer, { failOn: 'none' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-  const innerDistance = 46 * 46
-  const outerDistance = 168 * 168
-  for (let offset = 0; offset < data.length; offset += 4) {
-    const red = data[offset] - key[0]
-    const green = data[offset + 1] - key[1]
-    const blue = data[offset + 2] - key[2]
-    const distance = red * red + green * green + blue * blue
-    if (distance <= innerDistance) data[offset + 3] = 0
-    else if (distance < outerDistance) {
-      const alpha = (distance - innerDistance) / (outerDistance - innerDistance)
-      // Unmix the key color from antialiased foreground edges before compositing.
-      for (let channel = 0; channel < 3; channel++) {
-        data[offset + channel] = Math.max(0, Math.min(255, Math.round((data[offset + channel] - key[channel] * (1 - alpha)) / alpha)))
-      }
-      data[offset + 3] = Math.round(data[offset + 3] * alpha)
-    }
-  }
+  cleanChromaPixels(data, key)
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
 }
 
