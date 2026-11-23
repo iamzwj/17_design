@@ -220,12 +220,15 @@ async function makeReport() {
     try {
       const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
       const compressedSources = await Promise.all(sources.map((source,index) => draft.mode === 'multiple' ? teamIdentityReference(source,index) : compressReference(source)))
-      const teamPrompt = `只生成一组真人摄影风格团队人物抠图。参考图共有 ${compressedSources.length} 张，每张参考板编号对应一个不同的人；同一板中的原图和放大细节是同一个人，不能算成两个人。人物按编号从后排左至右、再前排左至右排列，面部必须严格对应同编号原图，不得平均五官、套用同一张脸或以相似人物替代。画面必须恰好出现 ${compressedSources.length} 人，每人仅出现一次，禁止新增人物或复制人物。逐一保持每人的五官、年龄、肤色、发型与身份特征，不要美化或替换面貌。穿深色正式西装、白色衬衫和橙色领带或领花，部分站立、部分坐在简洁的黑色椅子上，人物完整，从头到鞋无遮挡，构图紧凑，边缘留白。背景必须是纯色 #00ff00 绿色，无渐变、无阴影、无舞台、无文字、无装饰，不能穿绿色。`
+      const collarResponse = await fetch('/pulin-collar-reference.png')
+      if (!collarResponse.ok) throw new Error('领花规范参考图加载失败，请重试')
+      const collarReference = await fileToDataUrl(await collarResponse.blob())
+      const teamPrompt = `只生成一组真人摄影风格团队人物抠图。参考图共有 ${compressedSources.length} 张，每张参考板编号对应一个不同的人；同一板中的原图和放大细节是同一个人，不能算成两个人。人物按编号从后排左至右、再前排左至右排列，面部必须严格对应同编号原图，不得平均五官、套用同一张脸或以相似人物替代。画面必须恰好出现 ${compressedSources.length} 人，每人仅出现一次，禁止新增人物或复制人物。逐一保持每人的五官、年龄、肤色、发型与身份特征，不要美化或替换面貌。穿深色正式西装、白色衬衫。最后一张是领花规范参考图，不是人物，不计入人数。女性领口必须使用该参考图的金棕色领花：顶部圆形扣饰、两片交叠向下的尖角，尺寸适中、对称贴合领口，禁止长领带、横向蝴蝶结、丝巾和任意飘带。保留各人物参考照的性别与配饰类型，不按长短发判断性别。男性使用行政领带，外套扣好，领带下半段和尖端必须被前襟遮住。部分站立、部分坐在简洁的黑色椅子上，人物完整，从头到鞋无遮挡，构图紧凑，边缘留白。背景必须是纯色 #00ff00 绿色，无渐变、无阴影、无舞台、无文字、无装饰，不能穿绿色。`
       const result = await createConversationImageTask({
         prompt: draft.mode === 'single'
-          ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。'
+          ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，领口配饰严格沿用人物参考照，女性领花必须参照最后一张领花规范图的顶部圆扣和两片交叠下垂尖角，禁止长领带、横向蝴蝶结或丝巾，不按头发长短判断性别。背景简洁，不添加文字。'
           : teamPrompt,
-        images: draft.mode === 'single' ? [background, ...compressedSources] : compressedSources,
+        images: draft.mode === 'single' ? [background, ...compressedSources, collarReference] : [...compressedSources, collarReference],
         model: 'gpt-image-2.5', resolution: draft.mode === 'multiple' ? '2k' : '1k', quality: 'high',
         aspectRatio: draft.mode === 'single' ? '9:16' : '1:1', knowledge: {},
         ...(draft.mode === 'multiple' ? { removeBackground: true, backgroundColor: '#00ff00' } : {}),
