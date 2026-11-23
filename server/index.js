@@ -797,7 +797,14 @@ async function removeChromaBackground(imageBuffer, backgroundColor) {
     const blue = data[offset + 2] - key[2]
     const distance = red * red + green * green + blue * blue
     if (distance <= innerDistance) data[offset + 3] = 0
-    else if (distance < outerDistance) data[offset + 3] = Math.round(data[offset + 3] * ((distance - innerDistance) / (outerDistance - innerDistance)))
+    else if (distance < outerDistance) {
+      const alpha = (distance - innerDistance) / (outerDistance - innerDistance)
+      // Unmix the key color from antialiased foreground edges before compositing.
+      for (let channel = 0; channel < 3; channel++) {
+        data[offset + channel] = Math.max(0, Math.min(255, Math.round((data[offset + channel] - key[channel] * (1 - alpha)) / alpha)))
+      }
+      data[offset + 3] = Math.round(data[offset + 3] * alpha)
+    }
   }
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
 }
