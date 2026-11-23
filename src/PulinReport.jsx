@@ -1,3 +1,4 @@
+import {maleUniformAccessory} from './pulinUniformRules.js';
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createConversationImageTask, downloadGeneratedImage, fileToDataUrl, waitForConversationImageTask, waterfallReferenceForRequest } from './api.js'
@@ -112,7 +113,7 @@ async function generate(season, owner = loadedKey) {
     }
     const accessory = female
       ? '使用女款制服。领口只佩戴第二张参考图中的金棕色领花：两片交叠向下的尖角，顶部圆形扣饰。禁止长领带和横向蝴蝶结。'
-      : '使用男款制服。领口只佩戴一条金色行政长领带，单条长形垂至腰部，禁止领花和蝴蝶结。'
+      : maleUniformAccessory(season.id)
     const framing = season.half
       ? '两寸竖版证件照构图，画面从胸部上沿到头顶以上，领口配饰完整可见，肩膀和面部居中，留少量头顶空间。'
       : '9:16 竖版全身构图，完整头部到鞋子，左右各留边，四肢和衣物远离画面边缘。'
