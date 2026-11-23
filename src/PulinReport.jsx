@@ -220,9 +220,10 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       const urls = await Promise.all(files.map(fileToDataUrl))
       update(current => multiple ? { ...current, people: urls } : { ...current, portrait: urls[0], wardrobeHistory: wardrobePhotos(current), wardrobeBatchId: crypto.randomUUID(), cards: {}, selected: '' }, owner)
       setError('')
-      if (!multiple) onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
+      onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true })
     } catch { setError('图片读取失败，请重试') }
   }
+  function registerDraft() { onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true }) }
   if (!user) return <section className="pulin-report"><h1>朴邻战报制作</h1><p>登录后即可生成着装照和战报。</p><button onClick={onLogin}>登录</button></section>
   if (!ready) return <section className="pulin-report" role="status">正在读取战报草稿…</section>
   const anyGenerating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
@@ -281,9 +282,9 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
       <button onClick={() => setPicker(true)}>选择着装照</button><p>已选择 {(view.selectedWardrobe || []).length} 张</p>
       {view.mode !== 'single' && <label {...imageDropProps} className="pr-upload"><span>上传多人照片（最多 10 张）</span><input type="file" accept="image/*" multiple onChange={e => upload(e, true)}/></label>}
       {view.mode === 'multiple' && <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>}
-      <label>战报标题<input maxLength={12} value={view.title} onChange={e => update({ ...state, title: e.target.value })}/></label>
-      <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => update({ ...state, subtitle: e.target.value })}/></label>
-      <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => update({ ...state, data: e.target.value })}/></label>
+      <label>战报标题<input maxLength={12} value={view.title} onChange={e => { update({ ...state, title: e.target.value }); registerDraft() }}/></label>
+      <label>副标题<input maxLength={24} value={view.subtitle} onChange={e => { update({ ...state, subtitle: e.target.value }); registerDraft() }}/></label>
+      <label>战报数据<textarea maxLength={180} rows={5} value={view.data} placeholder={'每行填写一项，例如：\n本月成交 36 单\n目标完成率 120%'} onChange={e => { update({ ...state, data: e.target.value }); registerDraft() }}/></label>
       <button onClick={() => makeReport().catch(e => setError(e.message))}>生成战报</button>
       {view.report && <div className="pr-result"><img src={view.report} alt="生成的朴邻战报"/><a href={view.report} download="朴邻战报.png">下载战报</a></div>}
     </div>

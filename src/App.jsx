@@ -2197,6 +2197,8 @@ export default function App() {
     ? <ArchiveWorkspace key={workspaceToken} archived={archivedConversations} onRestore={restoreConversation} onDelete={deleteConversation} onDeleteAll={deleteAllArchived}/>
     : active === 'admin'
       ? <AdminStudio key={workspaceToken}/>
+    : active === 'more' && moreTool === 'pulin-report' && user && historyReady !== conversationStorageKey
+      ? <p role="status">正在恢复对话…</p>
     : active === 'more'
       ? <MoreTools key={workspaceToken} tool={moreTool} user={user} conversation={activeConversation} onSave={saveConversation} onLogin={() => openLogin('more')}/>
     : active === 'image'
