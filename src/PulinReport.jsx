@@ -178,17 +178,22 @@ async function makeReport() {
   const sources = draft.mode === 'single' ? (chosen.length ? chosen.slice(0,1) : draft.people.slice(0,1)) : [...chosen, ...draft.people].slice(0,10)
   if (!sources.length) throw new Error('请先选择人物形象照')
   if (draft.mode === 'multiple' && sources.length > 8) throw new Error('团队战报最多支持 8 张人物参考照，请减少形象照后重试')
-  if (draft.mode === 'multiple') {
-    if (!draft.region?.trim() || !draft.performance?.trim()) throw new Error('请填写片区和累计业绩')
+  if (draft.mode === 'single' && (!draft.title.trim() || !draft.data.trim())) throw new Error('请填写战报标题和数据')
+  if (draft.mode === 'multiple' || draft.people.length) {
+    if (draft.mode === 'multiple' && (!draft.region?.trim() || !draft.performance?.trim())) throw new Error('请填写片区和累计业绩')
     update({ reportStatus: 'running', reportError: '', reportDraft: { ...draft, portrait: '', people: [], cards: {}, wardrobeHistory: [], report: '' } }, owner)
     try {
-      const background = await fetch('/pulin-team-background.jpg').then(r => r.blob()).then(fileToDataUrl)
-      const result = await createConversationImageTask({ prompt: '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物位于标题下方及舞台上方，不遮挡顶部文字。画面下半部保持空白，不增加任何文字或数字。', images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
+      const background = await fetch(draft.mode === 'multiple' ? '/pulin-team-background.jpg' : '/pulin-report-background.png').then(r => r.blob()).then(fileToDataUrl)
+      const result = await createConversationImageTask({ prompt: (draft.mode === 'single' ? '参考第二张人物照片生成同一人的春秋着装全身形象，保持面貌身份，白色衬衫和深色合身西装，橙色领带；仅当人物长发且女性特征明显时使用橙色领花，不能确定时使用橙色领带。背景简洁，不添加文字。' : '以第一张图片为固定背景，保留顶部朴邻标识和千万片区标题及金色舞台。将其余参考图中的每个人各出现一次，保持面貌身份，穿正式黑色西装白衬衫，在舞台上组成自然美观的团队合影，部分站立，部分坐在高脚凳上，脚和凳子完整可见，人物位于标题下方及舞台上方，不遮挡顶部文字。画面下半部保持空白，不增加任何文字或数字。统一春秋着装，白色衬衫和深色西装，默认橙色领带；仅长发且女性特征明显的人物使用橙色领花，不能确定时使用领带。'), images: [background, ...sources.map(waterfallReferenceForRequest)], model: 'gpt-image-2.5', resolution: '1k', quality: 'high', aspectRatio: '9:16', knowledge: {} })
       update({ reportTaskId: result.task.id }, owner)
       await finishTeamReport(result.task.id, owner)
     } catch (error) { update({ reportStatus: 'error', reportError: error.message }, owner); throw error }
     return
   }
+  await renderSingleReport(sources[0], draft, owner)
+}
+async function renderSingleReport(source, draft, owner) {
+  const sources = [source]
   const lines = draft.data.split('\n').filter(line => line.trim())
   if (!draft.title.trim() || !lines.length) throw new Error('请填写战报标题和数据')
   if (lines.length > 6 || lines.some(line => line.length > 28)) throw new Error('战报数据最多 6 行，每行最多 28 个字')
@@ -226,7 +231,7 @@ async function makeReport() {
   ctx.fillStyle = '#4e3027'
   ctx.font = 'bold 40px sans-serif'
   lines.forEach((line, i) => ctx.fillText(line, 100, 1000 + i * 58, 880))
-  update(current => ({ ...current, report: canvas.toDataURL('image/png') }), owner)
+  update(current => ({ ...current, report: canvas.toDataURL('image/png'), reportStatus: 'done', reportTaskId: null }), owner)
 }
 async function finishTeamReport(taskId, owner) {
   const runtimeKey = `report:${taskId}`
@@ -236,7 +241,8 @@ async function finishTeamReport(taskId, owner) {
     const output = await waitForConversationImageTask(taskId)
     const draft = taskStates.get(owner)?.reportDraft
     if (!draft) throw new Error('无法恢复战报数据，请重新生成')
-    await renderTeamReport(output.urls[0], draft, owner)
+    if (draft.mode === 'single') await renderSingleReport(output.urls[0], draft, owner)
+    else await renderTeamReport(output.urls[0], draft, owner)
   } catch (error) { update({ reportStatus: 'error', reportError: error.message, reportTaskId: null }, owner) }
   finally { active.delete(runtimeKey) }
 }
@@ -257,6 +263,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const [view, setView] = useState(state)
   const [ready, setReady] = useState(false)
   const [picker, setPicker] = useState(false)
+  const [activeTab, setActiveTab] = useState('report')
   const [sourcePicker, setSourcePicker] = useState(false)
   const reportFileRef = useRef(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -294,9 +301,9 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   const canGenerate = Boolean(view.portrait && view.gender)
   const history = wardrobePhotos(view).filter(photo => photo.url).filter(photo => historyFilter === 'all' || (photo.seasonId?.endsWith('-half') ? 'half' : 'full') === historyFilter)
   return <section className="pulin-report">
-    <header className="pr-intro"><h1>朴邻战报制作</h1><p>上传形象照生成标准着装，再制作个人或团队战报。</p><div className="pr-steps"><span><b>01</b> 生成着装照</span><i/><span><b>02</b> 制作战报</span></div></header>
+    <header className="pr-intro"><h1>朴邻战报制作</h1><p>生成标准着装照，或直接制作个人及团队战报。</p><div className="pr-tabs" role="tablist" aria-label="战报工具"><button type="button" role="tab" aria-selected={activeTab === "portrait"} onClick={() => setActiveTab("portrait")}>生成着装照</button><button type="button" role="tab" aria-selected={activeTab === "report"} onClick={() => setActiveTab("report")}>制作战报</button></div></header>
     {(error || view.storageError) && <p role="alert" className="pr-error">{error || view.storageError}</p>}
-    <div className="pr-section"><button type="button" className="pr-history-trigger" onClick={() => setHistoryOpen(true)}>历史记录</button><span className="pr-step-number">01 / 着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面形象照，生成三季真人着装。</p>
+    <div className="pr-section" hidden={activeTab !== "portrait"}><button type="button" className="pr-history-trigger" onClick={() => setHistoryOpen(true)}>历史记录</button><span className="pr-step-number">着装照</span><h2>生成人物着装照</h2><p>上传清晰的正面形象照，生成三季真人着装。</p>
       <div className="pr-portrait-row">
         {view.portrait
           ? <button type="button" className="pr-upload pr-portrait-upload" aria-label="预览已上传的形象照" onClick={() => setPreview({ url: view.portrait, title: '人物形象照' })}><img src={view.portrait} alt="已上传的形象照"/></button>
@@ -337,7 +344,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
         </article>
       })}</div>
     </div>
-    <div className="pr-section pr-report-section"><span className="pr-step-number">02 / 战报制作</span><h2>制作战报</h2><p>选择人物形象照并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1), people: (state.selectedWardrobe || []).length ? [] : (state.people || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
+    <div className="pr-section pr-report-section" hidden={activeTab !== "report"}><span className="pr-step-number">战报制作</span><h2>制作战报</h2><p>选择人物形象照并填写业绩数据，生成可下载的战报。</p><div className="pr-mode"><button aria-pressed={view.mode === 'single'} onClick={() => update({ ...state, mode: 'single', selectedWardrobe: (state.selectedWardrobe || []).slice(0,1), people: (state.selectedWardrobe || []).length ? [] : (state.people || []).slice(0,1) })}>单人战报</button><button aria-pressed={view.mode === 'multiple'} onClick={() => update({ ...state, mode: 'multiple' })}>多人战报</button></div>
       <p>已选择 {(view.selectedWardrobe || []).length + (view.people || []).length} 张</p>
       <button type="button" className="pr-upload pr-team-upload" onClick={() => setSourcePicker(true)}><span className="pr-team-upload-icon" aria-hidden="true">＋</span><span className="pr-team-upload-copy"><strong>上传人物形象照</strong><small>{view.mode === 'single' ? '选择 1 张照片' : '最多 8 人，支持多选'}</small></span></button><input ref={reportFileRef} type="file" accept="image/*" multiple={view.mode === 'multiple'} hidden onChange={e => upload(e, true)}/>
       <div className="pr-people">{view.people.map((src, i) => <img key={i} src={src} alt={`人物${i + 1}`}/>)}</div>
