@@ -1,4 +1,4 @@
-import { formatHtmlDeckPlan, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
 import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
@@ -1184,7 +1184,10 @@ async function recognizeImageText(source, index) {
 }
 
 async function normalizeTextMessage({ role, content }, generalImages = false) {
-  if (typeof content === 'string') return { role, content: content.slice(0, 60_000) }
+  if (typeof content === 'string') {
+    const limit = role === 'assistant' && content.startsWith(HTML_PLAN_MARKER) ? 260_000 : 60_000
+    return { role, content: content.slice(0, limit) }
+  }
   if (role !== 'user' || !Array.isArray(content)) return null
 
   const textParts = content
@@ -1429,17 +1432,32 @@ async function handleTextCompletion(req, res, next) {
     const lastPlan = [...safeMessages].reverse().find(message => message.role === 'assistant' && typeof message.content === 'string' && message.content.startsWith(HTML_PLAN_MARKER))
     const confirmed = Boolean(lastPlan && /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/.test(lastUserText.trim()))
     const needsPlan = !confirmed && (wantsHtml || req.body.activityContext?.format === 'slides' || Boolean(lastPlan && !safeMessages.slice(safeMessages.indexOf(lastPlan) + 1).some(message => message.role === 'assistant' && /<\/html\s*>/i.test(String(message.content)))))
-    if (skill) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
+    if (skill && !needsPlan) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     const deck = confirmed ? readHtmlDeckPlan(lastPlan.content) : null
     if (deck) {
-      const content = '```html\n' + renderHtmlDeck(deck) + '\n```'
-      if (context) knowledge.finish(context.id, { status: 'succeeded', completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: null, model: null })
+      const request = {
+        ...upstreamRequest,
+        messages: [
+          ...upstreamRequest.messages,
+          { role: 'system', content: HTML_DESIGN_PROMPT },
+          { role: 'user', content: '请为以下已确认的文案设计版式：\n' + JSON.stringify(deck.slides.map(({ section, title, takeaway, points }) => ({ section, title, takeaway, points }))) },
+        ],
+      }
+      let data = await complete(request)
+      let styled = applyHtmlDeckDesign(deck, completionText(data))
+      if (!styled) {
+        data = await complete({ ...request, messages: [...request.messages, { role: 'user', content: '请检查页数和要点引用，只返回完整的排版 JSON。' }] })
+        styled = applyHtmlDeckDesign(deck, completionText(data))
+      }
+      if (!styled) throw new Error('排版结果与已确认规划不匹配，请再次确认规划后重试')
+      const content = '```html\n' + renderHtmlDeck(styled) + '\n```'
+      if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
+      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
     }
-    if (needsPlan) upstreamRequest.messages.push({
-      role: 'system',
-      content: HTML_PLAN_PROMPT + (skill ? '\n本次已选择 Skill。将其视觉要求映射到 design 及逐页 layout；Skill 中的交付格式与当前 HTML 演示稿冲突时，以当前任务为准。' : ''),
-    })
+    if (needsPlan) {
+      upstreamRequest.messages.push({ role: 'system', content: HTML_PLAN_PROMPT })
+      upstreamRequest.max_tokens = 32000
+    }
     if (confirmed) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
     if (confirmed) upstreamRequest.max_tokens = 32000
     let data = await complete(upstreamRequest)
@@ -1456,13 +1474,13 @@ async function handleTextCompletion(req, res, next) {
     }
     if (!content) throw new Error('接口未返回有效文本')
     if (needsPlan) {
-      let plan = parseHtmlDeck(content, { requireDesign: true })
+      let plan = parseHtmlDeck(content, { contentOnly: true })
       if (!plan) {
         data = await complete({
           ...upstreamRequest,
           messages: [...upstreamRequest.messages, { role: 'user', content: '请按格式要求只返回完整的规划 JSON。' }],
         })
-        plan = parseHtmlDeck(completionText(data), { requireDesign: true })
+        plan = parseHtmlDeck(completionText(data), { contentOnly: true })
       }
       if (!plan) throw new Error('演示稿规划格式不完整，请重试')
       content = formatHtmlDeckPlan(plan)
@@ -1484,7 +1502,7 @@ async function handleTextCompletion(req, res, next) {
       if (!/<\/html\s*>/i.test(content)) throw new Error('演示稿生成不完整，请重新生成')
     }
     if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, ...(needsPlan ? { contentPlan: true } : {}) })
   } catch (error) {
     if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)

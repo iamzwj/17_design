@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { formatHtmlDeckPlan, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
 import { extractPresentation, presentationPreview } from '../src/htmlPresentation.js'
 
 const deck = {
@@ -41,8 +41,33 @@ test('renders a distinct custom visual system and rejects unsafe style values', 
   const html = renderHtmlDeck(approved)
   assert.match(html, /--paper: #181620; --ink: #FFFFFF; --accent: #93EDFF/)
   assert.match(html, /heading-mono center panels compact bold/)
-  assert.match(formatHtmlDeckPlan(approved), /高对比暗色科技风/)
+  assert.doesNotMatch(formatHtmlDeckPlan(approved), /高对比暗色科技风/)
   assert.equal(parseHtmlDeck(JSON.stringify(deck), { requireDesign: true }), null)
   assert.equal(parseHtmlDeck(JSON.stringify({ ...input, design: { ...design, paper: '</style>' } })), null)
   assert.equal(parseHtmlDeck(JSON.stringify({ ...input, slides: [{ ...deck.slides[0], focus: '1000 万' }] })), null)
+})
+
+test('content planning preserves original hierarchy and styling cannot rewrite approved content', () => {
+  const raw = {
+    version: 2, audience: '评委', goal: '核对原文', design: { name: '杂志风' },
+    slides: [
+      { section: '现状', title: '试点积累', takeaway: '需求已验证', points: ['2026 年累计 391 人'], layout: 'cover' },
+      { section: '投入与局限', title: '试点成本', takeaway: '统计仅含 API 成本', points: ['不足 4,000 元'] },
+    ],
+  }
+  const plan = parseHtmlDeck(JSON.stringify(raw), { contentOnly: true })
+  const saved = formatHtmlDeckPlan(plan)
+  assert.match(saved, /现状[\s\S]*需求已验证[\s\S]*391 人[\s\S]*投入与局限[\s\S]*统计仅含 API 成本/)
+  assert.doesNotMatch(saved, /杂志风|视觉建议/)
+  assert.equal(plan.slides[0].layout, undefined)
+  assert.deepEqual(readHtmlDeckPlan(saved), plan)
+  const style = {
+    theme: 'editorial',
+    design: { name: '杂志风', paper: '#F2F5F8', ink: '#0F172A', accent: '#155EEF', secondary: '#008B74', heading: 'serif', align: 'left', surface: 'rules', density: 'airy', weight: 'regular' },
+    slides: [{ layout: 'cover', title: '被篡改的标题', focus: '391 人' }, { layout: 'metrics', points: ['无关数字'] }],
+  }
+  const html = renderHtmlDeck(applyHtmlDeckDesign(plan, JSON.stringify(style)))
+  assert.match(html, /现状[\s\S]*试点积累[\s\S]*需求已验证[\s\S]*投入与局限[\s\S]*统计仅含 API 成本/)
+  assert.doesNotMatch(html, /被篡改|无关数字/)
+  assert.equal(applyHtmlDeckDesign(plan, JSON.stringify({ ...style, slides: [style.slides[0]] })), null)
 })

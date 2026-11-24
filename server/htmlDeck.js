@@ -1,10 +1,13 @@
 export const HTML_PLAN_MARKER = '[HTML演示稿规划]'
 const DATA_MARKER = '<!-- dgen-deck:'
 
-export const HTML_PLAN_PROMPT = `只生成待确认的 HTML 逐页规划。返回一个 JSON 对象，不要输出 HTML 或 CSS。格式：
-{"audience":"受众","goal":"目标","theme":"editorial 或 standard","design":{"name":"实际采用的风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular"},"slides":[{"title":"页面标题","layout":"cover","points":["演示直接展示的短句"],"visual":"描述本页实际选用的构图","focus":"从某一条要点原样取出的短语或数值，没有则省略"}]}。
+export const HTML_PLAN_PROMPT = `只编写待确认的逐页文案。返回一个 JSON 对象：{"version":2,"audience":"受众","goal":"目标","slides":[{"section":"原文所属章节","title":"本页标题","takeaway":"本页核心判断","points":["可直接展示的论据、事实或细节"]}]}。
+先通读原文，梳理章节顺序、主次和论证关系，再按原文脉络分页。覆盖全部实质性章节和信息，保留支撑论据、对比关系、因果、专名、日期、数字、单位、统计口径及限定条件。长段落分到多页，不为控制页数删减有效信息，不自行补结论或数字。用章节、页标题、核心判断、支撑要点区分层级。输出可直接上屏的完整文案，不写占位提示或笼统提纲。输出前逐章节核对遗漏和顺序。当前阶段只处理内容，禁止输出风格、布局、配色或视觉建议。修改时返回完整的新 JSON。`
+
+export const HTML_DESIGN_PROMPT = `用户已确认逐页文案。只设计排版，返回 JSON：{"theme":"editorial 或 standard","design":{"name":"风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular"},"slides":[{"layout":"cover","focus":"从该页要点原样摘录，可省略"}]}。
+slides 条数及顺序必须与已确认稿完全一致。禁止返回或修改任何文案字段。
 选定 Skill 时，从其规范提取具体配色、标题字体类型、对齐、边框和留白，并写入 design，禁止用通用主题覆盖 Skill 明确规定的视觉需求。没有明确规定时按风格做合理选择。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。
-layout 允许 cover、split、columns、metrics、comparison、timeline、summary。根据本页内容关系和 Skill 的构图要求选择。杂志风使用 serif、rules、airy，开篇采用有视觉焦点的 cover，图文论证用 split，指标用 metrics，对照用 comparison。避免全稿反复使用等宽双栏。focus 必须来自 points，不得概括或补造数字。每页 1–6 条要点，保留事实、数值、单位和限定条件。修改规划时返回完整的新 JSON。`
+layout 允许 cover、split、columns、metrics、comparison、timeline、summary。根据本页内容关系和 Skill 的构图要求选择。杂志风使用 serif、rules、airy，开篇采用有视觉焦点的 cover，图文论证用 split，指标用 metrics，对照用 comparison。避免全稿反复使用等宽双栏。focus 必须来自 points，不得概括或补造数字。不要输出 HTML 或 CSS。`
 
 const layouts = new Set(['cover', 'split', 'columns', 'metrics', 'comparison', 'timeline', 'summary'])
 const choices = {
@@ -39,28 +42,58 @@ function readableColor(color, paper, fallback) {
   return (lighter + .05) / (darker + .05) >= 4.5 ? color : fallback
 }
 
-export function parseHtmlDeck(value, { requireDesign = false } = {}) {
+const hasText = value => typeof value === 'string' && value.trim().length > 0
+const validPoints = points => Array.isArray(points) && points.length > 0 && points.every(hasText)
+
+function parseJson(value) {
   try {
-    const text = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
-    const deck = JSON.parse(text)
-    const hasText = item => typeof item === 'string' && item.trim().length > 0
-    if (!Object.hasOwn(palettes, deck.theme) || ((requireDesign || deck.design !== undefined) && !validDesign(deck.design))) return null
-    if (!hasText(deck.audience) || !hasText(deck.goal) || !Array.isArray(deck.slides) || !deck.slides.length) return null
-    if (!deck.slides.every(slide => slide && hasText(slide.title) && layouts.has(slide.layout) && hasText(slide.visual)
-      && Array.isArray(slide.points) && slide.points.length >= 1 && slide.points.length <= 6 && slide.points.every(hasText)
-      && (slide.focus === undefined || (hasText(slide.focus) && slide.points.some(point => point.includes(slide.focus)))))) return null
-    if (text.length > 12_000) return null
-    return deck
+    return JSON.parse(value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
   } catch {
     return null
   }
 }
 
+export function parseHtmlDeck(value, { requireDesign = false, contentOnly = false } = {}) {
+  if (typeof value !== 'string' || value.length > 48_000) return null
+  const deck = parseJson(value)
+  if (!hasText(deck?.audience) || !hasText(deck.goal) || !Array.isArray(deck.slides) || !deck.slides.length) return null
+  if (!deck.slides.every(slide => hasText(slide?.title) && validPoints(slide.points))) return null
+  if (deck.version === 2) {
+    if (requireDesign || !deck.slides.every(slide => hasText(slide.section) && hasText(slide.takeaway))) return null
+    return {
+      version: 2,
+      audience: deck.audience,
+      goal: deck.goal,
+      slides: deck.slides.map(({ section, title, takeaway, points }) => ({ section, title, takeaway, points })),
+    }
+  }
+  if (contentOnly || !Object.hasOwn(palettes, deck.theme) || ((requireDesign || deck.design !== undefined) && !validDesign(deck.design))) return null
+  if (!deck.slides.every(slide => layouts.has(slide.layout) && hasText(slide.visual)
+    && (slide.focus === undefined || (hasText(slide.focus) && slide.points.some(point => point.includes(slide.focus)))))) return null
+  return deck
+}
+
+export function applyHtmlDeckDesign(deck, value) {
+  const result = parseJson(value)
+  if (!result || !Object.hasOwn(palettes, result.theme) || !validDesign(result.design)
+    || !Array.isArray(result.slides) || result.slides.length !== deck.slides.length) return null
+  if (!result.slides.every((style, index) => style && layouts.has(style.layout)
+    && (style.focus === undefined || (hasText(style.focus) && deck.slides[index].points.some(point => point.includes(style.focus)))))) return null
+  const slides = deck.slides.map((slide, index) => {
+    const { layout, focus } = result.slides[index]
+    return { ...slide, layout, focus }
+  })
+  return { ...deck, theme: result.theme, design: result.design, slides }
+}
+
 export function formatHtmlDeckPlan(deck) {
-  const pages = deck.slides.map((slide, index) =>
-    [`### 第 ${index + 1} 页 · ${slide.title}`, ...slide.points.map(point => `- ${point}`), `视觉建议：${slide.visual}`].join('\n'))
+  const pages = deck.slides.map((slide, index) => {
+    const heading = `### 第 ${index + 1} 页 · ${slide.title}`
+    const hierarchy = deck.version === 2 ? [`所属章节：${slide.section}`, `**核心判断** · ${slide.takeaway}`] : []
+    return [heading, ...hierarchy, ...slide.points.map(point => `- ${point}`)].join('\n\n')
+  })
   const data = Buffer.from(JSON.stringify(deck)).toString('base64')
-  return [HTML_PLAN_MARKER, `受众：${deck.audience}\n\n目标：${deck.goal}\n\n主题：${(deck.design ?? palettes[deck.theme]).name}`, ...pages,
+  return [HTML_PLAN_MARKER, `受众：${deck.audience}\n\n目标：${deck.goal}`, ...pages,
     '确认后按以上页序和内容生成 HTML 演示稿。', `${DATA_MARKER}${data} -->`].join('\n\n')
 }
 
@@ -80,7 +113,7 @@ function renderPoint(point, emphasis) {
 }
 
 function slideContent(slide) {
-  const title = `<h1>${escapeHtml(slide.title)}</h1>`
+  const title = `<h1>${escapeHtml(slide.title)}</h1>` + (slide.takeaway ? `<p class="takeaway">${escapeHtml(slide.takeaway)}</p>` : '')
   const pointMarkup = point => {
     const number = point.match(/[<>≤≥约±~-]?\s*\d[\d,.]*(?:%|倍|\s*(?:万元|亿元|个月|人|张|元))?/u)?.[0]?.trim()
     const focus = slide.focus && point.includes(slide.focus) ? slide.focus : slide.layout === 'metrics' && !/[<>][a-z/]/i.test(point) ? number : ''
@@ -105,7 +138,7 @@ export function renderHtmlDeck(deck) {
   const secondary = readableColor(design.secondary, design.paper, ink)
   const pages = deck.slides.map((slide, index) => `
 <section class="slide ${slide.layout}" ${index ? 'hidden' : ''} aria-label="第 ${index + 1} 页">
-  ${index ? `<header>${escapeHtml(deck.slides[0].title)}</header>` : ''}
+  ${slide.section || index ? `<header>${escapeHtml(slide.section || deck.slides[0].title)}</header>` : ''}
   <div class="content">${slideContent(slide)}</div>
 </section>`).join('')
   return `<!doctype html>
@@ -131,6 +164,7 @@ export function renderHtmlDeck(deck) {
   .content { margin-block: auto; padding-block: var(--space); font-size: clamp(14px, 2.45cqw, 30px); overflow-wrap: anywhere }
   .center h1, .center .cover .lead { text-align: center }
   h1 { margin: 0 0 .7em; line-height: 1.13; font-family: var(--heading); font-weight: var(--weight); font-size: 1.8em; letter-spacing: -.025em }
+  .takeaway { margin: 0 0 .85em; font-weight: 650; color: var(--accent) }
   .cover h1 { color: var(--ink); font-size: clamp(30px, 7cqw, 90px); margin-bottom: .45em }
   ul, ol { margin: 0; padding-inline-start: 1.25em }
   li + li { margin-top: .55em }
