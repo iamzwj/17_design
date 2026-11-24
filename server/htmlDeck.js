@@ -1,20 +1,54 @@
 export const HTML_PLAN_MARKER = '[HTML演示稿规划]'
 const DATA_MARKER = '<!-- dgen-deck:'
 
-export const HTML_PLAN_PROMPT = `只生成待确认的 HTML 逐页规划。返回一个 JSON 对象，不要输出 HTML。格式为 {"audience":"受众","goal":"目标","theme":"editorial","slides":[{"title":"页面标题","layout":"cover","points":["演示时直接展示的完整短句"],"visual":"视觉建议"}]}。
-layout 只用 cover、columns、metrics 或 summary，按内容选择。首页用 cover。每页 1–6 条要点，短而具体，长内容拆页。保留用户给出的事实、数值、单位和限定条件。theme 只用 editorial 或 standard，根据用户需求和所选 Skill 决定，杂志风排版使用 editorial。视觉建议须对应所选版式和主题。修改规划时返回完整的新版规划。`
+export const HTML_PLAN_PROMPT = `只生成待确认的 HTML 逐页规划。返回一个 JSON 对象，不要输出 HTML 或 CSS。格式：
+{"audience":"受众","goal":"目标","theme":"editorial 或 standard","design":{"name":"实际采用的风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular"},"slides":[{"title":"页面标题","layout":"cover","points":["演示直接展示的短句"],"visual":"描述本页实际选用的构图","focus":"从某一条要点原样取出的短语或数值，没有则省略"}]}。
+选定 Skill 时，从其规范提取具体配色、标题字体类型、对齐、边框和留白，并写入 design，禁止用通用主题覆盖 Skill 明确规定的视觉需求。没有明确规定时按风格做合理选择。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。
+layout 允许 cover、split、columns、metrics、comparison、timeline、summary。根据本页内容关系和 Skill 的构图要求选择。杂志风使用 serif、rules、airy，开篇采用有视觉焦点的 cover，图文论证用 split，指标用 metrics，对照用 comparison。避免全稿反复使用等宽双栏。focus 必须来自 points，不得概括或补造数字。每页 1–6 条要点，保留事实、数值、单位和限定条件。修改规划时返回完整的新 JSON。`
 
-const layouts = new Set(['cover', 'columns', 'metrics', 'summary'])
+const layouts = new Set(['cover', 'split', 'columns', 'metrics', 'comparison', 'timeline', 'summary'])
+const choices = {
+  heading: ['serif', 'sans', 'mono'],
+  align: ['left', 'center'],
+  surface: ['rules', 'panels', 'plain'],
+  density: ['airy', 'compact'],
+  weight: ['regular', 'bold'],
+}
+const palettes = {
+  editorial: { name: '杂志风', paper: '#F2F5F8', ink: '#0F172A', accent: '#155EEF', secondary: '#008B74', heading: 'serif', align: 'left', surface: 'rules', density: 'airy', weight: 'regular' },
+  standard: { name: '标准汇报', paper: '#FFFFFF', ink: '#0F172A', accent: '#405390', secondary: '#475569', heading: 'sans', align: 'left', surface: 'plain', density: 'compact', weight: 'bold' },
+}
+const colorKeys = ['paper', 'ink', 'accent', 'secondary']
 
-export function parseHtmlDeck(value) {
+function validDesign(design) {
+  return design && typeof design.name === 'string' && design.name.trim().length > 0
+    && colorKeys.every(key => typeof design[key] === 'string' && /^#[0-9a-f]{6}$/i.test(design[key]))
+    && Object.entries(choices).every(([key, options]) => options.includes(design[key]))
+}
+
+function luminance(color) {
+  const channels = color.slice(1).match(/../g).map(value => {
+    const channel = Number.parseInt(value, 16) / 255
+    return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4
+  })
+  return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2]
+}
+
+function readableColor(color, paper, fallback) {
+  const [lighter, darker] = [luminance(color), luminance(paper)].sort((a, b) => b - a)
+  return (lighter + .05) / (darker + .05) >= 4.5 ? color : fallback
+}
+
+export function parseHtmlDeck(value, { requireDesign = false } = {}) {
   try {
     const text = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
     const deck = JSON.parse(text)
     const hasText = item => typeof item === 'string' && item.trim().length > 0
-    if (!['editorial', 'standard'].includes(deck.theme)) return null
+    if (!Object.hasOwn(palettes, deck.theme) || ((requireDesign || deck.design !== undefined) && !validDesign(deck.design))) return null
     if (!hasText(deck.audience) || !hasText(deck.goal) || !Array.isArray(deck.slides) || !deck.slides.length) return null
     if (!deck.slides.every(slide => slide && hasText(slide.title) && layouts.has(slide.layout) && hasText(slide.visual)
-      && Array.isArray(slide.points) && slide.points.length >= 1 && slide.points.length <= 6 && slide.points.every(hasText))) return null
+      && Array.isArray(slide.points) && slide.points.length >= 1 && slide.points.length <= 6 && slide.points.every(hasText)
+      && (slide.focus === undefined || (hasText(slide.focus) && slide.points.some(point => point.includes(slide.focus)))))) return null
     if (text.length > 12_000) return null
     return deck
   } catch {
@@ -26,7 +60,7 @@ export function formatHtmlDeckPlan(deck) {
   const pages = deck.slides.map((slide, index) =>
     [`### 第 ${index + 1} 页 · ${slide.title}`, ...slide.points.map(point => `- ${point}`), `视觉建议：${slide.visual}`].join('\n'))
   const data = Buffer.from(JSON.stringify(deck)).toString('base64')
-  return [HTML_PLAN_MARKER, `受众：${deck.audience}\n\n目标：${deck.goal}\n\n主题：${deck.theme === 'editorial' ? '杂志风' : '标准汇报'}`, ...pages,
+  return [HTML_PLAN_MARKER, `受众：${deck.audience}\n\n目标：${deck.goal}\n\n主题：${(deck.design ?? palettes[deck.theme]).name}`, ...pages,
     '确认后按以上页序和内容生成 HTML 演示稿。', `${DATA_MARKER}${data} -->`].join('\n\n')
 }
 
@@ -39,14 +73,40 @@ function escapeHtml(value) {
   return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
 }
 
+function renderPoint(point, emphasis) {
+  const index = emphasis ? point.indexOf(emphasis) : -1
+  if (index < 0) return escapeHtml(point)
+  return escapeHtml(point.slice(0, index)) + `<strong class="focus">${escapeHtml(emphasis)}</strong>` + escapeHtml(point.slice(index + emphasis.length))
+}
+
+function slideContent(slide) {
+  const title = `<h1>${escapeHtml(slide.title)}</h1>`
+  const pointMarkup = point => {
+    const number = point.match(/[<>≤≥约±~-]?\s*\d[\d,.]*(?:%|倍|\s*(?:万元|亿元|个月|人|张|元))?/u)?.[0]?.trim()
+    const focus = slide.focus && point.includes(slide.focus) ? slide.focus : slide.layout === 'metrics' && !/[<>][a-z/]/i.test(point) ? number : ''
+    return `<li>${renderPoint(point, focus)}</li>`
+  }
+  const list = slide.layout === 'timeline' ? 'ol' : 'ul'
+  const leadIndex = slide.layout === 'cover' || slide.layout === 'split'
+    ? Math.max(0, slide.points.findIndex(point => slide.focus && point.includes(slide.focus))) : -1
+  if (leadIndex >= 0 && slide.points.length > 1) {
+    const primary = slide.points[leadIndex]
+    const others = slide.points.filter((_, index) => index !== leadIndex)
+    const lead = `<p class="lead">${renderPoint(primary, slide.focus)}</p>`
+    return `<div class="split-copy">${title}<ul>${others.map(pointMarkup).join('')}</ul></div>${lead}`
+  }
+  return `${title}<${list}>${slide.points.map(pointMarkup).join('')}</${list}>`
+}
+
 export function renderHtmlDeck(deck) {
+  const design = deck.design ?? palettes[deck.theme]
+  const ink = readableColor(design.ink, design.paper, luminance(design.paper) > .179 ? '#000000' : '#FFFFFF')
+  const accent = readableColor(design.accent, design.paper, ink)
+  const secondary = readableColor(design.secondary, design.paper, ink)
   const pages = deck.slides.map((slide, index) => `
 <section class="slide ${slide.layout}" ${index ? 'hidden' : ''} aria-label="第 ${index + 1} 页">
-  <header>${escapeHtml(deck.slides[0].title)}</header>
-  <div class="content">
-    <h1>${escapeHtml(slide.title)}</h1>
-    <ul>${slide.points.map(point => `<li>${escapeHtml(point)}</li>`).join('')}</ul>
-  </div>
+  ${index ? `<header>${escapeHtml(deck.slides[0].title)}</header>` : ''}
+  <div class="content">${slideContent(slide)}</div>
 </section>`).join('')
   return `<!doctype html>
 <html lang="zh-CN">
@@ -60,31 +120,44 @@ export function renderHtmlDeck(deck) {
   main { height: 100vh; height: 100dvh; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; padding: 12px }
   .stage { container-type: size; display: grid; place-items: center; min-width: 0 }
   .slide { width: min(100cqw, 177.7778cqh, 1440px); aspect-ratio: 16 / 9; overflow: auto; container-type: inline-size; background: #f2f5f8; padding: clamp(16px, 4cqw, 64px); display: flex; flex-direction: column }
-  .editorial { --accent: #155eef; --paper: #f2f5f8 }
-  .standard { --accent: #405390; --paper: #fff }
-  .slide { background: var(--paper) }
-  .editorial .cover h1 { letter-spacing: -.025em }
+  body { --paper: ${design.paper}; --ink: ${ink}; --accent: ${accent}; --secondary: ${secondary}; --highlight: ${design.secondary}; --rule: color-mix(in srgb, var(--ink) 24%, var(--paper)); --heading: system-ui, sans-serif; --space: 1em; --weight: 700 }
+  .heading-serif { --heading: "Newsreader", "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif }
+  .heading-mono { --heading: "Google Sans Code", ui-monospace, monospace }
+  .airy { --space: 1.45em }
+  .regular { --weight: 600 }
+  .slide { background: var(--paper); color: var(--ink) }
   .slide[hidden] { display: none }
-  header { color: var(--accent); font-weight: 700; font-size: clamp(12px, 1.7cqw, 23px); border-bottom: 1px solid #a8b5c8; padding-bottom: .5em }
-  .content { margin-block: auto; padding-block: 1em; font-size: clamp(14px, 2.7cqw, 34px); overflow-wrap: anywhere }
-  h1 { margin: 0 0 .6em; line-height: 1.14; font-size: 1.65em }
-  .cover h1 { font-size: 2em }
-  ul { margin: 0; padding-inline-start: 1.2em }
-  li + li { margin-top: .45em }
-  .columns ul, .metrics ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65em 1em; list-style: none; padding: 0 }
-  .columns li, .metrics li { margin: 0; border-top: 1px solid #a8b5c8; padding-top: .5em }
-  .metrics li { color: var(--accent); font-weight: 650 }
+  header { color: var(--accent); font-weight: 650; font-size: clamp(12px, 1.5cqw, 21px); border-bottom: 1px solid var(--rule); padding-bottom: .65em }
+  .content { margin-block: auto; padding-block: var(--space); font-size: clamp(14px, 2.45cqw, 30px); overflow-wrap: anywhere }
+  .center h1, .center .cover .lead { text-align: center }
+  h1 { margin: 0 0 .7em; line-height: 1.13; font-family: var(--heading); font-weight: var(--weight); font-size: 1.8em; letter-spacing: -.025em }
+  .cover h1 { color: var(--ink); font-size: clamp(30px, 7cqw, 90px); margin-bottom: .45em }
+  ul, ol { margin: 0; padding-inline-start: 1.25em }
+  li + li { margin-top: .55em }
+  .cover .content:has(.lead), .split .content:has(.lead) { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: var(--space); align-items: center }
+  .lead { margin: 0; border-inline-start: 2px solid var(--highlight); padding-inline-start: var(--space); color: var(--secondary); font-size: 1.1em }
+  .focus { color: var(--accent); font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums }
+  .lead .focus, .metrics .focus { font-size: clamp(24px, 5.3cqw, 66px); line-height: 1.15 }
+  :is(.columns, .metrics, .comparison) ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7em var(--space); list-style: none; padding: 0 }
+  :is(.columns, .metrics, .comparison) li { margin: 0; padding-block: .6em }
+  .rules :is(.columns, .metrics) li, .comparison li { border-top: 1px solid var(--rule) }
+  .comparison ul { gap: 0 var(--space); border-bottom: 1px solid var(--rule) }
+  .panels :is(.columns, .metrics, .comparison) li { background: color-mix(in srgb, var(--accent) 8%, var(--paper)); border-radius: .55em; padding: .75em }
+  .plain header { border-color: transparent }
+  .timeline ol { border-inline-start: 2px solid var(--rule); margin-inline-start: .25em; padding-inline-start: 1.6em }
+  .timeline li::marker { color: var(--accent); font-weight: 650 }
   nav { display: flex; justify-content: center; align-items: center; gap: 12px; color: #e7e9ee }
   button { font: inherit; color: inherit; background: #252731; border: 1px solid #666a7b; border-radius: 6px; padding: 5px 12px }
   button:disabled { opacity: .5 }
   @media (max-width: 520px), (max-height: 400px) {
     .slide { width: 100%; height: 100%; aspect-ratio: auto; padding: 18px }
     .content { margin-block: 0; font-size: 16px }
-    .columns ul, .metrics ul { grid-template-columns: 1fr }
+    .cover .content:has(.lead), .split .content:has(.lead), :is(.columns, .metrics, .comparison) ul { grid-template-columns: 1fr }
+    .lead { padding-inline-start: .8em }
   }
 </style>
 </head>
-<body class="${deck.theme}">
+<body class="${deck.theme} heading-${design.heading} ${design.align} ${design.surface} ${design.density} ${design.weight}">
 <main>
   <div class="stage">${pages}</div>
   <nav aria-label="演示稿翻页">

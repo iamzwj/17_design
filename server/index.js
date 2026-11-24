@@ -1436,7 +1436,10 @@ async function handleTextCompletion(req, res, next) {
       if (context) knowledge.finish(context.id, { status: 'succeeded', completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
       return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: null, model: null })
     }
-    if (needsPlan) upstreamRequest.messages.push({ role: 'system', content: HTML_PLAN_PROMPT })
+    if (needsPlan) upstreamRequest.messages.push({
+      role: 'system',
+      content: HTML_PLAN_PROMPT + (skill ? '\n本次已选择 Skill。将其视觉要求映射到 design 及逐页 layout；Skill 中的交付格式与当前 HTML 演示稿冲突时，以当前任务为准。' : ''),
+    })
     if (confirmed) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
     if (confirmed) upstreamRequest.max_tokens = 32000
     let data = await complete(upstreamRequest)
@@ -1453,13 +1456,13 @@ async function handleTextCompletion(req, res, next) {
     }
     if (!content) throw new Error('接口未返回有效文本')
     if (needsPlan) {
-      let plan = parseHtmlDeck(content)
+      let plan = parseHtmlDeck(content, { requireDesign: true })
       if (!plan) {
         data = await complete({
           ...upstreamRequest,
           messages: [...upstreamRequest.messages, { role: 'user', content: '请按格式要求只返回完整的规划 JSON。' }],
         })
-        plan = parseHtmlDeck(completionText(data))
+        plan = parseHtmlDeck(completionText(data), { requireDesign: true })
       }
       if (!plan) throw new Error('演示稿规划格式不完整，请重试')
       content = formatHtmlDeckPlan(plan)
