@@ -138,3 +138,6 @@
 .pulin-report .pr-team-fields input::placeholder{color:var(--dp-secondary);opacity:.7}
 .pulin-report .pr-team-fields input:focus-visible{outline:2px solid var(--dp-color-accent);outline-offset:2px}
 .pulin-report .pr-team-composition{margin-bottom:20px}
+
+/* Region names need the full form width at every viewport size. */
+.pulin-report .pr-team-primary-grid{grid-template-columns:minmax(0,1fr)}
