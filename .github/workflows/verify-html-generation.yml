@@ -10,8 +10,8 @@ jobs:
     steps:
       - name: Run actual HTML generation
         env:
-          API_KEY: ${{ secrets.GRSAI_API_KEY }}
-          BASE: ${{ secrets.GRSAI_BASE_URL }}
+          API_KEY: ${{ secrets.MAIZI_API_KEY }}
+          BASE: https://api.maizitech.ai
         run: |
           python3 -u - <<'PY'
           import os,json,time,urllib.request,urllib.error,re
@@ -20,12 +20,21 @@ jobs:
           original='''请制作完整离线HTML演示稿，内容为某企业AI工作台提案，10页，涵盖背景、团队、现状、需求、困难、方案、功能、推广、成本和收益。每页包含约120字说明，逐页有不同的完整内容，设计统一、可用方向键和按钮翻页，所有CSS和JavaScript内嵌，直接输出完整HTML。'''
           messages=[{'role':'system','content':'输出完整自包含HTML，不得使用外部资源。'},{'role':'user','content':original}]
           def complete(messages):
-              body={'model':'gpt-6.1-sol','stream':False,'messages':messages}
+              body={'model':'gemini-4-carbon','stream':True,'messages':messages}
               req=urllib.request.Request(base+'/v1/chat/completions',json.dumps(body).encode(),{'Authorization':'Bearer '+key,'Content-Type':'application/json'})
               t=time.monotonic()
               try:
-                  with urllib.request.urlopen(req,timeout=120) as r:d=json.load(r)
-                  c=d['choices'][0]; return {'text':c.get('message',{}).get('content') or '', 'finish':c.get('finish_reason'),'seconds':round(time.monotonic()-t,2),'usage':d.get('usage',{})}
+                  with urllib.request.urlopen(req,timeout=180) as r:
+                      pieces=[];finish=None;usage={}
+                      for line in r:
+                          if not line.startswith(b'data:'):continue
+                          raw=line[5:].strip()
+                          if raw==b'[DONE]':break
+                          d=json.loads(raw);usage=d.get('usage') or usage
+                          for c in d.get('choices',[]):
+                              pieces.append(c.get('delta',{}).get('content') or '')
+                              finish=c.get('finish_reason') or finish
+                  return {'text':''.join(pieces),'finish':finish,'seconds':round(time.monotonic()-t,2),'usage':usage}
               except Exception as e:
                   print('ERROR',str(e).replace(key,'[redacted]'),flush=True);raise
           r=complete(messages);content=r.pop('text');print('INITIAL',json.dumps({**r,'chars':len(content),'closed':bool(re.search(r'</html\s*>',content,re.I))}),flush=True)
