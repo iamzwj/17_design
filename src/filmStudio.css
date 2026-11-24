@@ -547,3 +547,5 @@
 .film-analysis-progress progress::-moz-progress-bar { background: var(--dp-highlight); border-radius: 999px; }
 .film-restoring{width:100%;min-height:240px;display:grid;place-content:center;text-align:center;box-sizing:border-box;color:var(--dp-secondary)}
 .film-restoring h2{font-size:14px;font-weight:400;margin:0}
+:root[data-theme="dark"] .film-stage-track .working .film-stage-dot,:root[data-theme="dark"] .film-stage-track .current .film-stage-dot { background:var(--theme-blue); border-color:var(--theme-blue); color:#fff; }
+.film-stage-track .complete .film-stage-dot { background:var(--dp-selected); }

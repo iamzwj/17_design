@@ -953,3 +953,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .workspace-loading-copy{display:inline-flex;align-items:center;gap:10px}
 .workspace-loading-copy>i{width:14px;height:14px;border:2px solid var(--dp-rule);border-top-color:var(--dp-highlight);border-radius:50%;animation:historySpin .9s linear infinite}
 @media(max-width:600px){.workspace-loading,.workspace-loading.is-fluid{width:calc(100% - 16px);min-height:120px}}
+
+/* Accent controls and conversation bubbles use the same accessible solid color. */
+.user-message { background: var(--theme-blue); color: #fff; }
+.ppt-download-button { background: var(--theme-blue); color: #fff; }
+.ppt-download-button:hover { background: color-mix(in srgb, var(--theme-blue) 80%, #000); }
+.ppt-download-button:focus-visible { outline-color: var(--dp-highlight); }

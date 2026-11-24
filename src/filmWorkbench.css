@@ -475,3 +475,4 @@
 .film-workbench .fw-asset-grid > article > .fw-actions { margin-top: 8px; padding-top: 10px; }
 
 
+:root .film-studio .fw-review-warning,:root[data-theme='dark'] .film-studio .fw-review-warning { --fw-review-primary:var(--theme-blue); --fw-review-primary-hover:color-mix(in srgb,var(--theme-blue) 80%,#000); --fw-review-primary-ink:#fff; }
