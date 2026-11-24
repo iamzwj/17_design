@@ -891,7 +891,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   width: min(850px, calc(100% - 60px));
   margin: 18px auto 14px;
 }
-:root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+:root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace) {
   padding-left: max(30px, calc((100% - 850px) / 2));
   padding-right: max(30px, calc((100% - 850px) / 2));
 }
@@ -919,7 +919,7 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   :root .main.has-workspace-title > .workspace-title-slot,
   :root .main.has-workspace-title > :is(.kb-page, .pulin-report),
   :root .main.has-workspace-title .skill-page { width: calc(100% - 30px); }
-  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace) {
     padding-left: 15px;
     padding-right: 15px;
   }
@@ -929,15 +929,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   :root .main.has-workspace-title > .workspace-title-slot,
   :root .main.has-workspace-title > :is(.kb-page, .pulin-report),
   :root .main.has-workspace-title .skill-page { width: calc(100% - 16px); }
-  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace) {
     padding-left: 8px;
     padding-right: 8px;
-  }
-}
-@media (min-width: 1600px) {
-  :root .has-workspace-title .film-workbench .fw-columns {
-    grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
   }
 }
 @media (min-width: 521px) and (max-width: 600px) {
@@ -947,3 +941,8 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
   :root .main.has-workspace-title .conversation { padding-left: 8px; padding-right: 8px; }
   :root .main.has-workspace-title .composer-wrap { left: 8px; right: 8px; }
 }
+
+/* Story-to-film uses the workspace width rather than the writing column. */
+:root .main.has-workspace-title>.film-studio{width:100%;max-width:none;box-sizing:border-box;padding-left:24px;padding-right:24px}
+:root .main.has-workspace-title:has(>.film-studio)>.workspace-title-slot{width:calc(100% - 48px);max-width:none}
+@media(max-width:600px){:root .main.has-workspace-title>.film-studio{padding-left:12px;padding-right:12px}:root .main.has-workspace-title:has(>.film-studio)>.workspace-title-slot{width:calc(100% - 24px)}}
