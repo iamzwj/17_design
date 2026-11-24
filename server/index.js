@@ -1281,7 +1281,19 @@ async function weatherFallbackSearch(query) {
       sources: [{
         title: `${place.name}实时天气（Open-Meteo）`,
         url: weatherUrl,
-        content: `数据时间（北京时间）：${current.time}；天气：${weatherDescription(current.weather_code)}；气温：${current.temperature_2m}°C；体感：${current.apparent_temperature}°C；相对湿度：${current.relative_humidity_2m}%；降水：${current.precipitation}mm；风速：${current.wind_speed_10m}km/h。`,
+        content: [
+          `### ${place.name}实时天气`,
+          `**${weatherDescription(current.weather_code)} · ${current.temperature_2m} °C**`,
+          '',
+          ...([
+            ['体感温度', current.apparent_temperature, ' °C'],
+            ['相对湿度', current.relative_humidity_2m, '%'],
+            ['降水量', current.precipitation, ' mm'],
+            ['风速', current.wind_speed_10m, ' km/h'],
+          ].filter(([, value]) => Number.isFinite(value)).map(([label, value, unit]) => `- ${label} **${value}${unit}**`)),
+          '',
+          `数据时间（北京时间） ${current.time.replace('T', ' ')}`,
+        ].join('\n'),
       }],
     }
   } catch { return { available: false, sources: [] } }
@@ -1392,7 +1404,7 @@ async function handleTextCompletion(req, res, next) {
     if (!needsPlan && !confirmedPlan && req.body.imageAnalysisMode === 'general' && isCurrentWeatherQuery(lastUserText)) {
       const weather = await weatherFallbackSearch(lastUserText)
       const source = weather.sources[0]
-      const content = source ? `**${source.title}**\n\n${source.content}` : '暂时未能获取当前天气数据，请稍后重试。'
+      const content = source ? source.content : '暂时未能获取当前天气数据，请稍后重试。'
       if (context) knowledge.finish(context.id, { status: 'succeeded', completedAt: new Date().toISOString() })
       return res.json({ content, sources: weather.sources, skillApplied: false })
     }
