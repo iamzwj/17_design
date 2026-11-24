@@ -66,6 +66,14 @@ test('content planning preserves original hierarchy and styling cannot rewrite a
     design: { name: '杂志风', paper: '#F2F5F8', ink: '#0F172A', accent: '#155EEF', secondary: '#008B74', heading: 'serif', align: 'left', surface: 'rules', density: 'airy', weight: 'regular' },
     slides: [{ layout: 'cover', title: '被篡改的标题', focus: '391 人' }, { layout: 'metrics', points: ['无关数字'] }],
   }
+  const imperfectStyle = { ...style, slides: [
+    { layout: 'cover', focus: ' 391 人 ' },
+    { layout: 'metrics', focus: '模型改写的重点' },
+  ] }
+  const recovered = applyHtmlDeckDesign(plan, JSON.stringify(imperfectStyle))
+  assert.deepEqual(recovered.slides.map(({ title, points }) => ({ title, points })),
+    plan.slides.map(({ title, points }) => ({ title, points })))
+  assert.deepEqual(recovered.slides.map(slide => slide.focus), ['391 人', undefined])
   const html = renderHtmlDeck(applyHtmlDeckDesign(plan, JSON.stringify(style)))
   assert.match(html, /现状[\s\S]*试点积累[\s\S]*需求已验证[\s\S]*投入与局限[\s\S]*统计仅含 API 成本/)
   assert.doesNotMatch(html, /被篡改|无关数字/)

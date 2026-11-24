@@ -1457,7 +1457,6 @@ async function handleTextCompletion(req, res, next) {
       const request = {
         ...upstreamRequest,
         messages: [
-          ...upstreamRequest.messages,
           { role: 'system', content: HTML_DESIGN_PROMPT },
           { role: 'user', content: JSON.stringify({ slides: deck.slides.map(({ section, title, takeaway, points }) => ({ section, title, takeaway, points })), ...(skill ? { styleSkill: { title: skill.title, guidelines: skill.markdown } } : {}) }) },
         ],
@@ -1465,10 +1464,10 @@ async function handleTextCompletion(req, res, next) {
       let data = await complete(request)
       let styled = applyHtmlDeckDesign(deck, completionText(data))
       if (!styled) {
-        data = await complete({ ...request, messages: [...request.messages, { role: 'user', content: '请检查页数和要点引用，只返回完整的排版 JSON。' }] })
+        data = await complete({ ...request, messages: [...request.messages, { role: 'user', content: `上一次排版未通过校验。严格返回一个 JSON 对象，slides 必须有 ${deck.slides.length} 项并按原顺序排列，每项只写 layout。design 必须填写首条指令中的字段，按允许值填写，并继续遵循所选风格。` }] })
         styled = applyHtmlDeckDesign(deck, completionText(data))
       }
-      if (!styled) throw new Error('排版结果与已确认规划不匹配，请再次确认规划后重试')
+      if (!styled) throw new Error('排版模型未返回可用的版式。已确认的规划仍可使用，请重试生成。')
       const content = '```html\n' + renderHtmlDeck(styled) + '\n```'
       if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
       return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })

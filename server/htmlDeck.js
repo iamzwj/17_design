@@ -102,11 +102,11 @@ export function applyHtmlDeckDesign(deck, value) {
   const result = parseJson(value)
   if (!result || !Object.hasOwn(palettes, result.theme) || !validDesign(result.design)
     || !Array.isArray(result.slides) || result.slides.length !== deck.slides.length) return null
-  if (!result.slides.every((style, index) => style && layouts.has(style.layout)
-    && (style.focus === undefined || (hasText(style.focus) && deck.slides[index].points.some(point => point.includes(style.focus)))))) return null
+  if (!result.slides.every(style => style && layouts.has(style.layout))) return null
   const slides = deck.slides.map((slide, index) => {
     const { layout, focus } = result.slides[index]
-    return { ...slide, layout, focus }
+    const excerpt = hasText(focus) ? focus.trim() : undefined
+    return { ...slide, layout, focus: excerpt && slide.points.some(point => point.includes(excerpt)) ? excerpt : undefined }
   })
   return { ...deck, theme: result.theme, design: result.design, slides }
 }
