@@ -14,7 +14,7 @@ export const BUILTIN_SKILLS = [{
   id: 'magazine-editorial-layout', title: '杂志风排版', summary: '将方案、复盘和汇报整理为清晰的杂志风 HTML 报告或演示稿。',
   category: '设计创作', author: 'D-Gen 内置', builtIn: true, canEdit: false, targets: ['chat'], referenceCount: 0,
   updatedAt: '2026-11-24T00:00:00.000Z', publishedAt: '2026-11-24T00:00:00.000Z',
-  markdown: `---\nname: magazine-editorial-layout\ndescription: 将用户内容设计成杂志风 HTML 报告与演示稿。\n---\n\n# 杂志风排版\n\n依据用户需求组织真实内容，不编造数据、来源或案例；缺失信息标为待补。以编辑式层级、开放式网格、留白、细分隔线和清晰的标题建立秩序，不使用卡片堆砌、阴影或表情符号。默认冷灰纸面 #F2F5F8、深墨色 #0F172A、钴蓝 #155EEF，辅助翠绿 #008B74；用户给出品牌规范时优先遵循。使用系统字体栈，无外部依赖。图表优先用内联 SVG，标明单位与来源。\n\n## HTML 演示稿\n用户要求演示稿时，直接输出完整自包含 HTML 放在 html 代码块中，可在工作台预览、全屏和下载；按内容分成 16:9 页面，每页突出一个结论，适配不同屏幕，提供页码、前后翻页及方向键。仅使用内联 CSS 和必要的内联 JavaScript，不引用外部字体、图片、脚本或网络；不声称已生成 PPTX。保留用户提供的名称、事实和数值。报告而非演示稿时优先静态 HTML，不需要脚本。\n`,
+  markdown: `---\nname: magazine-editorial-layout\ndescription: 将用户内容设计成杂志风 HTML 报告与演示稿。\n---\n\n# 杂志风排版\n\n依据用户需求组织真实内容，不编造数据、来源或案例；缺失信息标为待补。以编辑式层级、开放式网格、留白、细分隔线和清晰的标题建立秩序，不使用卡片堆砌、阴影或表情符号。默认冷灰纸面 #F2F5F8、深墨色 #0F172A、钴蓝 #155EEF，辅助翠绿 #008B74；用户给出品牌规范时优先遵循。使用系统字体栈，无外部依赖。图表优先用内联 SVG，标明单位与来源。\n\n## HTML 演示稿\n用户要求演示稿时，先规划逐页内容并等待确认；按内容分成 16:9 页面，每页突出一个结论，适配不同屏幕，提供页码、前后翻页及方向键。仅使用内联 CSS 和必要的内联 JavaScript，不引用外部字体、图片、脚本或网络；不声称已生成 PPTX。保留用户提供的名称、事实和数值。报告而非演示稿时优先静态 HTML，不需要脚本。\n`,
 }]
 export const skillTargets = (skill) => Array.isArray(skill.targets) ? skill.targets : ['image', 'video']
 export function generationSkillPrompt(snapshot, prompt, target) {

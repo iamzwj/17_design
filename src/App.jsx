@@ -1825,12 +1825,12 @@ function TextStudio({ type, conversation, onSave, user }) {
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
         const presentationPlan = typeof message.content === 'string' && message.content.startsWith('[HTML演示稿规划]')
-        const displayContent = presentationPlan ? message.content.replace(/^\[HTML演示稿规划\]\s*/, '') : message.content
+        const displayContent = presentationPlan ? message.content.replace(/^\[HTML演示稿规划\]\s*/, '').replace(/<!-- dgen-deck:[A-Za-z0-9+/=]+ -->\s*$/, '').trimEnd() : message.content
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={displayContent} sources={message.sources}/> : <>
-            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(displayContent)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={message.content}/></span> : null}/>}
+            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(displayContent)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={displayContent}/></span> : null}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
             {!message.pptTaskId && <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
