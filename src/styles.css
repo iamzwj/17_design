@@ -182,6 +182,14 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .user-message-actions { display: flex; justify-content: flex-end; margin-top: -6px; }
 .user-message-actions .message-copy-button { position: static; }
 .user-message-group:hover .message-copy-button, .user-message-group:focus-within .message-copy-button { opacity: 1; transform: translateY(0); pointer-events: auto; }
+:is(.user-message, .user-message-actions) .message-copy-button {
+  width: 36px;
+  height: 36px;
+}
+:is(.user-message, .user-message-actions) .message-copy-button svg {
+  width: 20px;
+  height: 20px;
+}
 .assistant-turn { position: relative; }
 .assistant-turn .message-copy-button { top: 0; right: -35px; }
 .user-message:hover .message-copy-button, .user-message:focus-within .message-copy-button, .assistant-turn:hover .message-copy-button, .assistant-turn:focus-within .message-copy-button { opacity: 1; transform: translateY(0); pointer-events: auto; }
