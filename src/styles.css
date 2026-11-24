@@ -885,3 +885,65 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .primary-tools > button > b,
 .primary-tools > .more-tool-nav > button > b { min-width: 0; text-align: left; }
 .primary-tools > .more-tool-nav > button > svg:last-child { margin-left: 0; justify-self: end; }
+
+/* Keep the workspace title and each tool's main content on the same grid. */
+:root .main.has-workspace-title > .workspace-title-slot {
+  width: min(850px, calc(100% - 60px));
+  margin: 18px auto 14px;
+}
+:root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+  padding-left: max(30px, calc((100% - 850px) / 2));
+  padding-right: max(30px, calc((100% - 850px) / 2));
+}
+:root .main.has-workspace-title > :is(.kb-page, .pulin-report) {
+  box-sizing: border-box;
+  width: min(850px, calc(100% - 60px));
+  max-width: 850px;
+  padding-left: 0;
+  padding-right: 0;
+}
+:root .main.has-workspace-title .skill-page {
+  box-sizing: border-box;
+  width: min(850px, calc(100% - 60px));
+  max-width: 850px;
+  padding-left: 0;
+  padding-right: 0;
+}
+:root .main.has-workspace-title :is(.material-library-page, .festival-poster-page, .more-tool-page, .admin-page, .film-layout.is-create) {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+:root .main.has-workspace-title .message-list { max-width: 850px; }
+@media (max-width: 820px) {
+  :root .main.has-workspace-title > .workspace-title-slot,
+  :root .main.has-workspace-title > :is(.kb-page, .pulin-report),
+  :root .main.has-workspace-title .skill-page { width: calc(100% - 30px); }
+  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  :root .main.has-workspace-title .conversation { padding-left: 15px; padding-right: 15px; }
+}
+@media (max-width: 520px) {
+  :root .main.has-workspace-title > .workspace-title-slot,
+  :root .main.has-workspace-title > :is(.kb-page, .pulin-report),
+  :root .main.has-workspace-title .skill-page { width: calc(100% - 16px); }
+  :root .main.has-workspace-title > :is(.material-library-workspace, .festival-poster-workspace, .please-day-workspace, .batch-workspace, .admin-workspace, .archive-workspace, .film-studio) {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+@media (min-width: 1600px) {
+  :root .has-workspace-title .film-workbench .fw-columns {
+    grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+@media (min-width: 521px) and (max-width: 600px) {
+  :root .has-workspace-title .video-waterfall-workspace { --video-side-space: 15px; }
+}
+@media (max-width: 520px) {
+  :root .main.has-workspace-title .conversation { padding-left: 8px; padding-right: 8px; }
+  :root .main.has-workspace-title .composer-wrap { left: 8px; right: 8px; }
+}
