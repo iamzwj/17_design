@@ -88,7 +88,8 @@ export function activityContentPages(content) {
 }
 export function activityVisibleText(content) {
   let text = String(content || '')
-  if (extractPresentation(text)) text = text.replace(/```html\s*[\s\S]*?```/i, '')
+  const presentation = extractPresentation(text)
+  if (presentation) text = text.replace(/```(?:html)?[ \t]*\n[\s\S]*?```/i, match => match.includes(presentation) ? '' : match).replace(presentation, '')
   if (activityContentPages(text).length) text = text.replace(/```json\s*[\s\S]*?```/gi, '')
   return text.trim()
 }
@@ -98,6 +99,15 @@ export function ActivityHtmlResult({ content }) {
   const html = extractPresentation(content)
   if (!html) return null
   const preview = presentationPreview(html)
+  async function saveAs() {
+    if (!window.showSaveFilePicker) { download(); return }
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: '演示稿.html', types: [{ description: 'HTML 演示稿', accept: { 'text/html': ['.html'] } }] })
+      const writable = await handle.createWritable()
+      await writable.write(preview)
+      await writable.close()
+    } catch (error) { if (error.name !== 'AbortError') download() }
+  }
   function download() { const url = URL.createObjectURL(new Blob([preview], { type: 'text/html;charset=utf-8' })); const a = document.createElement('a'); a.href = url; a.download = '演示稿.html'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) }
-  return <section className="activity-html-result"><header><b>HTML 演示稿</b><div><button type="button" onClick={() => frame.current?.requestFullscreen?.()}>全屏播放</button><button type="button" onClick={download}>下载演示稿</button></div></header><iframe ref={frame} sandbox="allow-scripts" allowFullScreen referrerPolicy="no-referrer" title="HTML 演示稿预览" srcDoc={preview}/></section>
+  return <section className="activity-html-result"><header><b>HTML 演示稿</b><div><button type="button" onClick={() => frame.current?.requestFullscreen?.()}>全屏播放</button><button type="button" onClick={saveAs}>选择位置保存</button></div></header><iframe ref={frame} sandbox="allow-scripts" allowFullScreen referrerPolicy="no-referrer" title="HTML 演示稿预览" srcDoc={preview}/></section>
 }

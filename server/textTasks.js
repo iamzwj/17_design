@@ -8,6 +8,16 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
   let tasks = []
   if (fs.existsSync(file)) tasks = JSON.parse(fs.readFileSync(file, 'utf8'))
   const executing = new Set()
+  const taskDeadline = 10 * 60 * 1000
+  function expire(task) {
+    if (!['running', 'needs-local-skill'].includes(task.status) || Date.now() - task.createdAt < taskDeadline) return false
+    task.status = 'failed'
+    task.error = '回复生成超时，请重新发送。'
+    delete task.input
+    localSkills.delete(task.id)
+    save()
+    return true
+  }
   const localSkills = new Map()
   const save = () => {
     fs.writeFileSync(`${file}.next`, JSON.stringify(tasks), { mode: 0o600 })
@@ -16,22 +26,24 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
   const publicTask = ({ id, status, result, error, createdAt, skill }) => ({ id, status, result, error, createdAt, ...(skill ? { skill: { id: skill.id, title: skill.title, external: Boolean(skill.external) } } : {}) })
   const owner = (req, kind) => req.user || kind === 'text' || req.body?.knowledge?.brandId ? req.user?.id : req.headers['x-text-session']
   async function run(task) {
-    if (executing.has(task.id)) return
+    if (executing.has(task.id) || expire(task)) return
     if (task.skill?.external && !localSkills.has(task.id)) { task.status = 'needs-local-skill'; save(); return }
     executing.add(task.id)
     task.status = 'running'
     let statusCode = 200
-    const fail = (error) => { task.status = 'failed'; task.error = error?.name === 'TimeoutError' ? '回复服务暂时超时，请重试' : String(error?.message || '回复生成失败') }
+    const fail = (error) => { if (task.status !== 'running') return; task.status = 'failed'; task.error = error?.name === 'TimeoutError' ? '回复服务暂时超时，请重试' : String(error?.message || '回复生成失败') }
     try {
       if (prepareInput && !task.prepared) {
         task.input = await prepareInput({ body: task.input, user: task.user, path: `/api/${task.kind}/tasks` })
         task.prepared = true; save()
       }
+      if (task.status !== 'running' || expire(task)) return
       const skill = task.skill?.external ? localSkills.get(task.id) : task.skill
       const body = skill ? { ...task.input, __skill: skill } : task.input
       await handleCompletion({ body, user: task.user }, {
         status(code) { statusCode = code; return this },
         json(result) {
+          if (task.status !== 'running' || expire(task)) return
           if (statusCode >= 400) fail(new Error(result.error))
           else { task.status = 'succeeded'; task.result = task.skill ? { ...result, skillSnapshot: { id: task.skill.id, title: task.skill.title } } : result }
         },
@@ -80,6 +92,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
     app.get(`/api/${kind}/tasks/:id`, ...guards, (req, res) => {
       const task = tasks.find((item) => item.id === req.params.id && item.owner === (item.privateKnowledge ? req.user?.id : owner(req, kind)) && item.kind === kind)
       if (!task) return res.status(404).json({ error: '回复任务不存在或无权访问' })
+      expire(task)
       res.set('Cache-Control', 'no-store').json({ task: publicTask(task) })
     })
   }

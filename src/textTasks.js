@@ -28,7 +28,8 @@ export function waitForTextTask(kind, id) {
   if (liveWaits.has(key)) return liveWaits.get(key)
   const promise = (async () => {
     let missingSince = null
-    while (true) {
+    const deadline = Date.now() + 11 * 60 * 1000
+    while (Date.now() < deadline) {
       let task
       try { task = await request(kind, id) }
       catch (error) {
@@ -51,6 +52,7 @@ export function waitForTextTask(kind, id) {
       if (task.status === 'failed') throw new Error(task.error || '回复生成失败')
       await delay()
     }
+    throw new Error('回复等待超时，请检查网络或重新发送')
   })().finally(() => liveWaits.delete(key))
   liveWaits.set(key, promise)
   return promise
