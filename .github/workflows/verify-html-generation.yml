@@ -1,0 +1,42 @@
+name: Verify HTML generation
+on:
+  push:
+    branches: [test/html-presentation-verification]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run actual HTML generation
+        env:
+          API_KEY: ${{ secrets.GRSAI_API_KEY }}
+          BASE: ${{ secrets.GRSAI_BASE_URL }}
+        run: |
+          python3 -u - <<'PY'
+          import os,json,time,urllib.request,urllib.error,re
+          base=(os.environ.get('BASE') or 'https://grsaiapi.com').rstrip('/')
+          key=os.environ['API_KEY']
+          original='''请制作完整离线HTML演示稿，内容为某企业AI工作台提案，10页，涵盖背景、团队、现状、需求、困难、方案、功能、推广、成本和收益。每页包含约120字说明，逐页有不同的完整内容，设计统一、可用方向键和按钮翻页，所有CSS和JavaScript内嵌，直接输出完整HTML。'''
+          messages=[{'role':'system','content':'输出完整自包含HTML，不得使用外部资源。'},{'role':'user','content':original}]
+          def complete(messages):
+              body={'model':'gpt-6.1-sol','stream':False,'messages':messages}
+              req=urllib.request.Request(base+'/v1/chat/completions',json.dumps(body).encode(),{'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+              t=time.monotonic()
+              try:
+                  with urllib.request.urlopen(req,timeout=120) as r:d=json.load(r)
+                  c=d['choices'][0]; return {'text':c.get('message',{}).get('content') or '', 'finish':c.get('finish_reason'),'seconds':round(time.monotonic()-t,2),'usage':d.get('usage',{})}
+              except Exception as e:
+                  print('ERROR',str(e).replace(key,'[redacted]'),flush=True);raise
+          r=complete(messages);content=r.pop('text');print('INITIAL',json.dumps({**r,'chars':len(content),'closed':bool(re.search(r'</html\s*>',content,re.I))}),flush=True)
+          content=re.sub(r'^\s*```(?:html)?\s*','',content,flags=re.I)
+          for i in range(4):
+              if re.search(r'</html\s*>',content,re.I):break
+              tail=content[-8000:]
+              prompt='请续写被截断的 HTML。以下是已有内容末尾，紧接最后一个字符输出剩余部分，不要重复已有内容或使用 Markdown 围栏。保留未完成的所有页面，并完成翻页脚本和 </html>。\n'+tail
+              r=complete(messages+[{'role':'user','content':prompt}]);t=r.pop('text');t=re.sub(r'^\s*```(?:html)?\s*','',t,flags=re.I);t=re.sub(r'\s*```\s*$','',t)
+              restart=bool(re.match(r'\s*(?:<!doctype\s+html|<html\b)',t,re.I));print('CONTINUATION',i+1,json.dumps({**r,'chars':len(t),'restart':restart,'closed':bool(re.search(r'</html\s*>',t,re.I))}),flush=True)
+              if not t.strip() or restart:break
+              content+=t
+          print('FINAL',json.dumps({'chars':len(content),'closed':bool(re.search(r'</html\s*>',content,re.I)),'sections':len(re.findall(r'<section\b',content,re.I)),'scripts':len(re.findall(r'<script\b',content,re.I))}),flush=True)
+          PY
