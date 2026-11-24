@@ -13,10 +13,12 @@ export default function ImagePreview({ url, urls, prompt, onClose }) {
   const activeUrl = images[index] || images[0] || url
   const [privateUrl, setPrivateUrl] = useState('')
   const [status, setStatus] = useState('loading')
+  const [zoom, setZoom] = useState(1)
   const [attempt, setAttempt] = useState(0)
   const canBrowse = images.length > 1
 
   useEffect(() => {
+    setZoom(1)
     setStatus('loading')
     setPrivateUrl('')
     if (!activeUrl?.startsWith('/api/chat-images/')) return undefined
@@ -57,9 +59,12 @@ export default function ImagePreview({ url, urls, prompt, onClose }) {
 
   return <div className="image-preview" role="dialog" aria-modal="true" aria-label="图片预览" onClick={onClose}>
     {status !== 'ready' && <div className="preview-loading-state" role={status === 'error' ? 'alert' : 'status'} onClick={(event) => event.stopPropagation()}>{status === 'loading' ? <><span className="preview-spinner" aria-hidden="true"/><b>图片加载中</b><small>请稍候…</small></> : <><b>图片加载失败</b><small>请检查网络或稍后重试</small><button type="button" onClick={() => { setStatus('loading'); setAttempt((value) => value + 1) }}>重新加载</button></>}</div>}
-    {(activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl) && <img key={`${activeUrl}-${attempt}-${privateUrl}`} className={status === 'ready' ? '' : 'preview-image-pending'} src={activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl} alt={`图片预览 ${index + 1}`} onLoad={() => setStatus('ready')} onError={() => setStatus('error')} onClick={(event) => event.stopPropagation()}/>}
+    {(activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl) && <img key={`${activeUrl}-${attempt}-${privateUrl}`} style={{transform: `scale(${zoom})`, transformOrigin: 'center'}} className={status === 'ready' ? '' : 'preview-image-pending'} src={activeUrl?.startsWith('/api/chat-images/') ? privateUrl : activeUrl} alt={`图片预览 ${index + 1}`} onLoad={() => setStatus('ready')} onError={() => setStatus('error')} onClick={(event) => event.stopPropagation()}/>}
     <div className="preview-actions" onClick={(event) => event.stopPropagation()}>
       {canBrowse && <><button className="preview-nav" type="button" onClick={previous} aria-label="上一张">‹</button><span className="preview-counter">{index + 1} / {images.length}</span><button className="preview-nav" type="button" onClick={next} aria-label="下一张">›</button></>}
+      <button type="button" aria-label="缩小图片" onClick={() => setZoom(value=>Math.max(1,value-.25))}>−</button>
+      <button type="button" aria-label="重置图片缩放" onClick={() => setZoom(1)}>{Math.round(zoom*100)}%</button>
+      <button type="button" aria-label="放大图片" onClick={() => setZoom(value=>Math.min(5,value+.25))}>＋</button>
       <button className="preview-download" type="button" disabled={status !== 'ready'} onClick={() => void download()}><Icon name="download" size={17}/>下载</button>
       <button type="button" onClick={onClose}><Icon name="chevron" size={17}/>返回</button>
     </div>

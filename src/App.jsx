@@ -1,3 +1,4 @@
+import useToolZoomLock from './useToolZoomLock.js'
 import { activityFormatDraft } from './activityDraft.js'
 import { skillDisplayName } from './skillDisplayName.js'
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
@@ -1899,6 +1900,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
   const [historyReady, setHistoryReady] = useState(null)
+  useToolZoomLock(active === 'more')
   const [activeConversationId, setActiveConversationId] = useState(null)
   const [workspaceToken, setWorkspaceToken] = useState(0)
   const [filmDeepLink, setFilmDeepLink] = useState(() => localPreviewParams.get('module') === 'film' ? localPreviewParams.get('filmProject') : null)
