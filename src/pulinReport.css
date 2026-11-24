@@ -141,3 +141,9 @@
 
 /* Region names need the full form width at every viewport size. */
 .pulin-report .pr-team-primary-grid{grid-template-columns:minmax(0,1fr)}
+
+/* Header and tabs remain outside the independently scrolling content. */
+.pulin-report{display:flex;flex-direction:column;overflow:hidden;min-height:0;padding-bottom:0}
+.pulin-report>.pr-intro{flex:none;margin-bottom:0;padding-bottom:24px}
+.pr-scroll-content{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-bottom:60px;scrollbar-width:none}
+.pr-scroll-content::-webkit-scrollbar{display:none}
