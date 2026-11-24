@@ -619,7 +619,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'pulin-report' ? 'true' : undefined} className={active === 'more' && moreTool === 'pulin-report' ? 'active' : ''} onClick={() => { onSelectMoreTool('pulin-report'); onClose() }}>朴邻战报制作</button>
             <button type="button" role="menuitem" aria-current={active === 'more' && moreTool === 'qr' ? 'true' : undefined} className={active === 'more' && moreTool === 'qr' ? 'active' : ''} onClick={() => { onSelectMoreTool('qr'); onClose() }}>二维码批量制作</button>
           </div>}
-        </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
+        </div> : <button key={item.id} disabled={item.disabled} className={active === item.id ? 'active' : ''} onClick={() => { if (item.disabled) return; setExpandedMenu(null); onChange(item.id); onClose() }}><Icon name={item.icon} size={17}/><b>{item.label}</b></button>)}
       </nav>
       <button type="button" className="nav-label nav-label-secondary history-heading history-toggle" aria-expanded={pinnedOpen} aria-controls="sidebar-pinned-history" onClick={() => toggleHistory(pinnedOpen, setPinnedOpen, "dgen-sidebar-pinned-open")}><span>置顶</span><Icon name="chevron" size={13}/></button>
       {pinnedOpen && <div id="sidebar-pinned-history" className="conversation-history pinned-history">
