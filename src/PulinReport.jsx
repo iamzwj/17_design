@@ -1,3 +1,4 @@
+import WorkspaceLoading from './WorkspaceLoading.jsx'
 import {maleUniformAccessory} from './pulinUniformRules.js';
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -457,7 +458,7 @@ export default function PulinReport({ user, onLogin, taskId, onSave }) {
   }
   function registerDraft() { onSave({ id: taskId, type: 'pulin-report', title: '朴邻战报制作', messages: [], activate: true }) }
   if (!user) return <section className="pulin-report"><h1>朴邻战报制作</h1><p>登录后即可生成着装照和战报。</p><button onClick={onLogin}>登录</button></section>
-  if (!ready) return <section className="pulin-report" role="status">正在读取战报草稿…</section>
+  if (!ready) return <WorkspaceLoading>正在读取战报草稿…</WorkspaceLoading>
   const anyGenerating = allSeasons.some(season => view.cards[season.id]?.status === 'running')
   const visibleSeasons = view.framing === 'half' ? halfSeasons : seasons
   const generating = visibleSeasons.some(season => view.cards[season.id]?.status === 'running')

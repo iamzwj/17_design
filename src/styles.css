@@ -946,3 +946,10 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 :root .main.has-workspace-title>.film-studio{width:100%;max-width:none;box-sizing:border-box;padding-left:24px;padding-right:24px}
 :root .main.has-workspace-title:has(>.film-studio)>.workspace-title-slot{width:calc(100% - 48px);max-width:none}
 @media(max-width:600px){:root .main.has-workspace-title>.film-studio{padding-left:12px;padding-right:12px}:root .main.has-workspace-title:has(>.film-studio)>.workspace-title-slot{width:calc(100% - 24px)}}
+
+/* Page loading placeholders follow the same column as their eventual content. */
+.workspace-loading{box-sizing:border-box;width:min(850px,calc(100% - 60px));margin:0 auto;min-height:160px;flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;color:var(--dp-secondary);font-size:13px}
+.workspace-loading.is-fluid{width:calc(100% - 48px)}
+.workspace-loading-copy{display:inline-flex;align-items:center;gap:10px}
+.workspace-loading-copy>i{width:14px;height:14px;border:2px solid var(--dp-rule);border-top-color:var(--dp-highlight);border-radius:50%;animation:historySpin .9s linear infinite}
+@media(max-width:600px){.workspace-loading,.workspace-loading.is-fluid{width:calc(100% - 16px);min-height:120px}}
