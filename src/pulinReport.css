@@ -101,3 +101,8 @@
 .pulin-report .pr-report-image{display:block;width:100%;padding:0;border:0;background:transparent;overflow:hidden}
 .pr-report-image img{display:block;width:100%;border-radius:12px}
 .pr-result-pending{display:grid;place-items:center;min-height:340px;aspect-ratio:826/1903;border:1px solid var(--dp-rule);border-radius:12px;background:var(--dp-muted-surface);color:var(--dp-secondary)}
+
+.pr-people{display:grid;grid-template-columns:repeat(var(--pr-photo-limit,8),minmax(0,76px));gap:8px;min-width:0}
+.pr-people .pr-selected-person{width:100%;height:auto;aspect-ratio:76/90;min-width:0}
+.pr-people .pr-selected-person img{width:100%;height:100%}
+@media(max-width:600px){.pr-people{gap:4px}.pulin-report .pr-selected-person button{width:18px;height:18px;top:1px;right:1px;font-size:14px}}
