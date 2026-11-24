@@ -1,0 +1,27 @@
+name: Inspect text task status
+on:
+  push:
+    branches: [test/text-task-inspection]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read task metadata
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 49.235.121.231 >> ~/.ssh/known_hosts
+          ssh ubuntu@49.235.121.231 python3 - <<'PY'
+          import json,time,pathlib,datetime
+          f=pathlib.Path('/home/ubuntu/17_design/data/text-tasks.json')
+          tasks=json.loads(f.read_text())
+          for t in sorted(tasks,key=lambda x:x.get('createdAt',0),reverse=True)[:12]:
+              inp=t.get('input') or {};result=t.get('result') or {};messages=inp.get('messages') or []
+              print('TASK',json.dumps({'id':t.get('id'),'time':datetime.datetime.fromtimestamp(t.get('createdAt',0)/1000,datetime.timezone.utc).isoformat(),'status':t.get('status'),'ageSeconds':round(time.time()-t.get('createdAt',0)/1000),'model':inp.get('textModel') or result.get('model'),'inputChars':sum(len(str(m.get('content',''))) for m in messages),'containsHtmlRequest':any('做成html' in str(m.get('content','')).lower() for m in messages),'resultChars':len(str(result.get('content',''))),'error':t.get('error')} ,ensure_ascii=False))
+          PY
+          ssh ubuntu@49.235.121.231 'journalctl -u 17design --since "2026-11-24 07:00:00 UTC" --no-pager | grep -E "selected-text-model-fallback|text.task|Timeout|timed out" | tail -20' || true
