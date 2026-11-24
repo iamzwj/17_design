@@ -960,3 +960,30 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 .ppt-download-button { background: var(--theme-blue); color: #fff; }
 .ppt-download-button:hover { background: color-mix(in srgb, var(--theme-blue) 80%, #000); }
 .ppt-download-button:focus-visible { outline-color: var(--dp-highlight); }
+
+.text-workspace {
+  --chat-gutter: 30px;
+  --chat-inset: max(var(--chat-gutter), calc((100% - 850px) / 2));
+}
+:root .main .text-workspace .conversation {
+  padding-inline: var(--chat-inset);
+}
+:root .main .text-workspace .text-list {
+  max-width: none;
+}
+.text-list > .error-message {
+  margin-left: 0;
+}
+.text-answer .answer-plain {
+  max-width: 720px;
+}
+:root .main .text-workspace .text-composer-wrap {
+  inset-inline: var(--chat-inset);
+}
+:root .main .text-workspace.activity-workspace .text-composer-wrap {
+  inset-inline: auto;
+  width: calc(100% - 2 * var(--chat-inset));
+}
+@media (max-width: 820px) {
+  .text-workspace { --chat-gutter: 15px; }
+}
