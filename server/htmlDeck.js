@@ -1,3 +1,8 @@
+export function isCurrentWeatherQuery(text) {
+  return /^(?:请问|帮我查(?:一下)?|查(?:一下)?)?\s*(?:今天|现在|当前)?\s*[\p{Script=Han}]{2,12}?(?:市)?(?:今天|现在|当前)?(?:的)?(?:天气|气温)(?:怎么样|如何|多少)?[？?。！!\s]*$/u.test(text.trim())
+    && !/气候|历史|去年|去年同期|明天|后天|未来|周末|\d/.test(text)
+}
+
 export const HTML_PLAN_MARKER = '[HTML演示稿规划]'
 export function htmlPresentationPhase(messages, text, format) {
   const confirmation = /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/

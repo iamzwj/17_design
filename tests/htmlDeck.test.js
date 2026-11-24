@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
 import { extractPresentation, presentationPreview } from '../src/htmlPresentation.js'
 
 const deck = {
@@ -83,4 +83,9 @@ test('ordinary questions stay in chat even after an HTML plan', () => {
   assert.equal(route([plan, { role: 'assistant', content: '天气答复' }], '确认规划').confirmedPlan, null)
   assert.equal(route([], '生成 HTML 演示稿').needsPlan, true)
   assert.equal(route([], '整理一下', 'slides').needsPlan, true)
+})
+
+test('current weather lookup excludes forecasts and historical requests', () => {
+  for (const query of ['深圳天气', '深圳现在的天气如何？', '帮我查一下深圳今天的天气']) assert.equal(isCurrentWeatherQuery(query), true)
+  for (const query of ['深圳明天天气', '深圳去年天气', '深圳天气做成 HTML', '解释天气预报']) assert.equal(isCurrentWeatherQuery(query), false)
 })

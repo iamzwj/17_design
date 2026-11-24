@@ -45,7 +45,7 @@ export function installTextTasks(app, { dataDir, requireAuth, handleCompletion, 
         json(result) {
           if (task.status !== 'running' || expire(task)) return
           if (statusCode >= 400) fail(new Error(result.error))
-          else { task.status = 'succeeded'; task.result = task.skill && !result.contentPlan ? { ...result, skillSnapshot: { id: task.skill.id, title: task.skill.title } } : result }
+          else { task.status = 'succeeded'; task.result = task.skill && result.skillApplied !== false ? { ...result, skillSnapshot: { id: task.skill.id, title: task.skill.title } } : result }
         },
       }, fail)
       if (task.status === 'running') fail(new Error('回复服务未返回结果'))

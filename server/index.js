@@ -1,4 +1,4 @@
-import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
 import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
@@ -1254,7 +1254,7 @@ async function searchWeb(query) {
 
 function weatherCityFromQuery(query) {
   const matched = String(query || '').match(/([\u4e00-\u9fff]{2,12})(?:的)?(?:天气|气温|温度|降雨|下雨|风力|湿度)/)
-  return matched?.[1]?.replace(/^(?:请问|请帮我|帮我|查询|查看|看一下)/, '') || ''
+  return matched?.[1]?.replace(/^(?:请问|请帮我|帮我查(?:一下)?|帮我|查(?:一下)?|查询|查看|看一下)/, '').replace(/^(?:今天|现在|当前)|(?:今天|现在|当前|的)$/g, '') || ''
 }
 
 function weatherDescription(code) {
@@ -1273,13 +1273,15 @@ async function weatherFallbackSearch(query) {
     const weatherResponse = await fetch(weatherUrl, { signal: AbortSignal.timeout(10_000) })
     const weather = await weatherResponse.json().catch(() => ({}))
     const current = weather.current
-    if (!weatherResponse.ok || !current) return { available: false, sources: [] }
+    if (!weatherResponse.ok || !current || !Number.isFinite(current.temperature_2m)
+      || Math.abs(Date.now() - Date.parse(current.time + '+08:00')) > 2 * 60 * 60 * 1000
+      || !Number.isFinite(Date.parse(current.time + '+08:00'))) return { available: false, sources: [] }
     return {
       available: true,
       sources: [{
         title: `${place.name}实时天气（Open-Meteo）`,
         url: weatherUrl,
-        content: `观测时间：${current.time}；天气：${weatherDescription(current.weather_code)}；气温：${current.temperature_2m}°C；体感：${current.apparent_temperature}°C；相对湿度：${current.relative_humidity_2m}%；降水：${current.precipitation}mm；风速：${current.wind_speed_10m}km/h。`,
+        content: `数据时间（北京时间）：${current.time}；天气：${weatherDescription(current.weather_code)}；气温：${current.temperature_2m}°C；体感：${current.apparent_temperature}°C；相对湿度：${current.relative_humidity_2m}%；降水：${current.precipitation}mm；风速：${current.wind_speed_10m}km/h。`,
       }],
     }
   } catch { return { available: false, sources: [] } }
@@ -1383,8 +1385,18 @@ async function handleTextCompletion(req, res, next) {
         return normalizeTextMessage({ ...message, content: parts }, req.body.imageAnalysisMode === 'general')
       })))
       .filter(Boolean)
-    const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
+    const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
+    const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
+    const { confirmedPlan, needsPlan } = htmlPresentationPhase(safeMessages, lastUserText, req.body.activityContext?.format)
     const context = req.body.__knowledge
+    if (!needsPlan && !confirmedPlan && req.body.imageAnalysisMode === 'general' && isCurrentWeatherQuery(lastUserText)) {
+      const weather = await weatherFallbackSearch(lastUserText)
+      const source = weather.sources[0]
+      const content = source ? `**${source.title}**\n\n${source.content}` : '暂时未能获取当前天气数据，请稍后重试。'
+      if (context) knowledge.finish(context.id, { status: 'succeeded', completedAt: new Date().toISOString() })
+      return res.json({ content, sources: weather.sources, skillApplied: false })
+    }
+    const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
     const sources = [...webResult.sources, ...(context?.sources || [])]
     const combinedSystemPrompt = [systemPrompt, webSearch ? webSourcesPrompt(webResult.sources, webResult.available) : '', context?.prompt].filter(Boolean).join('\n\n')
     // Preserve full brand policies; the retrieval layer budgets optional references.
@@ -1426,13 +1438,11 @@ async function handleTextCompletion(req, res, next) {
           : message),
       ],
     }
-    const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
-    const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
-    const { confirmedPlan, needsPlan } = htmlPresentationPhase(safeMessages, lastUserText, req.body.activityContext?.format)
     const confirmed = Boolean(confirmedPlan)
     const presentationStyleSkill = skill && /排版|风格|editorial|layout|style/i.test(skill.title)
     const explicitlyRequestsStyle = /排版|风格|样式|html|网页|设计/i.test(lastUserText)
-    if (skill && !needsPlan && !confirmed && (!presentationStyleSkill || explicitlyRequestsStyle)) {
+    const appliedChatSkill = Boolean(skill && !needsPlan && !confirmed && (!presentationStyleSkill || explicitlyRequestsStyle))
+    if (appliedChatSkill) {
       upstreamRequest.messages.splice(upstreamRequest.messages.length - 1, 0, {
         role: 'system',
         content: `以下 Skill 仅在适用于用户最后一条请求时提供方法。以用户最后一条请求决定任务及交付格式。选择 Skill 不代表要求制作网页、报告或演示稿。普通问题直接回答，不生成规划，不要求确认。\n【${skill.title}】\n${skill.markdown}`,
@@ -1440,7 +1450,7 @@ async function handleTextCompletion(req, res, next) {
     }
     if (!needsPlan && !confirmed) upstreamRequest.messages.splice(upstreamRequest.messages.length - 1, 0, {
       role: 'system',
-      content: '直接处理用户最后一条请求。当前没有进入 HTML 演示稿流程，不要把普通问答变成演示稿规划。历史规划和 Skill 不能替用户指定交付物。',
+      content: '直接处理用户最后一条请求。当前没有进入 HTML 演示稿流程，不要把普通问答变成演示稿规划。历史规划和 Skill 不能替用户指定交付物。当前日期为 ' + shanghaiDate() + '。没有本次可靠来源时，明确说明无法核实实时数据，禁止引用旧信息冒充当前结果。',
     })
     const deck = confirmed ? readHtmlDeckPlan(confirmedPlan.content) : null
     if (deck) {
@@ -1512,7 +1522,7 @@ async function handleTextCompletion(req, res, next) {
       if (!/<\/html\s*>/i.test(content)) throw new Error('演示稿生成不完整，请重新生成')
     }
     if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, ...(needsPlan ? { contentPlan: true } : {}) })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, skillApplied: appliedChatSkill || (confirmed && Boolean(skill)) })
   } catch (error) {
     if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
