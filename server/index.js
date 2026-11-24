@@ -1412,7 +1412,13 @@ async function handleTextCompletion(req, res, next) {
     const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
     const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
     const wantsHtml = /(?:html|网页)/i.test(lastUserText) && /(?:演示|幻灯|提报|汇报|做成|生成|制作)/.test(lastUserText)
-    if (wantsHtml || req.body.activityContext?.format === 'slides') upstreamRequest.max_tokens = 32000
+    const planMarker = '[HTML演示稿规划]'
+    const lastPlan = [...safeMessages].reverse().find(message => message.role === 'assistant' && typeof message.content === 'string' && message.content.startsWith(planMarker))
+    const confirmed = Boolean(lastPlan && /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/.test(lastUserText.trim()))
+    const needsPlan = !confirmed && (wantsHtml || req.body.activityContext?.format === 'slides' || Boolean(lastPlan && !safeMessages.slice(safeMessages.indexOf(lastPlan) + 1).some(message => message.role === 'assistant' && /<\/html\s*>/i.test(String(message.content)))))
+    if (needsPlan) upstreamRequest.messages.push({ role: 'system', content: '本次只生成 HTML 演示稿的文字规划，包含目标、受众、逐页标题和要点、视觉风格。不得输出 HTML 或代码；如用户要求调整则按要求更新规划。结尾提示用户确认。' })
+    if (confirmed) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
+    if (confirmed) upstreamRequest.max_tokens = 32000
     let data = await complete(upstreamRequest)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
@@ -1426,6 +1432,10 @@ async function handleTextCompletion(req, res, next) {
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
+    if (needsPlan) {
+      if (/<html\b/i.test(content)) throw new Error('规划未按文字格式返回，请重试')
+      content = planMarker + '\n' + content
+    }
     // A truncated HTML document cannot be rendered or delivered as a usable file.
     // Continue from the exact cutoff, keeping earlier output in the model context.
     if (/```(?:html)?\s*<!doctype\s+html|```(?:html)?\s*<html\b|<!doctype\s+html|<html\b/i.test(content) && !/<\/html\s*>/i.test(content)) {

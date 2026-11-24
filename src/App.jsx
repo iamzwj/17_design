@@ -1785,7 +1785,7 @@ function TextStudio({ type, conversation, onSave, user }) {
       updateMessages(completedMessages)
       scrollToLatestResult()
       if (type === 'strategy') saveTaskState(completedMessages)
-      if (type === 'strategy' && activityContext.format === 'content') {
+      if (type === 'strategy' && activityContext.format === 'content' && !result.content?.startsWith('[HTML演示稿规划]')) {
         const pages = activityContentPages(result.content)
         if (!pages.length) setAttachmentError('文案已生成，但配图脚本未返回有效结构。请让 AI 补充逐页配图脚本后重试。')
         await Promise.all(pages.map((page, index) => activityImages.create(page.prompt, { ...activityContext, format: 'image', pageTitle: `图文第${index + 1}页 · ${page.title}` }, `${requestId}-page-${index + 1}`)))
@@ -1824,15 +1824,18 @@ function TextStudio({ type, conversation, onSave, user }) {
           {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
+        const presentationPlan = typeof message.content === 'string' && message.content.startsWith('[HTML演示稿规划]')
+        const displayContent = presentationPlan ? message.content.replace(/^\[HTML演示稿规划\]\s*/, '') : message.content
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
           {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
-          {type === 'strategy' ? <ActivityAnswer content={message.content} sources={message.sources}/> : <>
-            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(message.content)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={message.content}/></span> : null}/>}
+          {type === 'strategy' ? <ActivityAnswer content={displayContent} sources={message.sources}/> : <>
+            {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(displayContent)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={message.content}/></span> : null}/>}
             <ActivityHtmlResult content={message.content}/>
             <TextSources sources={message.sources}/>
             {!message.pptTaskId && <MessageCopyButton content={type === 'compliance' ? formatComplianceReport(message.content) : message.content} label={type !== 'compliance'}/>}
           </>}
+          {presentationPlan && index === messages.length - 1 && <div className="ppt-result-actions"><button type="button" className="ppt-download-button" onClick={() => submit('确认规划')} disabled={runningRequests.length > 0}>确认规划，生成 HTML</button><span>也可以直接输入修改意见</span></div>}
           {message.pptTaskId && <div className="ppt-result-actions"><button type="button" className="ppt-download-button" onClick={async () => { try { const base = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''); const response = await fetch(`${base}/api/ppt-tasks/${encodeURIComponent(message.pptTaskId)}/download`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }); if (!response.ok) throw new Error('下载失败，请重新登录后重试'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'editable.pptx'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000) } catch (error) { setAttachmentError(userError(error.message)) } }}><Icon name="file" size={18}/><span>下载 PPT</span></button></div>}
           {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </div>
