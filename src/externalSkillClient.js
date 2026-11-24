@@ -63,7 +63,7 @@ export function installExternal(owner, preview) { return job(owner, `install:${p
   const data = await externalRequest('/installed', { previewId: preview.previewId }, 'POST', token); await writeLocalSkill(owner, data.skill, data.markdown); updateDiscovery(owner, { tab: 'installed', preview: null, notice: '已保存到当前浏览器本地文件区，仅此账号可见。' })
 }) }
 export function redownloadExternal(owner, record) { return job(owner, `download:${record.id}`, async (token) => { const data = await externalRequest(`/${record.id}/download`, undefined, 'GET', token); await writeLocalSkill(owner, data.skill, data.markdown); updateDiscovery(owner, { notice: 'MD 已重新下载并校验，可以继续使用。' }) }) }
-export function uninstallExternal(owner, record) { return job(owner, `remove:${record.id}`, async (token) => { await externalRequest(`/${record.id}`, undefined, 'DELETE', token); await removeLocalSkill(owner, record); updateDiscovery(owner, { notice: '已移除当前账号的安装记录和本机文件。' }) }) }
+export function uninstallExternal(owner, record) { return job(owner, `remove:${record.id}`, async (token) => { await externalRequest(`/${record.id}`, undefined, 'DELETE', token); await removeLocalSkill(owner, record); for (const target of ['chat', 'image', 'video']) { const selectionKey = `dgen-generation-skill:${token.slice(-12) || 'guest'}:${target}`; if (readWorkspaceStorage(selectionKey) === record.id) writeWorkspaceStorage(selectionKey, '') } updateDiscovery(owner, { notice: '已删除当前账号的安装记录和本机文件。' }) }) }
 export async function localSkillText(owner, record) { return readLocalSkill(owner, record) }
 export async function resumeLocalSkillTask(task) {
   if (!task.skillSnapshot?.external || !task.slots?.some((s) => s.status === 'running' && s.phase === 'needs-local-skill')) return
