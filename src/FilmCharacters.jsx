@@ -1,5 +1,6 @@
 import {imageDropProps} from './imageDropUpload.js';
 import { userError } from './userErrors.js'
+import { compressImageForUpload } from './imageUpload.js'
 import { useEffect, useRef, useState } from "react";
 import FilmMedia from "./FilmMedia.jsx";
 import "./filmCharacters.css";
@@ -8,14 +9,15 @@ export function WarehouseIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13H3Zm4 0V11h10v10M7 15h10M7 18h10"/></svg>;
 }
 
-export function readImage(file) {
-  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024)
-    throw Error("请上传 10 MB 以内的 PNG、JPEG 或 WebP 图片");
+export async function readImage(file) {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
+    throw Error("请上传 PNG、JPEG 或 WebP 图片");
+  const prepared = await compressImageForUpload(file);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = () => reject(Error("图片读取失败，请重试"));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(prepared);
   });
 }
 
@@ -38,6 +40,8 @@ export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [editing, setEditing] = useState(null);
+  const [name, setName] = useState("");
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -77,7 +81,24 @@ export function CharacterLibrary({ request, onClose, onSelect, roleName }) {
     <div className="film-character-grid">
       {items?.map((item) => <article key={item.id}>
         {item.source === "brand" ? <img src={item.file} alt={item.name} loading="lazy"/> : <FilmMedia characterId={item.id}/>}
-        <b>{item.name}</b>
+        {editing === item.id ? <form className="film-character-rename" onSubmit={(event) => {
+          event.preventDefault();
+          perform(async () => {
+            const result = await request("/characters/" + item.id + "/rename", { name });
+            setData(current => ({ ...current, characters: current.characters.map(character => character.id === item.id ? result.character : character) }));
+            setEditing(null);
+          });
+        }}><input aria-label="角色名称" maxLength={100} value={name} onChange={event => setName(event.target.value)} autoFocus/><div><button type="submit" disabled={busy || !name.trim()}>保存</button><button type="button" disabled={busy} onClick={() => setEditing(null)}>取消</button></div></form> : <b>{item.name}</b>}
+        {section === "personal" && editing !== item.id && <div className="film-character-manage">
+          <button type="button" disabled={busy} onClick={() => { setName(item.name); setEditing(item.id); }}>重命名</button>
+          <button type="button" disabled={busy} onClick={() => {
+            if (!window.confirm('删除角色「' + item.name + '」？')) return;
+            perform(async () => {
+              await request("/characters/" + item.id + "/delete", {});
+              setData(current => ({ ...current, characters: current.characters.filter(character => character.id !== item.id) }));
+            });
+          }}>删除</button>
+        </div>}
         {onSelect && <button disabled={busy} onClick={() => perform(() => onSelect(item))}>使用此形象</button>}
       </article>)}
     </div>

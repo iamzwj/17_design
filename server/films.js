@@ -202,6 +202,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       throw Error("图片无效或无法解码");
     }
   }
+  const characterImagePath = (req, entry) => path.join(library(req), entry.id + (entry.imageFormat === "webp" ? ".webp" : ".png"));
   app.get("/api/films/characters", requireAuth, (req, res) => {
     const dir = library(req);
     const ids = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
@@ -216,7 +217,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
     const entry = readCharacter(req, req.params.characterId);
     if (!entry) return res.sendStatus(404);
     res.setHeader("Cache-Control", "private, no-store");
-    res.sendFile(path.resolve(library(req), entry.id + ".png"));
+    res.sendFile(path.resolve(characterImagePath(req, entry)));
   });
   app.get("/api/films/history", requireAuth, (req, res) => {
     const projects = fs.readdirSync(root).map(read)
@@ -302,20 +303,41 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       if (existing) return res.json({ character: existing });
       bytes = fs.readFileSync(path.join(root, project.id, file));
       name = project.characters?.find((c) => c.id === asset.sourceId)?.name || asset.name;
-      const character = saveCharacter(req, { id, name, origin: source }, bytes);
+      const character = await saveCharacter(req, { id, name, origin: source }, bytes);
       return res.json({ character });
     }
     bytes = await uploadedImage(req.body.image);
-    res.json({ character: saveCharacter(req, { id, name }, bytes) });
+    res.json({ character: await saveCharacter(req, { id, name }, bytes) });
   }));
-  function saveCharacter(req, { id, name, origin }, bytes) {
-    const character = { id, name: name || "未命名角色", origin, createdAt: Date.now() };
+  async function saveCharacter(req, { id, name, origin }, bytes) {
+    const compressed = await sharp(bytes, { limitInputPixels: 40_000_000 }).rotate().resize(2048, 2048, { fit: "inside", withoutEnlargement: true }).webp({ quality: 92, effort: 4 }).toBuffer();
+    const character = { id, name: name || "未命名角色", origin, imageFormat: "webp", createdAt: Date.now() };
     const dir = library(req);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, id + ".png"), bytes);
-    fs.writeFileSync(path.join(dir, id + ".json"), JSON.stringify(character));
+    fs.writeFileSync(path.join(dir, id + ".webp"), compressed, { mode: 0o600 });
+    try { fs.writeFileSync(path.join(dir, id + ".json"), JSON.stringify(character), { mode: 0o600 }); }
+    catch (error) { fs.rmSync(path.join(dir, id + ".webp"), { force: true }); throw error; }
     return character;
   }
+  app.post("/api/films/characters/:characterId/rename", requireAuth, commandRoute((req, res) => {
+    const entry = readCharacter(req, req.params.characterId);
+    if (!entry) return res.status(404).json({ error: "角色不存在" });
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name || name.length > 100) return res.status(400).json({ error: "请输入 1 到 100 字的角色名称" });
+    const updated = { ...entry, name };
+    const file = path.join(library(req), entry.id + ".json");
+    const temp = file + "." + randomUUID() + ".tmp";
+    try { fs.writeFileSync(temp, JSON.stringify(updated), { mode: 0o600 }); fs.renameSync(temp, file); }
+    finally { fs.rmSync(temp, { force: true }); }
+    res.json({ character: updated });
+  }));
+  app.post("/api/films/characters/:characterId/delete", requireAuth, commandRoute((req, res) => {
+    const entry = readCharacter(req, req.params.characterId);
+    if (!entry) return res.status(404).json({ error: "角色不存在" });
+    fs.unlinkSync(path.join(library(req), entry.id + ".json"));
+    fs.rmSync(characterImagePath(req, entry), { force: true });
+    res.json({ ok: true });
+  }));
   app.post("/api/films/:id/character-reference", requireAuth, commandRoute(async (req, res) => {
     const { id, characterId, source, image } = req.body;
     let bytes;
@@ -329,7 +351,7 @@ export function installFilms(app, { dataDir, requireAuth, worker = true, prepare
       name = entry?.name;
     } else {
       const entry = readCharacter(req, characterId);
-      if (entry) bytes = fs.readFileSync(path.join(library(req), entry.id + ".png"));
+      if (entry) bytes = await sharp(fs.readFileSync(characterImagePath(req, entry))).png().toBuffer();
       name = entry?.name;
     }
     const p = owned(req, res);

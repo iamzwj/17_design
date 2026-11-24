@@ -31,3 +31,8 @@
 .fw-current-tasks:empty { display: none; }
 .fw-current-tasks { padding: 14px 18px; border-bottom: 1px solid var(--fw-border); background: var(--fw-soft); color: var(--fw-accent); display: grid; gap: 8px; }
 .film-studio .fw-current-tasks button { text-align: left; color: var(--fw-accent); border: 1px solid var(--fw-accent); background: var(--dp-panel); padding: 9px 12px; line-height: 1.6; }
+
+.film-character-manage,.film-character-rename div{display:flex;gap:6px;flex-wrap:wrap}
+.film-character-manage button,.film-character-rename button{flex:1;min-width:0;padding:6px 8px}
+.film-character-rename{display:grid;gap:6px;min-width:0}
+.film-character-rename input{width:100%;min-width:0;box-sizing:border-box;padding:7px;border:1px solid var(--dp-rule);border-radius:6px;background:var(--dp-panel);color:var(--ink)}
