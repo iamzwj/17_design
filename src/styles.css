@@ -179,8 +179,9 @@ button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2p
 .user-message { position: relative; align-self: flex-end; max-width: 72%; padding: 12px 16px; border-radius: 18px 18px 5px 18px; background: color-mix(in srgb, var(--user-message-fill, #1685ff) 90%, transparent); border: 1px solid transparent; color: #fff; font-size: var(--dp-typography-small); line-height: 1.6; white-space: pre-wrap; }
 .user-message-content { min-height: 22px; }
 .message-copy-button { position: absolute; z-index: 1; width: 27px; height: 27px; padding: 0; border: 1px solid rgba(22,25,31,.1); border-radius: 8px; display: grid; place-items: center; background: var(--dp-panel); color: var(--muted); box-shadow: 0 3px 10px rgba(22,25,31,.08); cursor: pointer; opacity: 0; transform: translateY(3px); pointer-events: none; transition: opacity .16s ease, transform .16s ease, color .16s ease, background .16s ease; }
-.user-message .message-copy-button { top: 8px; right: -35px; }
-.user-message::after { content: ''; position: absolute; top: 0; left: 100%; width: 35px; height: 43px; }
+.user-message-actions { display: flex; justify-content: flex-end; margin-top: -6px; }
+.user-message-actions .message-copy-button { position: static; }
+.user-message-group:hover .message-copy-button, .user-message-group:focus-within .message-copy-button { opacity: 1; transform: translateY(0); pointer-events: auto; }
 .assistant-turn { position: relative; }
 .assistant-turn .message-copy-button { top: 0; right: -35px; }
 .user-message:hover .message-copy-button, .user-message:focus-within .message-copy-button, .assistant-turn:hover .message-copy-button, .assistant-turn:focus-within .message-copy-button { opacity: 1; transform: translateY(0); pointer-events: auto; }

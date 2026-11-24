@@ -1331,8 +1331,8 @@ function UserMessage({ content, images = [], files = [], messageRef, onPreview, 
     {(content || files.length > 0) && <div className="user-message">
       {files.length > 0 && <div className="text-attachment-list">{files.map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/>{file.name}</span>)}</div>}
       {content && <div className="user-message-content">{content}</div>}
-      {content && <MessageCopyButton content={content}/>}
     </div>}
+    {content && <div className="user-message-actions"><MessageCopyButton content={content}/></div>}
   </div>
 }
 
