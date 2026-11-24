@@ -20,7 +20,7 @@ jobs:
           original='''请制作完整离线HTML演示稿，内容为某企业AI工作台提案，10页，涵盖背景、团队、现状、需求、困难、方案、功能、推广、成本和收益。每页包含约120字说明，逐页有不同的完整内容，设计统一、可用方向键和按钮翻页，所有CSS和JavaScript内嵌，直接输出完整HTML。'''
           messages=[{'role':'system','content':'输出完整自包含HTML，不得使用外部资源。'},{'role':'user','content':original}]
           def complete(messages):
-              body={'model':'gemini-4-carbon','stream':True,'messages':messages}
+              body={'model':'gemini-4-carbon','stream':True,'max_tokens':12000,'messages':messages}
               req=urllib.request.Request(base+'/v1/chat/completions',json.dumps(body).encode(),{'Authorization':'Bearer '+key,'Content-Type':'application/json'})
               t=time.monotonic()
               try:
