@@ -129,3 +129,12 @@
 @media (max-width: 600px) {
   .pr-report-form .pr-team-primary, .pr-report-form .pr-team-score { padding: 16px; }
 }
+
+/* Section headings, field labels and entered values are distinct levels. */
+.pulin-report .pr-team-heading{margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--dp-rule)}
+.pulin-report .pr-team-heading h3{font-size:17px;font-weight:600;line-height:1.4;color:var(--dp-ink)}
+.pulin-report .pr-team-fields label{display:grid;gap:8px;font-size:12px;font-weight:400;line-height:1.5;color:var(--dp-secondary)}
+.pulin-report .pr-team-fields input{margin:0;min-height:44px;padding:11px 12px;font-size:14px;font-weight:400;line-height:1.5;color:var(--dp-ink);border-color:var(--dp-rule);border-radius:9px;background:transparent}
+.pulin-report .pr-team-fields input::placeholder{color:var(--dp-secondary);opacity:.7}
+.pulin-report .pr-team-fields input:focus-visible{outline:2px solid var(--dp-color-accent);outline-offset:2px}
+.pulin-report .pr-team-composition{margin-bottom:20px}
