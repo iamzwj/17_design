@@ -1432,7 +1432,7 @@ async function handleTextCompletion(req, res, next) {
     const lastPlan = [...safeMessages].reverse().find(message => message.role === 'assistant' && typeof message.content === 'string' && message.content.startsWith(HTML_PLAN_MARKER))
     const confirmed = Boolean(lastPlan && /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/.test(lastUserText.trim()))
     const needsPlan = !confirmed && (wantsHtml || req.body.activityContext?.format === 'slides' || Boolean(lastPlan && !safeMessages.slice(safeMessages.indexOf(lastPlan) + 1).some(message => message.role === 'assistant' && /<\/html\s*>/i.test(String(message.content)))))
-    if (skill && !needsPlan) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
+    if (skill && !needsPlan && !confirmed) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     const deck = confirmed ? readHtmlDeckPlan(lastPlan.content) : null
     if (deck) {
       const request = {
@@ -1440,7 +1440,7 @@ async function handleTextCompletion(req, res, next) {
         messages: [
           ...upstreamRequest.messages,
           { role: 'system', content: HTML_DESIGN_PROMPT },
-          { role: 'user', content: '请为以下已确认的文案设计版式：\n' + JSON.stringify(deck.slides.map(({ section, title, takeaway, points }) => ({ section, title, takeaway, points }))) },
+          { role: 'user', content: JSON.stringify({ slides: deck.slides.map(({ section, title, takeaway, points }) => ({ section, title, takeaway, points })), ...(skill ? { styleSkill: { title: skill.title, guidelines: skill.markdown } } : {}) }) },
         ],
       }
       let data = await complete(request)
@@ -1459,6 +1459,7 @@ async function handleTextCompletion(req, res, next) {
       upstreamRequest.max_tokens = 32000
     }
     if (confirmed) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
+    if (confirmed && skill) upstreamRequest.messages.push({ role: 'user', content: `仅在最终 HTML 排版应用所选 Skill，保留已确认文案。\n【${skill.title}】\n${skill.markdown}` })
     if (confirmed) upstreamRequest.max_tokens = 32000
     let data = await complete(upstreamRequest)
     let content = completionText(data)

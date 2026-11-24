@@ -4,9 +4,9 @@ const DATA_MARKER = '<!-- dgen-deck:'
 export const HTML_PLAN_PROMPT = `只编写待确认的逐页文案。返回一个 JSON 对象：{"version":2,"audience":"受众","goal":"目标","slides":[{"section":"原文所属章节","title":"本页标题","takeaway":"本页核心判断","points":["可直接展示的论据、事实或细节"]}]}。
 先通读原文，梳理章节顺序、主次和论证关系，再按原文脉络分页。覆盖全部实质性章节和信息，保留支撑论据、对比关系、因果、专名、日期、数字、单位、统计口径及限定条件。长段落分到多页，不为控制页数删减有效信息，不自行补结论或数字。用章节、页标题、核心判断、支撑要点区分层级。输出可直接上屏的完整文案，不写占位提示或笼统提纲。输出前逐章节核对遗漏和顺序。当前阶段只处理内容，禁止输出风格、布局、配色或视觉建议。修改时返回完整的新 JSON。`
 
-export const HTML_DESIGN_PROMPT = `用户已确认逐页文案。只设计排版，返回 JSON：{"theme":"editorial 或 standard","design":{"name":"风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular"},"slides":[{"layout":"cover","focus":"从该页要点原样摘录，可省略"}]}。
+export const HTML_DESIGN_PROMPT = `用户已确认逐页文案。只设计排版，返回 JSON：{"theme":"editorial 或 standard","design":{"name":"风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular","frame":"none","backdrop":"none"},"slides":[{"layout":"cover","focus":"从该页要点原样摘录，可省略"}]}。
 slides 条数及顺序必须与已确认稿完全一致。禁止返回或修改任何文案字段。
-选定 Skill 时，从其规范提取具体配色、标题字体类型、对齐、边框和留白，并写入 design，禁止用通用主题覆盖 Skill 明确规定的视觉需求。没有明确规定时按风格做合理选择。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。
+选定 Skill 时，从其规范提取具体配色、标题字体类型、对齐、边框和留白，并写入 design，禁止用通用主题覆盖 Skill 明确规定的视觉需求。没有明确规定时按风格做合理选择。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。Skill 要求虚线选区及四角手柄时设置 frame 为 selection，要求轮廓波纹时设置 backdrop 为 contour，其余情况分别用 none。
 layout 允许 cover、split、columns、metrics、comparison、timeline、summary。根据本页内容关系和 Skill 的构图要求选择。杂志风使用 serif、rules、airy，开篇采用有视觉焦点的 cover，图文论证用 split，指标用 metrics，对照用 comparison。避免全稿反复使用等宽双栏。focus 必须来自 points，不得概括或补造数字。不要输出 HTML 或 CSS。`
 
 const layouts = new Set(['cover', 'split', 'columns', 'metrics', 'comparison', 'timeline', 'summary'])
@@ -25,6 +25,8 @@ const colorKeys = ['paper', 'ink', 'accent', 'secondary']
 
 function validDesign(design) {
   return design && typeof design.name === 'string' && design.name.trim().length > 0
+    && (design.frame === undefined || ['selection', 'none'].includes(design.frame))
+    && (design.backdrop === undefined || ['contour', 'none'].includes(design.backdrop))
     && colorKeys.every(key => typeof design[key] === 'string' && /^#[0-9a-f]{6}$/i.test(design[key]))
     && Object.entries(choices).every(([key, options]) => options.includes(design[key]))
 }
@@ -112,8 +114,9 @@ function renderPoint(point, emphasis) {
   return escapeHtml(point.slice(0, index)) + `<strong class="focus">${escapeHtml(emphasis)}</strong>` + escapeHtml(point.slice(index + emphasis.length))
 }
 
-function slideContent(slide) {
-  const title = `<h1>${escapeHtml(slide.title)}</h1>` + (slide.takeaway ? `<p class="takeaway">${escapeHtml(slide.takeaway)}</p>` : '')
+function slideContent(slide, selectionFrame) {
+  const handles = selectionFrame ? '<span class="handles" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''
+  const title = `<h1>${escapeHtml(slide.title)}${handles}</h1>` + (slide.takeaway ? `<p class="takeaway">${escapeHtml(slide.takeaway)}</p>` : '')
   const pointMarkup = point => {
     const number = point.match(/[<>≤≥约±~-]?\s*\d[\d,.]*(?:%|倍|\s*(?:万元|亿元|个月|人|张|元))?/u)?.[0]?.trim()
     const focus = slide.focus && point.includes(slide.focus) ? slide.focus : slide.layout === 'metrics' && !/[<>][a-z/]/i.test(point) ? number : ''
@@ -136,10 +139,12 @@ export function renderHtmlDeck(deck) {
   const ink = readableColor(design.ink, design.paper, luminance(design.paper) > .179 ? '#000000' : '#FFFFFF')
   const accent = readableColor(design.accent, design.paper, ink)
   const secondary = readableColor(design.secondary, design.paper, ink)
+  const selectionFrame = design.frame === 'selection'
+  const contour = design.backdrop === 'contour'
   const pages = deck.slides.map((slide, index) => `
 <section class="slide ${slide.layout}" ${index ? 'hidden' : ''} aria-label="第 ${index + 1} 页">
   ${slide.section || index ? `<header>${escapeHtml(slide.section || deck.slides[0].title)}</header>` : ''}
-  <div class="content">${slideContent(slide)}</div>
+  <div class="content">${slideContent(slide, selectionFrame && slide.layout === 'cover')}</div>
 </section>`).join('')
   return `<!doctype html>
 <html lang="zh-CN">
@@ -180,6 +185,16 @@ export function renderHtmlDeck(deck) {
   .plain header { border-color: transparent }
   .timeline ol { border-inline-start: 2px solid var(--rule); margin-inline-start: .25em; padding-inline-start: 1.6em }
   .timeline li::marker { color: var(--accent); font-weight: 650 }
+  .contour .cover { background-image: repeating-radial-gradient(ellipse at 50% -70%, transparent 0 24px, #ffffff80 25px 26px), linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--paper)), var(--paper) 85%); }
+  .selection .cover h1 { position: relative; border: 1px dashed var(--ink); padding: .22em .35em; font-size: clamp(28px, 5.8cqw, 78px) }
+  .handles i { position: absolute; width: 11px; aspect-ratio: 1; background: var(--paper); border: 1px solid var(--ink) }
+  .handles i:nth-child(odd) { left: -6px }
+  .handles i:nth-child(even) { right: -6px }
+  .handles i:nth-child(-n+2) { top: -6px }
+  .handles i:nth-child(n+3) { bottom: -6px }
+  .selection.center .cover .content:has(.lead) { display: block; width: min(100%, 29em); margin-inline: auto; text-align: center }
+  .selection.center .cover .lead { border: 0; padding: 0; margin-top: .8em; color: var(--accent) }
+  .selection.center .cover ul { list-style: none; padding: 0 }
   nav { display: flex; justify-content: center; align-items: center; gap: 12px; color: #e7e9ee }
   button { font: inherit; color: inherit; background: #252731; border: 1px solid #666a7b; border-radius: 6px; padding: 5px 12px }
   button:disabled { opacity: .5 }
@@ -191,7 +206,7 @@ export function renderHtmlDeck(deck) {
   }
 </style>
 </head>
-<body class="${deck.theme} heading-${design.heading} ${design.align} ${design.surface} ${design.density} ${design.weight}">
+<body class="${deck.theme} heading-${design.heading} ${design.align} ${design.surface} ${design.density} ${design.weight}${selectionFrame ? ' selection' : ''}${contour ? ' contour' : ''}">
 <main>
   <div class="stage">${pages}</div>
   <nav aria-label="演示稿翻页">
