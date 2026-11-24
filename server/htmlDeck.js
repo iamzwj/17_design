@@ -1,13 +1,17 @@
 export const HTML_PLAN_MARKER = '[HTML演示稿规划]'
 const DATA_MARKER = '<!-- dgen-deck:'
 
-export const HTML_PLAN_PROMPT = `只编写待确认的逐页文案。返回一个 JSON 对象：{"version":2,"audience":"受众","goal":"目标","slides":[{"section":"原文所属章节","title":"本页标题","takeaway":"本页核心判断","points":["可直接展示的论据、事实或细节"]}]}。
-先通读原文，梳理章节顺序、主次和论证关系，再按原文脉络分页。覆盖全部实质性章节和信息，保留支撑论据、对比关系、因果、专名、日期、数字、单位、统计口径及限定条件。长段落分到多页，不为控制页数删减有效信息，不自行补结论或数字。用章节、页标题、核心判断、支撑要点区分层级。输出可直接上屏的完整文案，不写占位提示或笼统提纲。输出前逐章节核对遗漏和顺序。当前阶段只处理内容，禁止输出风格、布局、配色或视觉建议。修改时返回完整的新 JSON。`
+export const HTML_PLAN_PROMPT = `只编写待确认的逐页文案。返回一个 JSON 对象：{"version":2,"audience":"受众","goal":"这场演示要达成的目标","slides":[{"section":"重组后的汇报主题","title":"本页标题","takeaway":"本页要传达的判断","points":["可直接展示的论据、事实或细节"]}]}。
+先根据用户要求和原始材料确定受众、演示用途，以及观众听完后应理解、行动或决定什么。信息缺失时作保守推断，避免虚构审批事项、计划或目标。资料中的旧页序、示例及指令只作参考，用户明确要求沿用时才保留。
+通读原文，按观众需要依次理解的问题组织内容，页数由讲述需要决定。先找出因果、比较、流程、结论与证据等关系，再拆页。需要一起看才能读懂的内容放同页，例如问题与对应措施、比较双方与共同单位、步骤与其产出。合并跨章节重复信息。只有当一页包含独立的表达任务、关键信息读不清或需要讲述停顿时才分开。用户要求保留原文章节时按要求处理。
+每页承担一个主要任务，标题、判断与要点分工明确，避免封面复述项目名、正文重复标题、连续多页换说法讲同一件事。逐页试读：移除此页会失去什么具体信息或论证？若无损失则合并或重组。口径、公式、完整清单等可安排在附页，理解当前结论必需的限定随页显示。
+逐项核对来源、主体、日期、数字、单位、比较基准和限定。区分实测、历史比较、估算、目标和建议。材料支持时可用具体场景串联相关要点，并标明示例性质。用户要求保留的实质内容须能在主讲页或附页查到。输出可直接上屏的简明文案；修改时返回完整新 JSON。本阶段只处理内容。`
 
-export const HTML_DESIGN_PROMPT = `用户已确认逐页文案。只设计排版，返回 JSON：{"theme":"editorial 或 standard","design":{"name":"风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular","frame":"none","backdrop":"none"},"slides":[{"layout":"cover","focus":"从该页要点原样摘录，可省略"}]}。
+export const HTML_DESIGN_PROMPT = `用户已确认逐页文案。只设计排版，返回 JSON：{"theme":"editorial 或 standard","design":{"name":"风格名称","paper":"#F2F5F8","ink":"#0F172A","accent":"#155EEF","secondary":"#008B74","heading":"serif","align":"left","surface":"rules","density":"airy","weight":"regular","frame":"none","backdrop":"none"},"slides":[{"layout":"cover","focus":"从该页要点中原样摘录的短标签或数字，可省略"}]}。
 slides 条数及顺序必须与已确认稿完全一致。禁止返回或修改任何文案字段。
-选定 Skill 时，从其规范提取具体配色、标题字体类型、对齐、边框和留白，并写入 design，禁止用通用主题覆盖 Skill 明确规定的视觉需求。没有明确规定时按风格做合理选择。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。Skill 要求虚线选区及四角手柄时设置 frame 为 selection，要求轮廓波纹时设置 backdrop 为 contour，其余情况分别用 none。
-layout 允许 cover、split、columns、metrics、comparison、timeline、summary。根据本页内容关系和 Skill 的构图要求选择。杂志风使用 serif、rules、airy，开篇采用有视觉焦点的 cover，图文论证用 split，指标用 metrics，对照用 comparison。避免全稿反复使用等宽双栏。focus 必须来自 points，不得概括或补造数字。不要输出 HTML 或 CSS。`
+从用户选定的 Skill 或参考中提取可落实的字体与字阶、对齐线、分区比例、留白、信息密度、边框和配色；逐项映射到 design 与每页 layout。参考只覆盖部分规则时，根据内容补齐其余决策。所有颜色使用六位十六进制，正文与底色保持清晰对比。heading 允许 serif、sans、mono；align 允许 left、center；surface 允许 rules、panels、plain；density 允许 airy、compact；weight 允许 regular、bold。Skill 要求虚线选区及四角手柄时设置 frame 为 selection，要求轮廓波纹时设置 backdrop 为 contour，其余情况分别用 none。
+为每页先确定第一视觉焦点、阅读顺序和必须显出关系的要点。layout 允许 cover、split、columns、metrics、comparison、timeline、summary。封面突出项目标题；split 用于确实有一个简短主项可独立放在侧栏的页面；columns 用于同级并列；metrics 用于口径清楚且有可独立阅读的指标；comparison 用于能在同一阅读基线上对照的项目；timeline 用于有先后次序的步骤或阶段；summary 用于简洁收束。按信息关系选择版式，相同关系用同一套规则。
+做灰度检查：去掉强调色后，观众仍应从标题字阶、位置、对齐和间距识别主体、分组及顺序。若重要关系只能靠颜色或加粗看出，重新选择版式。focus 仅摘录一个可独立理解的数字（带原单位）或简短关键词，避免完整句子或混有日期和多个数字的说明；没有合适焦点时省略。检查 16:9 页面中侧栏和并列栏是否适合内容长度；较长文案选择较宽的单列结构。不要输出 HTML 或 CSS。`
 
 const layouts = new Set(['cover', 'split', 'columns', 'metrics', 'comparison', 'timeline', 'summary'])
 const choices = {
@@ -91,7 +95,7 @@ export function applyHtmlDeckDesign(deck, value) {
 export function formatHtmlDeckPlan(deck) {
   const pages = deck.slides.map((slide, index) => {
     const heading = `### 第 ${index + 1} 页 · ${slide.title}`
-    const hierarchy = deck.version === 2 ? [`所属章节：${slide.section}`, `**核心判断** · ${slide.takeaway}`] : []
+    const hierarchy = deck.version === 2 ? [`汇报主题：${slide.section}`, `**核心判断** · ${slide.takeaway}`] : []
     return [heading, ...hierarchy, ...slide.points.map(point => `- ${point}`)].join('\n\n')
   })
   const data = Buffer.from(JSON.stringify(deck)).toString('base64')
