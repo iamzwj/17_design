@@ -172,3 +172,9 @@
 .pulin-report .pr-intro>p{font-size:13px}
 .pulin-report .pr-tabs{margin-top:12px}
 .pulin-report .pr-tabs button{padding:8px 18px}
+
+/* The entire workspace below the fixed intro is the scroll hit area. */
+:root .main.has-workspace-title>.pulin-report{width:100%;max-width:none;padding:0;flex:1 1 0;min-height:0;overflow:hidden}
+:root .main.has-workspace-title>.pulin-report>.pr-intro{width:min(850px,calc(100% - 60px));margin:0 auto;box-sizing:border-box}
+.pr-scroll-content{width:100%;box-sizing:border-box;padding-left:max(30px,calc((100% - 850px)/2));padding-right:max(30px,calc((100% - 850px)/2));flex:1 1 0;min-height:0}
+@media(max-width:600px){:root .main.has-workspace-title>.pulin-report>.pr-intro{width:calc(100% - 16px)}.pr-scroll-content{padding-left:8px;padding-right:8px}}
