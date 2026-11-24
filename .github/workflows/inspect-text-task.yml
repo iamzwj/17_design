@@ -24,4 +24,4 @@ jobs:
               inp=t.get('input') or {};result=t.get('result') or {};messages=inp.get('messages') or []
               print('TASK',json.dumps({'id':t.get('id'),'time':datetime.datetime.fromtimestamp(t.get('createdAt',0)/1000,datetime.timezone.utc).isoformat(),'status':t.get('status'),'ageSeconds':round(time.time()-t.get('createdAt',0)/1000),'model':inp.get('textModel') or result.get('model'),'inputChars':sum(len(str(m.get('content',''))) for m in messages),'containsHtmlRequest':any('做成html' in str(m.get('content','')).lower() for m in messages),'resultChars':len(str(result.get('content',''))),'error':t.get('error')} ,ensure_ascii=False))
           PY
-          ssh ubuntu@49.235.121.231 'journalctl -u 17design --since "2026-11-24 07:00:00 UTC" --no-pager | grep -E "selected-text-model-fallback|text.task|Timeout|timed out" | tail -20' || true
+          ssh ubuntu@49.235.121.231 'journalctl -u 17design --since "2026-11-24 07:00:00 UTC" --no-pager | grep -A 5 -B 1 "selected-text-model-fallback" | tail -30' || true
