@@ -5,7 +5,6 @@ import { skillDisplayName } from './skillDisplayName.js'
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
-import { PRESENTATION_INSTRUCTIONS } from './htmlPresentation.js'
 import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
@@ -1779,7 +1778,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         const text = [item.content, imageInstruction, ...textFiles.map((file) => `\n\n--- 文件：${file.name} ---\n${file.content}`)].join('')
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
-      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS, PRESENTATION_INSTRUCTIONS].filter(Boolean).join('\n\n')
+      const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS].filter(Boolean).join('\n\n')
       const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' ? { imageAnalysisMode: 'general' } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)

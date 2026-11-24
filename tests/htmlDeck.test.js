@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyHtmlDeckDesign, formatHtmlDeckPlan, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from '../server/htmlDeck.js'
 import { extractPresentation, presentationPreview } from '../src/htmlPresentation.js'
 
 const deck = {
@@ -70,4 +70,17 @@ test('content planning preserves original hierarchy and styling cannot rewrite a
   assert.match(html, /现状[\s\S]*试点积累[\s\S]*需求已验证[\s\S]*投入与局限[\s\S]*统计仅含 API 成本/)
   assert.doesNotMatch(html, /被篡改|无关数字/)
   assert.equal(applyHtmlDeckDesign(plan, JSON.stringify({ ...style, slides: [style.slides[0]] })), null)
+})
+
+test('ordinary questions stay in chat even after an HTML plan', () => {
+  const plan = { role: 'assistant', content: formatHtmlDeckPlan(deck) }
+  const route = (history, content, format) => htmlPresentationPhase([...history, { role: 'user', content }], content, format)
+  assert.equal(route([], '深圳天气').needsPlan, false)
+  assert.equal(route([plan], '深圳天气').needsPlan, false)
+  assert.equal(route([plan], '修改第三页').needsPlan, true)
+  assert.equal(route([plan], '确认规划').confirmedPlan, plan)
+  assert.equal(route([plan, { role: 'user', content: '确认规划' }], '确认规划').confirmedPlan, plan)
+  assert.equal(route([plan, { role: 'assistant', content: '天气答复' }], '确认规划').confirmedPlan, null)
+  assert.equal(route([], '生成 HTML 演示稿').needsPlan, true)
+  assert.equal(route([], '整理一下', 'slides').needsPlan, true)
 })

@@ -1,4 +1,4 @@
-import { applyHtmlDeckDesign, formatHtmlDeckPlan, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
 import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
@@ -1428,12 +1428,21 @@ async function handleTextCompletion(req, res, next) {
     }
     const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
     const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
-    const wantsHtml = /(?:html|网页)/i.test(lastUserText) && /(?:演示|幻灯|提报|汇报|做成|生成|制作)/.test(lastUserText)
-    const lastPlan = [...safeMessages].reverse().find(message => message.role === 'assistant' && typeof message.content === 'string' && message.content.startsWith(HTML_PLAN_MARKER))
-    const confirmed = Boolean(lastPlan && /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/.test(lastUserText.trim()))
-    const needsPlan = !confirmed && (wantsHtml || req.body.activityContext?.format === 'slides' || Boolean(lastPlan && !safeMessages.slice(safeMessages.indexOf(lastPlan) + 1).some(message => message.role === 'assistant' && /<\/html\s*>/i.test(String(message.content)))))
-    if (skill && !needsPlan && !confirmed) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
-    const deck = confirmed ? readHtmlDeckPlan(lastPlan.content) : null
+    const { confirmedPlan, needsPlan } = htmlPresentationPhase(safeMessages, lastUserText, req.body.activityContext?.format)
+    const confirmed = Boolean(confirmedPlan)
+    const presentationStyleSkill = skill && /排版|风格|editorial|layout|style/i.test(skill.title)
+    const explicitlyRequestsStyle = /排版|风格|样式|html|网页|设计/i.test(lastUserText)
+    if (skill && !needsPlan && !confirmed && (!presentationStyleSkill || explicitlyRequestsStyle)) {
+      upstreamRequest.messages.splice(upstreamRequest.messages.length - 1, 0, {
+        role: 'system',
+        content: `以下 Skill 仅在适用于用户最后一条请求时提供方法。以用户最后一条请求决定任务及交付格式。选择 Skill 不代表要求制作网页、报告或演示稿。普通问题直接回答，不生成规划，不要求确认。\n【${skill.title}】\n${skill.markdown}`,
+      })
+    }
+    if (!needsPlan && !confirmed) upstreamRequest.messages.splice(upstreamRequest.messages.length - 1, 0, {
+      role: 'system',
+      content: '直接处理用户最后一条请求。当前没有进入 HTML 演示稿流程，不要把普通问答变成演示稿规划。历史规划和 Skill 不能替用户指定交付物。',
+    })
+    const deck = confirmed ? readHtmlDeckPlan(confirmedPlan.content) : null
     if (deck) {
       const request = {
         ...upstreamRequest,
