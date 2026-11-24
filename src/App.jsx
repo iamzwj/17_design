@@ -1485,7 +1485,7 @@ function TextStudio({ type, conversation, onSave, user }) {
   const [messages, setMessages] = useState(() => runtime.messages.current)
   const [activityContext, setActivityContext] = useState(() => { try { return { ...DEFAULT_ACTIVITY, ...(conversation?.activityContext || JSON.parse(readWorkspaceStorage(`dgen-activity:${getAuthToken().slice(-12)}:${conversation?.id || "new"}`)) || {}) } } catch { return DEFAULT_ACTIVITY } })
   const [textModels, setTextModels] = useState(null)
-  const [selectedTextModel, setSelectedTextModel] = useState('gemini-4-carbon')
+  const [selectedTextModel, setSelectedTextModel] = useState('gemini-3.7-flash')
   const usesTextModel = type !== 'compliance' && !(type === 'strategy' && activityContext.format === 'image')
   useEffect(() => {
     if (!usesTextModel) return

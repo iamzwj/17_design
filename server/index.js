@@ -609,7 +609,7 @@ async function saveVideoReference(source) {
 }
 
 async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
-  const maizi = endpoint === '/v1/chat/completions' && body?.model === 'gemini-4-carbon'
+  const maizi = endpoint === '/v1/chat/completions' && ['gemini-4-carbon', 'gemini-3.7-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash'].includes(body?.model)
   const base = maizi ? (process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai').replace(/\/$/, '') : apiBase
   const apiKey = maizi ? process.env.MAIZI_API_KEY : getApiKey()
   if (!apiKey) throw new Error('MaiziAI API Key 未配置')
@@ -1399,6 +1399,18 @@ async function handleTextCompletion(req, res, next) {
       } catch (error) {
         if ([400, 413].includes(error.status)) throw error
         console.error('selected-text-model-fallback', { model: selectedModel, status: error.status, message: error.message })
+        {
+          for (const model of ['gemini-3.7-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash'].filter(model => model !== selectedModel)) {
+            try {
+              const result = await requestTextUpstream('/v1/chat/completions', { ...body, model }, 90_000)
+              if (result?.error || !completionText(result)?.trim()) throw new Error(result?.error?.message || '语言模型未返回结果')
+              return { ...result, model: result.model || model }
+            } catch (fallbackError) {
+              if ([400, 413].includes(fallbackError.status)) throw fallbackError
+              console.error('selected-text-model-fallback', { model, status: fallbackError.status, message: fallbackError.message })
+            }
+          }
+        }
         return requestLanguageModel(requestTextUpstream, body)
       }
     }
