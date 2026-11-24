@@ -1409,6 +1409,10 @@ async function handleTextCompletion(req, res, next) {
         ...safeMessages,
       ],
     }
+    const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
+    const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
+    const wantsHtml = /(?:html|网页)/i.test(lastUserText) && /(?:演示|幻灯|提报|汇报|做成|生成|制作)/.test(lastUserText)
+    if (wantsHtml || req.body.activityContext?.format === 'slides') upstreamRequest.max_tokens = 16000
     let data = await complete(upstreamRequest)
     let content = completionText(data)
     // Some compatible reasoning endpoints occasionally return an empty content
