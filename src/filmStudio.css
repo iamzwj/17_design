@@ -545,3 +545,5 @@
 .film-analysis-progress progress::-webkit-progress-bar { background: var(--dp-selected); border-radius: 999px; }
 .film-analysis-progress progress::-webkit-progress-value { background: var(--dp-highlight); border-radius: 999px; transition: width .5s ease; }
 .film-analysis-progress progress::-moz-progress-bar { background: var(--dp-highlight); border-radius: 999px; }
+.film-restoring{width:100%;min-height:240px;display:grid;place-content:center;text-align:center;box-sizing:border-box;color:var(--dp-secondary)}
+.film-restoring h2{font-size:14px;font-weight:400;margin:0}

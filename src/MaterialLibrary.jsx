@@ -1,3 +1,4 @@
+import WorkspaceLoading from './WorkspaceLoading.jsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import './materialLibrary.css'
@@ -113,7 +114,7 @@ export default function MaterialLibrary({ user, onLogin }) {
       {downloadError && <p role="alert">{downloadError}</p>}
       {!user ? <div className="material-empty"><b>登录后查看素材库</b><button type="button" className="primary-button" onClick={onLogin}>登录</button></div>
         : loadError ? <p role="alert">{loadError}</p>
-        : !catalog ? <p role="status">正在加载素材…</p>
+        : !catalog ? <WorkspaceLoading>正在加载素材…</WorkspaceLoading>
         : <div className="material-library-layout">
         <aside className="material-categories" aria-label="素材类别">
           <div className="material-category-heading"><b>素材类别</b><span>{ipCount + logoCount}</span></div>
