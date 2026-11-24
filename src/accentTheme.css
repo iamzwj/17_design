@@ -113,3 +113,9 @@
   font-size: calc(var(--dp-typography-label) - 1px);
   font-weight: 400;
 }
+
+/* Dark UI accents must share the readable highlight, not the light-mode ink. */
+:root[data-theme='dark'][data-accent='orange']{--dp-color-accent:#ffae70;--theme-blue:#ffae70;--theme-blue-rgb:255 174 112}
+:root[data-theme='dark'][data-accent='green']{--dp-color-accent:#5bd590;--theme-blue:#5bd590;--theme-blue-rgb:91 213 144}
+:root[data-theme='dark'][data-accent='yellow']{--dp-color-accent:#ffd66b;--theme-blue:#ffd66b;--theme-blue-rgb:255 214 107}
+:root[data-theme='dark'][data-accent='pink']{--dp-color-accent:#ff9bc9;--theme-blue:#ff9bc9;--theme-blue-rgb:255 155 201}
