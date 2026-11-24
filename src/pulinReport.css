@@ -147,3 +147,28 @@
 .pulin-report>.pr-intro{flex:none;margin-bottom:0;padding-bottom:24px}
 .pr-scroll-content{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-bottom:60px;scrollbar-width:none}
 .pr-scroll-content::-webkit-scrollbar{display:none}
+
+/* Compact report form without shrinking the text or changing field order. */
+.pulin-report .pr-report-section{padding:18px}
+.pulin-report .pr-report-form .pr-mode{margin-bottom:12px}
+.pulin-report .pr-report-form .pr-mode button{padding:7px 16px;font-size:13px}
+.pulin-report .pr-report-form .pr-team-upload{min-height:64px;padding:12px 16px;margin-bottom:8px;gap:12px}
+.pulin-report .pr-team-upload-icon{width:34px;height:34px;font-size:24px}
+.pulin-report .pr-report-form .pr-team-upload strong{font-size:14px}
+.pulin-report .pr-report-form .pr-team-upload small{font-size:12px}
+.pulin-report .pr-report-form .pr-photo-help{font-size:11px;line-height:1.45}
+.pulin-report .pr-report-form .pr-team-fields{margin-top:14px;gap:12px}
+.pulin-report .pr-report-form .pr-team-primary,.pulin-report .pr-report-form .pr-team-score{padding:14px}
+.pulin-report .pr-report-form .pr-team-heading{margin-bottom:12px;padding-bottom:9px}
+.pulin-report .pr-report-form .pr-team-heading h3{font-size:15px}
+.pulin-report .pr-report-form .pr-team-fields label{gap:5px}
+.pulin-report .pr-report-form .pr-team-fields input{min-height:34px;height:34px;padding:6px 10px;font-size:14px;border-radius:7px}
+.pulin-report .pr-report-form .pr-team-primary-grid{gap:10px}
+.pulin-report .pr-report-form .pr-team-composition{margin-bottom:12px}
+.pulin-report .pr-report-form .pr-team-metrics{gap:10px 12px}
+.pulin-report .pr-report-form .pr-report-submit{margin-top:14px}
+.pulin-report .pr-report-form .pr-report-submit button{padding:8px 16px;font-size:14px}
+.pulin-report>.pr-intro{padding-bottom:14px}
+.pulin-report .pr-intro>p{font-size:13px}
+.pulin-report .pr-tabs{margin-top:12px}
+.pulin-report .pr-tabs button{padding:8px 18px}
