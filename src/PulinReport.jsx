@@ -213,14 +213,11 @@ async function runTeamPipeline(owner) {
   active.add(runtime)
   try {
     let job = taskStates.get(owner).teamPipeline
-    const response = await fetch('/pulin-collar-reference.png')
-    if (!response.ok) throw new Error('品牌BI领花参考图加载失败')
-    const collar = await fileToDataUrl(await response.blob())
     const outcomes = await Promise.allSettled(job.sources.map(async (_, index) => {
       if (job.people[index]?.url) return
       let taskId=job.people[index]?.taskId
       if (!taskId) {
-        const result=await createConversationImageTask({prompt:'只生成参考图中这一个人的春秋全身形象，严格保留五官、年龄、肤色、发型及身份，不新增人物。人物参考只用于身份，服装统一按朴邻品牌BI：深色合身西装、白衬衫、黑皮鞋。按既有男女规则识别，不按发型长短判断。男性金色行政领带，下半段和尖端藏在扣好的西装内；女性严格使用第二张BI参考图的金棕色领花，顶部圆扣、两片交叠向下尖角，禁止领带、蝴蝶结和丝巾。完整头到鞋，纯浅灰背景，不加文字。',images:[await compressReference(job.sources[index]),collar],model:'gpt-image-2.5',resolution:'1k',quality:'high',aspectRatio:'9:16',knowledge:{}})
+        const result=await createConversationImageTask({prompt:'严格以参考图还原这一个人，不换脸、不美化、不调整五官，保留独有脸型、眼睛、鼻子、嘴、年龄、肤色和发型。仅更换为春秋着装：深色合身西装、白衬衫、黑皮鞋。默认佩戴橙色行政长领带，领带必须有清晰细长的垂直形状，禁止领花、蝴蝶结和短飘带；只有长发且女性特征明显时才佩戴橙色领花，无法确定时一律使用橙色领带。完整头到鞋，浅灰背景，不加文字。',images:[await compressReference(job.sources[index])],model:'gpt-image-2.5',resolution:'1k',quality:'high',aspectRatio:'9:16',knowledge:{}})
         taskId=result.task.id
         job.people[index]={taskId}
         update({teamPipeline:structuredClone(job)},owner)
@@ -234,8 +231,8 @@ async function runTeamPipeline(owner) {
     if (failed) throw failed.reason
 
     if (!job.groupTaskId) {
-      const images=await Promise.all(job.people.map((person,index)=>teamIdentityReference(person.url,index)))
-      const result=await createConversationImageTask({prompt:`参考图是已经按品牌BI生成的${images.length}个人物。仅调整站位与姿态组合为合照，恰好${images.length}人，不新增、不重复，逐一保持编号对应的面貌和已生成的春秋制服、领带及领花，不再次换装或设计配饰。部分站立部分坐在黑色椅子，头到鞋完整。纯#00ff00背景，无阴影无文字。`,images,model:'gpt-image-2.5',resolution:'2k',quality:'high',aspectRatio:'1:1',knowledge:{},removeBackground:true,backgroundColor:'#00ff00'})
+      const images=await Promise.all(job.people.map((person,index)=>teamIdentityReference(job.sources[index],index)))
+      const result=await createConversationImageTask({prompt:`每张参考板是对应人物的原始照片与面部细节，逐一严格对照原图保留不同人物的真实身份，不得混合、平均或复制五官。为各人生成春秋着装后组合为合照，恰好${images.length}人，不新增、不重复，逐一保持编号对应的真实面貌、年龄、肤色与发型；深色西装白衬衫，默认每人佩戴清晰细长的橙色行政领带，只有长发且女性特征明显的人使用橙色领花，不确定一律领带。禁止把领带画成领花或蝴蝶结。部分站立部分坐在黑色椅子，头到鞋完整。纯#00ff00背景，无阴影无文字。`,images,model:'gpt-image-2.5',resolution:'2k',quality:'high',aspectRatio:'1:1',knowledge:{},removeBackground:true,backgroundColor:'#00ff00'})
       job.groupTaskId=result.task.id
       update({teamPipeline:structuredClone(job),reportTaskId:result.task.id},owner)
     }
