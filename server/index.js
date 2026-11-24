@@ -1422,6 +1422,18 @@ async function handleTextCompletion(req, res, next) {
       content = completionText(data)
     }
     if (!content) throw new Error('接口未返回有效文本')
+    // A truncated HTML document cannot be rendered or delivered as a usable file.
+    // Continue from the exact cutoff, keeping earlier output in the model context.
+    if (/```(?:html)?\s*<!doctype\s+html|```(?:html)?\s*<html\b|<!doctype\s+html|<html\b/i.test(content) && !/<\/html\s*>/i.test(content)) {
+      const partial = content.replace(/^\s*```(?:html)?\s*/i, '')
+      const continuation = await complete({
+        ...upstreamRequest,
+        messages: [...upstreamRequest.messages, { role: 'assistant', content: partial }, { role: 'user', content: '上次 HTML 被截断。只从最后一个字符继续输出剩余内容，不要重复开头，不要使用 Markdown 代码围栏，确保完整闭合 HTML。' }],
+      })
+      const tail = completionText(continuation).replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '')
+      content = partial + tail
+      if (!/<\/html\s*>/i.test(content)) throw new Error('演示稿生成不完整，请重新生成')
+    }
     if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
     res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
   } catch (error) {
