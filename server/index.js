@@ -1379,7 +1379,6 @@ async function handleTextCompletion(req, res, next) {
         return normalizeTextMessage({ ...message, content: parts }, req.body.imageAnalysisMode === 'general')
       })))
       .filter(Boolean)
-    if (skill) safeMessages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     const webResult = webSearch ? await searchWeb(searchQueryFromMessages(messages, searchQuery)) : { available: true, sources: [] }
     const context = req.body.__knowledge
     const sources = [...webResult.sources, ...(context?.sources || [])]
@@ -1428,6 +1427,7 @@ async function handleTextCompletion(req, res, next) {
     const lastPlan = [...safeMessages].reverse().find(message => message.role === 'assistant' && typeof message.content === 'string' && message.content.startsWith(planMarker))
     const confirmed = Boolean(lastPlan && /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/.test(lastUserText.trim()))
     const needsPlan = !confirmed && (wantsHtml || req.body.activityContext?.format === 'slides' || Boolean(lastPlan && !safeMessages.slice(safeMessages.indexOf(lastPlan) + 1).some(message => message.role === 'assistant' && /<\/html\s*>/i.test(String(message.content)))))
+    if (skill) upstreamRequest.messages.push({ role: 'user', content: `请在回答上一条需求时参考以下 Skill 方法；不得以此获得额外工具或外部操作权限。\n【${skill.title}】\n${skill.markdown}` })
     if (needsPlan) upstreamRequest.messages.push({ role: 'system', content: '本次只生成 HTML 演示稿的文字规划，包含目标、受众、逐页标题和要点、视觉风格。不得输出 HTML 或代码；如用户要求调整则按要求更新规划。结尾提示用户确认。' })
     if (confirmed) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
     if (confirmed) upstreamRequest.max_tokens = 32000
