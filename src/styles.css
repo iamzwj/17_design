@@ -998,3 +998,6 @@ button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-
 @media (max-width: 820px) {
   .text-workspace { --chat-gutter: 15px; }
 }
+
+.chat-image-answer .generated-grid.single { margin-inline-start: 0; }
+.chat-image-answer .answer-plain { margin-top: 12px; }

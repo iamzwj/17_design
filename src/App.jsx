@@ -1,3 +1,4 @@
+import { isChatImageRequest } from './chatImageIntent.js'
 import WorkspaceLoading from './WorkspaceLoading.jsx'
 import useToolZoomLock from './useToolZoomLock.js'
 import { activityFormatDraft } from './activityDraft.js'
@@ -1474,7 +1475,7 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
   </div>
 }
 
-function TextStudio({ type, conversation, onSave, user }) {
+function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
   const brandScope = scopedBrand(user)
   const chatSkill = useGenerationSkill('chat')
   const [chatKnowledge, setChatKnowledge] = useState({})
@@ -1548,9 +1549,15 @@ function TextStudio({ type, conversation, onSave, user }) {
     return [...activeRequestsRef.current.entries()].map(([id, task]) => ({ id, ...(typeof task === 'string' ? { startedAt: task } : task) }))
   }
 
-  function startTask(id, startedAt, taskContext) {
-    activeRequestsRef.current.set(id, { startedAt, ...(taskContext ? { activityContext: taskContext } : {}) })
+  function startTask(id, startedAt, details = {}) {
+    activeRequestsRef.current.set(id, { startedAt, ...details })
     setRunningRequests(activeTaskSnapshot())
+  }
+
+  async function imageReply(id) {
+    const result = await waitForConversationImageTask(id)
+    if (result.user) onUserUpdate(result.user)
+    return { urls: result.urls, content: '如果需要更专业的生图体验请用左侧功能区的【图片创作】功能' }
   }
 
   function finishTask(id) {
@@ -1588,10 +1595,10 @@ function TextStudio({ type, conversation, onSave, user }) {
     if (conversation.status === 'running' && activeRequestsRef.current.size === 0 && conversation.textTasks?.length) {
       updateMessages(validTextMessages(conversation.messages))
       for (const task of conversation.textTasks) {
-        startTask(task.id, task.startedAt, task.activityContext)
-        void waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id).then(async (result) => {
+        startTask(task.id, task.startedAt, { activityContext: task.activityContext, imageTaskId: task.imageTaskId })
+        void (task.imageTaskId ? imageReply(task.imageTaskId) : waitForTextTask(type === 'compliance' ? 'compliance' : 'text', task.id)).then(async (result) => {
           if (!messagesRef.current.some((message) => message.taskId === task.id)) {
-            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
+            updateMessages([...messagesRef.current, { role: 'assistant', taskId: task.id, complianceBrand: conversation.brand, content: result.content, urls: result.urls, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(task.startedAt).getTime() }])
           }
           if (type === 'strategy' && (task.activityContext || conversation.activityContext)?.format === 'content') {
             const pages = activityContentPages(result.content)
@@ -1703,13 +1710,19 @@ function TextStudio({ type, conversation, onSave, user }) {
       setAttachmentError('请先选择品牌，再发送审核')
       return
     }
-    if (usesTextModel && !textModel) return
     if (type === 'chat' && chatSkill.id && !chatSkill.selected) { setAttachmentError('所选 Skill 不可用，请重新选择或重新下载'); return }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
     const content = submittedInput.trim() || (submittedAttachments.length ? (type === 'chat' ? '请分析我上传的图片。' : '请审核我上传的文件。') : '')
     const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
+    const generateImage = type === 'chat' && isChatImageRequest(content)
+    if (!generateImage && usesTextModel && !textModel) return
+    const imageSkill = generateImage && chatSkill.selected?.targets?.includes('image') ? chatSkill.selected : null
+    if (generateImage && submittedAttachments.length + (imageSkill?.referenceCount || 0) > 4) {
+      setAttachmentError('生图最多使用 4 张参考图（含 Skill 自带参考图）')
+      return
+    }
     if (type === 'strategy' && activityContext.format === 'image') {
       setInput(''); setAttachmentError('')
       const activityImageId = crypto.randomUUID()
@@ -1722,7 +1735,7 @@ function TextStudio({ type, conversation, onSave, user }) {
     }
     const startedAt = new Date().toISOString()
     const requestId = crypto.randomUUID()
-    startTask(requestId, startedAt, type === 'strategy' ? { ...activityContext } : undefined)
+    startTask(requestId, startedAt, type === 'strategy' ? { activityContext: { ...activityContext } } : generateImage ? { generatingImage: true } : undefined)
     // Clear the composer at submission time so a second task can be composed
     // while this request uploads and is being reviewed.
     setInput(''); setAttachments([]); setAttachmentError('')
@@ -1768,6 +1781,26 @@ function TextStudio({ type, conversation, onSave, user }) {
       updateMessages(nextMessages)
       scrollToLatestResult()
       saveTaskState(nextMessages, { activate: true })
+      if (generateImage) {
+        const created = await createConversationImageTask({
+          prompt: content, clientRequestId: requestId,
+          images: uploadedAttachments.filter(file => file.kind === 'image').map(file => file.src),
+          aspectRatio: normalizedImageRatio(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, content.match(/(?:^|[^\d])(\d{1,2}[:：]\d{1,2})(?!\d)/u)?.[1]?.replace('：', ':') || '1:1'),
+          model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION,
+          quality: imageQualityForModel(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY),
+          ...(imageSkill ? { skillId: imageSkill.id } : {}),
+        })
+        if (created.user) onUserUpdate(created.user)
+        startTask(requestId, startedAt, { generatingImage: true, imageTaskId: created.task.id })
+        saveTaskState(messagesRef.current)
+        const reply = await imageReply(created.task.id)
+        if (!messagesRef.current.some(message => message.taskId === requestId)) {
+          updateMessages([...messagesRef.current, { role: 'assistant', taskId: requestId, ...reply, elapsedMs: Date.now() - new Date(startedAt).getTime() }])
+        }
+        scrollToLatestResult()
+        completed = true
+        return
+      }
       const requestMessages = nextMessages.filter((item) => item.role !== 'error').map((item) => {
         if (item.role !== 'user' || !item.attachments?.length) return { role: item.role, content: item.content }
         const textFiles = item.attachments.filter((file) => file.kind === 'text')
@@ -1824,6 +1857,10 @@ function TextStudio({ type, conversation, onSave, user }) {
           {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </Fragment>
         if (message.role === 'error') return <div ref={messageRef} className="error-message" key={index}><span><b>请求失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
+        if (message.urls?.length) return <div ref={messageRef} className="text-answer chat-image-answer" key={message.taskId || index}>
+          <ImageMessage message={message} onPreview={setPreviewImage}/>
+          <AnswerText content={message.content}/>
+        </div>
         const presentationPlan = typeof message.content === 'string' && message.content.startsWith('[HTML演示稿规划]')
         const displayContent = presentationPlan ? message.content.replace(/^\[HTML演示稿规划\]\s*/, '').replace(/<!-- dgen-deck:[A-Za-z0-9+/=]+ -->\s*$/, '').trimEnd() : message.content
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
@@ -1840,7 +1877,7 @@ function TextStudio({ type, conversation, onSave, user }) {
           {imageRecords && <ActivityImageResults records={imageRecords} onRetry={activityImages.retry}/>}
         </div>
       })}
-        {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
+        {runningRequests.map((task, index) => <div ref={index === runningRequests.length - 1 ? focusRef : null} key={task.id}><LiveTaskStatus startedAt={task.startedAt} label={task.generatingImage || task.imageTaskId ? '正在生成图片' : type === 'compliance' ? (uploadingImages ? '正在上传图片' : '正在审核图片与内容') : '思考中'}/></div>)}
         {activityImageGroups?.unmatched.length > 0 && <ActivityImageResults records={activityImageGroups.unmatched} onRetry={activityImages.retry}/>}
         <div className="conversation-tail-space" aria-hidden="true"/>
       </div>}
@@ -1855,7 +1892,7 @@ function TextStudio({ type, conversation, onSave, user }) {
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
         </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null && type === 'chat' ? 'Gemini 3.7 Flash' : textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text" localSelection={type === 'chat' ? chatKnowledge : undefined} onLocalSelectionChange={setChatKnowledge}/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
-        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
+        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel && !(type === 'chat' && isChatImageRequest(input))) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
   </section>
@@ -2247,7 +2284,7 @@ export default function App() {
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken} onUserUpdate={setUser}/>
-      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation}/>
+      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation} onUserUpdate={setUser}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
