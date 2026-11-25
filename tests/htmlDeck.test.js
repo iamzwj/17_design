@@ -97,3 +97,9 @@ test('current weather lookup excludes forecasts and historical requests', () => 
   for (const query of ['深圳天气', '深圳现在的天气如何？', '帮我查一下深圳今天的天气']) assert.equal(isCurrentWeatherQuery(query), true)
   for (const query of ['深圳明天天气', '深圳去年天气', '深圳天气做成 HTML', '解释天气预报']) assert.equal(isCurrentWeatherQuery(query), false)
 })
+
+test('selected Skills can generate HTML directly without redirecting ordinary questions', () => {
+  assert.equal(htmlPresentationPhase([], '把完整文案做成 HTML', undefined, true).directHtml, true)
+  assert.equal(htmlPresentationPhase([], '制作 HTML 汇报，先给提纲', undefined, true).needsPlan, true)
+  assert.equal(htmlPresentationPhase([], '这个 HTML 为什么难看', undefined, true).directHtml, undefined)
+})

@@ -4,16 +4,20 @@ export function isCurrentWeatherQuery(text) {
 }
 
 export const HTML_PLAN_MARKER = '[HTML演示稿规划]'
-export function htmlPresentationPhase(messages, text, format) {
+export function htmlPresentationPhase(messages, text, format, withSkill = false) {
   const confirmation = /^(?:确认(?:规划|方案)?|按(?:此|这个|以上)(?:规划|方案)?(?:生成|制作)?|确认生成|开始生成)[。！!\s]*$/
   const previous = messages.slice(0, -1).findLast(message => message.role !== 'user' || !confirmation.test(String(message.content).trim()))
   const pending = previous?.role === 'assistant' && typeof previous.content === 'string'
     && previous.content.startsWith(HTML_PLAN_MARKER) ? previous : null
   if (pending && confirmation.test(text.trim())) {
-    return { confirmedPlan: pending, needsPlan: false }
+    return { confirmedPlan: pending, needsPlan: false, ...(withSkill && { directHtml: true }) }
   }
   const requested = /(?:html|网页)/i.test(text) && /(?:演示|幻灯|提报|汇报|做成|生成|制作)/.test(text)
   const revision = pending && /(?:修改|调整|重排|删掉|删除|补充|增加|改成|改为).{0,30}(?:规划|提纲|第.{1,4}页|标题|要点)|(?:第.{1,4}页|规划|提纲).{0,30}(?:改|调整|删|加)/.test(text)
+  if (withSkill && !revision && !/先.{0,10}(规划|提纲|大纲)|只.{0,6}(规划|提纲|大纲)/.test(text)
+    && (requested || format === 'slides' || /html/i.test(text) && /生成|制作|做成|转成|输出|导出/.test(text))) {
+    return { confirmedPlan: null, needsPlan: false, directHtml: true }
+  }
   return { confirmedPlan: null, needsPlan: Boolean(requested || format === 'slides' || revision) }
 }
 
