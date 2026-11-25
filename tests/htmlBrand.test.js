@@ -17,3 +17,17 @@ test('embeds one official logo and leaves the Skill background and typography al
   assert.doesNotMatch(output, /DGEN_BRAND_LOGO/)
   assert.doesNotMatch(embedHtmlBrand(html, {}), /DGEN_BRAND_LOGO|<img/)
 })
+
+test('the default deck applies the brand to its accent and cover without changing the background', async () => {
+  const { renderHtmlDeck } = await import('../server/htmlDeck.js')
+  const html = renderHtmlDeck({
+    theme: 'standard',
+    slides: [
+      { title: '封面', layout: 'cover', points: ['简介'] },
+      { title: '详情', layout: 'summary', points: ['数据'] },
+    ],
+  }, { accent: '#182060', logo: 'data:image/png;base64,AAAA' })
+  assert.match(html, /--paper: #FFFFFF; --ink: #0F172A; --accent: #182060/)
+  assert.match(html, /class="slide cover"[\s\S]*<img[^>]+src="data:image\/png;base64,AAAA"[\s\S]*<h1>封面<\/h1>/)
+  assert.equal(html.match(/<img/g).length, 1)
+})

@@ -10,7 +10,7 @@ export function htmlBrandAccent(sources) {
 
 export function htmlBrandPrompt(brand) {
   return [
-    '保留所选 Skill 的版式、字体、背景、正文色和组件，只应用以下品牌强调色及正式 Logo。',
+    '保留当前版式、字体、背景、正文色和组件，只应用以下品牌强调色及正式 Logo。',
     brand.accent && `仅把高亮和强调色设为 var(--dgen-brand-accent, ${brand.accent})，保持其余配色及字面内容。`,
     brand.logo && `在封面或顶部页眉留出空间，在合适位置输出一次 ${logoMarker}，系统会放入正式 Logo；不要自行绘制、替换或猜测 Logo。`,
     !brand.logo && '当前没有正式 Logo 素材，省略 Logo。',
