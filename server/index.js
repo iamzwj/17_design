@@ -1,5 +1,5 @@
 import { embedHtmlBrand, htmlBrandPrompt } from './htmlBrand.js'
-import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
+import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_ATTRIBUTION_RULE, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
 import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
@@ -1498,6 +1498,7 @@ async function handleTextCompletion(req, res, next) {
     if (htmlBrand) upstreamRequest.messages.push({ role: 'system', content: htmlBrandPrompt(htmlBrand) })
     if (confirmed && !directHtml) upstreamRequest.messages.push({ role: 'system', content: '用户已确认此前的 HTML 演示稿规划。严格按规划生成完整的自包含 HTML 演示稿，使用内联样式和脚本，支持翻页，不依赖外部资源。' })
     if (confirmed && skill && !directHtml) upstreamRequest.messages.push({ role: 'user', content: `仅在最终 HTML 排版应用所选 Skill，保留已确认文案。\n【${skill.title}】\n${skill.markdown}` })
+    if (confirmed || directHtml) upstreamRequest.messages.push({ role: 'system', content: HTML_ATTRIBUTION_RULE })
     if (confirmed || directHtml) upstreamRequest.max_tokens = 32000
     let data = await complete(upstreamRequest)
     let content = completionText(data)
