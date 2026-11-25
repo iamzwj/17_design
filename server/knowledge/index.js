@@ -1,3 +1,4 @@
+import { htmlBrandAccent } from '../htmlBrand.js'
 import { seedMarketingDocuments, prepareActivityContext } from './marketing.js'
 import { documentProgress } from './progress.js'
 import { processPagePool, VISION_LIMITS } from './pagePool.js'
@@ -539,6 +540,19 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       return chunksFor(v.id).filter((c) => c.enabled && colorPattern.test(c.text)).map((c) => ({ documentId: d.id, versionId: v.id, version: v.number, chunkId: c.id, title: v.title, source: c.source, text: c.text, kind: v.kind, fixedColor: true }))
     })
   }
+  async function htmlBrand(user, brandId) {
+    const brand = access(user, brandId)
+    const accent = htmlBrandAccent(colorSources(brand.id))
+    const logos = generationAssets(brand).filter(asset => asset.kind === 'logo')
+    const asset = logos.find(logo => logo.variant === '彩色') || logos.find(logo => !logo.variant)
+    if (!asset) return { accent, logo: null }
+    const file = asset.origin === 'document'
+      ? path.join(originals, get('versions', asset.versionId).file)
+      : path.join(materialDir, path.basename(MATERIAL_ASSETS.find(item => item.id === asset.materialId).file))
+    const buffer = await sharp(file).rotate().resize(480, 160, { fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+      .catch(() => null)
+    return { accent, logo: buffer ? `data:image/png;base64,${buffer.toString('base64')}` : null }
+  }
   function generationAssets(brand) {
     const docs = all('documents').filter((d) => d.brandId === brand.id && !d.deletedAt && d.publishedVersionId).flatMap((d) => {
       const v = get('versions', d.publishedVersionId)
@@ -716,5 +730,5 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (!v?.file) fail('此资料没有原文件', 404)
     res.set('Cache-Control', 'private, no-store').download(path.join(originals, v.file), v.originalName)
   })
-  return { prepare, finish, compose, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining || visionScheduling || activeVision.size) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
+  return { prepare, finish, compose, htmlBrand, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining || visionScheduling || activeVision.size) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
 }
