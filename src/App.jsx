@@ -1477,6 +1477,7 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
 function TextStudio({ type, conversation, onSave, user }) {
   const brandScope = scopedBrand(user)
   const chatSkill = useGenerationSkill('chat')
+  const [chatKnowledge, setChatKnowledge] = useState({})
   const copy = MODULE_COPY[type]
   const conversationId = useRef(conversation?.id || crypto.randomUUID())
   const activityImages = useActivityImages(conversationId.current, type === 'strategy')
@@ -1779,7 +1780,7 @@ function TextStudio({ type, conversation, onSave, user }) {
         return { role: 'user', content: [{ type: 'text', text }, ...imageFiles.map((file) => ({ type: 'image_url', image_url: { url: file.src, detail: 'high' } }))] }
       })
       const systemPrompt = type === 'compliance' ? buildComplianceSystemPrompt(brand, copy.systemPrompt) : [copy.systemPrompt, type === 'strategy' && ACTIVITY_ANSWER_INSTRUCTIONS].filter(Boolean).join('\n\n')
-      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' ? { imageAnalysisMode: 'general' } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
+      const result = await generatePersistentText(type === 'compliance' ? 'compliance' : 'text', requestId, { messages: requestMessages, systemPrompt, webSearch, ...(usesTextModel ? { textModel } : {}), ...(type === 'chat' ? { imageAnalysisMode: 'general', knowledge: chatKnowledge } : {}), ...(type === 'chat' && chatSkill.id ? { skillId: chatSkill.id } : {}), searchQuery: type === 'strategy' ? [content, activityContext.identity, activityContext.scope, activityContext.campaign].filter(Boolean).join(' ') : content, ...(type === 'strategy' ? { activityContext, knowledge: {} } : {}), ...(type === 'compliance' ? { complianceBrand: brand } : {}) })
       const completedMessages = messagesRef.current.some((message) => message.taskId === requestId) ? messagesRef.current : [...messagesRef.current, { role: 'assistant', taskId: requestId, content: result.content, pptTaskId: result.pptTaskId, skillSnapshot: result.skillSnapshot, sources: result.sources || [], elapsedMs: Date.now() - new Date(startedAt).getTime() }]
       updateMessages(completedMessages)
       scrollToLatestResult()
@@ -1853,7 +1854,7 @@ function TextStudio({ type, conversation, onSave, user }) {
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text"/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
+        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null && type === 'chat' ? 'Gemini 3.7 Flash' : textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text" localSelection={type === 'chat' ? chatKnowledge : undefined} onLocalSelectionChange={setChatKnowledge}/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
         <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
@@ -2045,7 +2046,8 @@ export default function App() {
     })
   }
 
-  function startNew(type = active) {
+  function startNew(type = active, { keepSkill = false } = {}) {
+    if (type === 'chat' && !keepSkill) selectGenerationSkill('chat', '')
     const url = new URL(window.location.href); url.searchParams.delete('conversation'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setFilmDeepLink(null)
     setArchiveViewOpen(false)
@@ -2232,9 +2234,9 @@ export default function App() {
       : active === 'content'
         ? <FestivalPosterStudio key={workspaceToken} onUserUpdate={setUser} onRequireLogin={() => openLogin('content')}/>
       : active === 'skills'
-        ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+        ? <SkillLibrary key={user?.id || 'guest'} user={user} onLogin={() => openLogin('skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target, { keepSkill: true }) }}/>
       : active === 'discover-skills'
-        ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target) }}/>
+        ? <DiscoverSkills key={user?.id || 'guest'} user={user} onLogin={() => openLogin('discover-skills')} onUse={(skill, target) => { selectGenerationSkill(target, skill.id); if (target === 'image') { setImageMode('waterfall'); writeWorkspaceStorage(IMAGE_MODE_KEY, 'waterfall') }; startNew(target, { keepSkill: true }) }}/>
       : active === 'marketing-activities'
         ? <KnowledgeStudio key={`marketing:${user?.id || 'guest'}`} user={user} spaceName="营销知识库" spaceId="marketing-activities" onLogin={() => openLogin('marketing-activities')}/>
       : active === 'brand-knowledge'
