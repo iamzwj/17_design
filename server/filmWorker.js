@@ -59,7 +59,7 @@ function check(p, inflight=false) {
   if(p.schedulingPaused && !inflight)throw Object.assign(Error('已暂停新任务调度，已提交的外部任务继续保存结果'),{code:'PAUSED'});
 }
 async function api(endpoint, body, timeout = 180000) {
-  const maizi = endpoint === "/v1/chat/completions" && body?.model === "gemini-4-carbon";
+  const maizi = endpoint === "/v1/chat/completions" && ["gemini-3.7-flash", "gemini-4-hydrogen", "gemini-3.5-flash"].includes(body?.model);
   const requestBase = maizi ? (process.env.MAIZI_BASE_URL || "https://api.maizitech.ai").replace(/\/$/, "") : base;
   const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY;
   const r = await fetch(requestBase + endpoint, {

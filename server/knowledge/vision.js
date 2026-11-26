@@ -30,7 +30,7 @@ export async function analyzePage(image, context = '', { request } = {}) {
       if (request) {
         data = await request(input)
       } else {
-        const maizi = model === 'gemini-4-carbon'
+        const maizi = ['gemini-3.7-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash'].includes(model)
         const base = maizi ? (process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai') : (process.env.GRSAI_BASE_URL || 'https://grsaiapi.com')
         const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY
         if (!apiKey) throw new Error('语言模型服务未配置')

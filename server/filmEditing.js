@@ -1,3 +1,4 @@
+import { requestLanguageModel } from './languageModels.js';
 import { filmOutputDimensions } from '../shared/filmVideoModels.js';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';import path from 'node:path';import {execFile} from 'node:child_process';import {promisify} from 'node:util';
@@ -29,9 +30,14 @@ export async function prepareFilmAudio(p,{root,api,save,check,onlyShot}) {
         await exec('ffmpeg',['-v','error','-y','-i',path.join(dir,shot.video.file),'-vn','-c:a','aac',path.join(dir,audio.file)],{timeout:120000});
         if(shot.dialogue || p.simpleFilmWorkflow) {
           try {
-            const bytes=fs.readFileSync(path.join(dir,audio.file));if(bytes.length>20e6)throw Error('音轨超过对齐预算');
-            const r=await api('/v1beta/models/gemini-3.1-pro:generateContent',{contents:[{role:'user',parts:[{text:'按实际音频转录中文语音，返回JSON {segments:[{start:秒,end:秒,text:实际听到的话}]}。没有听到的对白不得补写。时间必须在音频范围内。'},{inline_data:{mime_type:'audio/mp4',data:bytes.toString('base64')}}]}],generationConfig:{temperature:0.1}});
-            const raw=(r.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('');const d=JSON.parse(raw.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''));
+            const wav = await exec('ffmpeg', ['-v', 'error', '-i', path.join(dir, audio.file), '-ac', '1', '-ar', '16000', '-f', 'wav', 'pipe:1'], { timeout: 120000, encoding: 'buffer', maxBuffer: 20e6 });
+            const bytes = wav.stdout; if (bytes.length > 20e6) throw Error('音轨超过对齐预算');
+            const r = await requestLanguageModel(api, { messages: [{ role: 'user', content: [
+              { type: 'text', text: '按实际音频转录中文语音，返回JSON {segments:[{start:秒,end:秒,text:实际听到的话}]}。没有听到的对白不得补写。时间必须在音频范围内。' },
+              { type: 'input_audio', input_audio: { data: bytes.toString('base64'), format: 'wav' } },
+            ] }], response_format: { type: 'json_object' }, temperature: 0.1 });
+            const raw = r.choices?.[0]?.message?.content || '';
+            const d = JSON.parse(raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, ''));
             if(!Array.isArray(d.segments)||(!p.simpleFilmWorkflow && !d.segments.length)||d.segments.some(s=>!Number.isFinite(s.start)||!Number.isFinite(s.end)||s.start<0||s.end<=s.start||s.end>audio.duration+.2||typeof s.text!=='string'))throw Error('实际语音对齐未得到有效结果');
             audio.segments=d.segments;audio.alignment='audio-model';
           }catch(e){audio.alignment=p.simpleFilmWorkflow?'none':'shot-estimate';audio.note=(p.simpleFilmWorkflow?'语音对齐未完成，本镜暂不添加自动字幕：':'语音对齐未完成，字幕按镜头暂定，请人工核对：')+e.message;}

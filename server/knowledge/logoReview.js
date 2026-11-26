@@ -31,7 +31,7 @@ export async function reviewLogo(image, logo, brandName, { request, signal } = {
       if (request) data = await request(body)
       else {
         if (!process.env.GRSAI_API_KEY && !process.env.MAIZI_API_KEY) throw new Error('Logo检查服务未配置')
-        const maizi = model === 'gemini-4-carbon'
+        const maizi = ['gemini-3.7-flash', 'gemini-4-hydrogen', 'gemini-3.5-flash'].includes(model)
         const base = maizi ? (process.env.MAIZI_BASE_URL || 'https://api.maizitech.ai') : (process.env.GRSAI_BASE_URL || 'https://grsaiapi.com')
         const apiKey = maizi ? process.env.MAIZI_API_KEY : process.env.GRSAI_API_KEY
         if (!apiKey) throw new Error('语言模型服务未配置')
