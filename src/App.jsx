@@ -1,4 +1,4 @@
-import { isChatImageRequest } from './chatImageIntent.js'
+import { chatImagePrompt, isChatImageRequest } from './chatImageIntent.js'
 import WorkspaceLoading from './WorkspaceLoading.jsx'
 import useToolZoomLock from './useToolZoomLock.js'
 import { activityFormatDraft } from './activityDraft.js'
@@ -1735,6 +1735,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
     const generateImage = type === 'chat' && !hasChatHtml && isChatImageRequest(content)
     if (!generateImage && usesTextModel && !textModel) return
+    const imagePrompt = generateImage ? chatImagePrompt(content, messagesRef.current) : content
     const imageSkill = generateImage && chatSkill.selected?.targets?.includes('image') ? chatSkill.selected : null
     if (generateImage && submittedAttachments.length + (imageSkill?.referenceCount || 0) > 4) {
       setAttachmentError('生图最多使用 4 张参考图（含 Skill 自带参考图）')
@@ -1800,7 +1801,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
       saveTaskState(nextMessages, { activate: true })
       if (generateImage) {
         const created = await createConversationImageTask({
-          prompt: content, clientRequestId: requestId,
+          prompt: imagePrompt, clientRequestId: requestId,
           images: uploadedAttachments.filter(file => file.kind === 'image').map(file => file.src),
           aspectRatio: normalizedImageRatio(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, content.match(/(?:^|[^\d])(\d{1,2}[:：]\d{1,2})(?!\d)/u)?.[1]?.replace('：', ':') || '1:1'),
           model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION,
