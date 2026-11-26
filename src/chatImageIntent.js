@@ -1,7 +1,9 @@
-export function isChatImageRequest(input) {
+export function isChatImageRequest(input, imageCount = 0) {
   const text = input.trim()
   if (!text || /^(?:不要|别|不用|如何|怎么|为什么|什么是)/u.test(text)) return false
   if (/提示词|prompt|(?:生图|生成图片)(?:功能|流程|教程|原理|接口|模型)/iu.test(text)) return false
+  if (imageCount >= 2 && /^(?:请\s*|帮我\s*)*(?:合并|拼接|拼合)(?:(?:这|这几)?[一二两三四五六\d]+张|这几张|这些)?(?:图|图片|照片)[。！!]?$/u.test(text)) return true
+  if (imageCount > 0 && /^(?:请\s*|帮我\s*)*(?:去掉|去除|移除|删除|擦掉)(?:图中|照片里|画面里)?(?:人|人物|行人|路人|背景|水印|文字)[。！!]?$/u.test(text)) return true
   if (/^(?:请\s*)?(?:帮我\s*|给我\s*|为我\s*|用.+?(?:来|帮我|给我))*(?:生图|画(?!图表|流程图)|绘制|(?:生|生成|制作|做)(?:一[张幅组]|个|一张)?[^。！？\n]{0,24}(?:图片|插画|海报|照片|头像|壁纸|效果图|视觉图|配图|图像))/u.test(text)) return true
   if (/^(?:请\s*)?(?:帮我\s*|给我\s*)?(?:画|生)(?:一张|一幅|一只|一组)[^。！？\n]{1,50}$/u.test(text)) return true
   if (/^(?:请\s*)?(?:给|发)(?:我)?一[张幅组][^。！？\n]{0,30}(?:图片|插画|海报|照片|头像|图像)/u.test(text)) return true

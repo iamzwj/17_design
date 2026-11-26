@@ -873,7 +873,21 @@ function imageMimeFromFileName(fileName) {
   return 'image/png'
 }
 
-async function persistWaterfallReference(source, taskId, index) {
+async function persistWaterfallReference(source, taskId, index, userId) {
+  const chatImage = typeof source === 'string' && source.match(/^\/api\/chat-images\/([a-f0-9-]{36})\.png$/i)
+  if (chatImage) {
+    const directory = path.join(waterfallDataDir, 'chat-images')
+    const [, id] = chatImage
+    const name = `${taskId}-reference-${index}.png`
+    try {
+      const owner = JSON.parse(await fs.promises.readFile(path.join(directory, `${id}.json`), 'utf8'))
+      if (!userId || owner.userId !== userId) throw new Error('attachment owner mismatch')
+      await fs.promises.copyFile(path.join(directory, `${id}.png`), path.join(waterfallAssetsDir, name))
+      return `/api/waterfall/assets/${name}`
+    } catch {
+      throw Object.assign(new Error('参考图已不可用，请重新上传后再生成'), { status: 422 })
+    }
+  }
   if (source.startsWith('/api/waterfall/assets/')) {
     const fileName = path.basename(new URL(source, 'http://localhost').pathname)
     if (!fileName || fileName !== path.basename(fileName)) throw Object.assign(new Error('参考图地址无效，请重新上传'), { status: 422 })
@@ -2162,7 +2176,7 @@ app.post('/api/waterfall/tasks', requireAuth, async (req, res, next) => {
     const imageSize = generationSize(settings.model, settings.resolution, resolvedAspectRatio)
     const now = new Date().toISOString()
     const id = randomUUID()
-    const referenceImages = await Promise.all(images.map((source, index) => persistWaterfallReference(source, id, index)))
+    const referenceImages = await Promise.all(images.map((source, index) => persistWaterfallReference(source, id, index, req.user.id)))
     const creditCostPerImage = imageCreditCost(settings.model)
     const chargedCredits = imageCreditCost(settings.model, requestedCount)
     const chargedUser = spendCredits(req.user.id, chargedCredits)
