@@ -106,7 +106,7 @@ export async function prepareActivityContext({ user, input, tool, activity, all,
   const trace = tracePut({ ...(brandTrace || {}), id: id(), brandId: brandScope ? identity.id : marketing?.id || identity?.id, brandName: brandName || '营销活动', userId: user.id, tool, activity: { enabled: Boolean(activity.enabled), identity: brandName, scope: clean(activity.scope, 100), campaign: clean(activity.campaign, 100) }, contextBrandIds: [activity.enabled && marketing?.id, identity?.id].filter(Boolean), createdAt: now(), rules: brandTrace?.rules || [], retrieved: [...(brandTrace?.retrieved || []), ...retrieved], assets: brandTrace?.assets || [], prompt, status: 'prepared' })
   const sources = [...(brandContext?.sources || []), ...retrieved.map(r => ({ ...r, title: `${r.title} / ${r.source}`, url: `?module=marketing-activities&document=${r.documentId}&version=${r.versionId}` }))]
   if (brandTrace) finish(brandTrace.id, { status: 'referenced', parentTraceId: trace.id })
-  return { id: trace.id, prompt, images: brandContext?.images || [], referenceImages: brandContext?.referenceImages || [], sources: [...new Map(sources.map(r => [r.url, r])).values()] }
+  return { id: trace.id, activityBrandId: identity?.id, prompt, images: brandContext?.images || [], referenceImages: brandContext?.referenceImages || [], sources: [...new Map(sources.map(r => [r.url, r])).values()] }
 }
 
 export const ACTIVITY_POLICY = `你在执行真实营销策划任务。先理解需求中的活动性质、目标年份和时间段、业务身份与执行范围，再辩证选择资料。

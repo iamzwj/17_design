@@ -175,8 +175,9 @@ export function renderHtmlDeck(deck, brand = null) {
   const contour = design.backdrop === 'contour'
   const pages = deck.slides.map((slide, index) => `
 <section class="slide ${slide.layout}" ${index ? 'hidden' : ''} aria-label="第 ${index + 1} 页">
+  ${index === 0 && brand?.topRight && brand.logo ? '<!-- DGEN_BRAND_LOGO -->' : ''}
   ${slide.section || index ? `<header>${escapeHtml(slide.section || deck.slides[0].title)}</header>` : ''}
-  ${index === 0 && brand?.logo ? '<!-- DGEN_BRAND_LOGO -->' : ''}
+  ${index === 0 && brand?.logo && !brand.topRight ? '<!-- DGEN_BRAND_LOGO -->' : ''}
   <div class="content">${slideContent(slide, selectionFrame && slide.layout === 'cover')}</div>
 </section>`).join('')
   const html = `<!doctype html>
@@ -276,5 +277,5 @@ export function renderHtmlDeck(deck, brand = null) {
 </script>
 </body>
 </html>`
-  return brand?.logo ? embedHtmlBrand(html, { logo: brand.logo }) : html
+  return brand?.logo ? embedHtmlBrand(html, { logo: brand.logo, topRight: brand.topRight }) : html
 }
