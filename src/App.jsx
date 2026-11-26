@@ -1678,8 +1678,8 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     const limit = type === 'chat' ? 6 : 4
     const files = Array.from(fileList || []).slice(0, limit - attachments.length)
     if (!files.length && fileList?.length) { setAttachmentError(`最多上传 ${limit} 张图片或文件`); return }
-    if (type === 'chat' && files.some((file) => (file.type.startsWith('image/') && !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) || file.size > 10 * 1024 * 1024)) { setAttachmentError('请选择 10MB 以内的图片或文件'); return }
-    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || (!complianceFileKind(file) && !(type === 'chat' && isChatHtmlFile(file))))
+    if (type === 'chat' && files.some((file) => (file.type.startsWith('image/') && !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) || (!isChatHtmlFile(file) && file.size > 10 * 1024 * 1024))) { setAttachmentError('请选择 10MB 以内的图片或非 HTML 文件'); return }
+    const invalid = files.find(file => !(type === 'chat' && isChatHtmlFile(file)) && (file.size > 12 * 1024 * 1024 || !complianceFileKind(file)))
     if (invalid) { setAttachmentError(`${invalid.name} 不支持或超过 12MB`); return }
     try {
       const encoded = await Promise.all(files.map(async (file) => {
