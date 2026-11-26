@@ -26,6 +26,19 @@ export function readActivityHistory(key) {
   return activityHistory('readonly', store => store.get(key))
 }
 
-export function saveActivityHistory(key, records) {
-  return activityHistory('readwrite', store => store.put(records.filter(record => ['strategy', 'pulin-report'].includes(record.type)), key))
+export function readConversationSnapshot(key) {
+  return activityHistory('readonly', store => store.get(`snapshot:${key}`))
+}
+
+export function saveConversationSnapshot(key, snapshot) {
+  return activityHistory('readwrite', store => store.put(snapshot, `snapshot:${key}`))
+}
+
+export function restoreConversationRecords(local, backup, legacyActivity) {
+  if (backup && backup.savedAt >= local.savedAt) return backup.records
+  if (local.savedAt || !legacyActivity) return local.records
+  return [
+    ...local.records.filter(record => !['strategy', 'pulin-report'].includes(record.type)),
+    ...legacyActivity,
+  ]
 }

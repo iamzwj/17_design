@@ -6,7 +6,7 @@ import { skillDisplayName } from './skillDisplayName.js'
 import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailable } from './workspaceStorage.js'
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
-import { readActivityHistory, saveActivityHistory } from './activityConversations.js'
+import { readActivityHistory, readConversationSnapshot, restoreConversationRecords, saveConversationSnapshot } from './activityConversations.js'
 import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
@@ -284,8 +284,16 @@ async function extractComplianceText(file) {
 function loadConversations(storageKey = STORAGE_KEY) {
   try {
     const saved = JSON.parse(readWorkspaceStorage(storageKey) || '[]')
-    return Array.isArray(saved) ? saved : []
-  } catch { return [] }
+    if (Array.isArray(saved)) return { records: saved, savedAt: 0 }
+    if (Array.isArray(saved?.records) && Number.isFinite(saved.savedAt)) return saved
+  } catch { /* The IndexedDB copy can still be restored. */ }
+  return { records: [], savedAt: 0 }
+}
+
+function persistConversations(key, records) {
+  const snapshot = { records, savedAt: Date.now() }
+  void saveConversationSnapshot(key, snapshot).catch(() => {})
+  writeWorkspaceStorage(key, JSON.stringify(snapshot))
 }
 
 function isFailureMessage(message) {
@@ -1976,18 +1984,15 @@ export default function App() {
     // Video generation is a persistent waterfall workspace, not a chat.
     // Remove records left by the earlier node-based video workspace so they
     // no longer appear alongside actual conversations.
-    const savedKey = user ? `${STORAGE_KEY}:${user.email}` : STORAGE_KEY
+    const savedKey = conversationStorageKey
     const loaded = loadConversations(savedKey)
-    const withoutVideoHistory = loaded.filter((conversation) => conversation.type !== 'video')
-    if (withoutVideoHistory.length !== loaded.length) {
-      try { writeWorkspaceStorage(savedKey, JSON.stringify(withoutVideoHistory)) } catch { /* Keep the cleaned list in memory if storage is unavailable. */ }
-    }
     let current = true
-    readActivityHistory(savedKey).catch(() => undefined).then(savedActivity => {
+    Promise.all([
+      readConversationSnapshot(savedKey).catch(() => undefined),
+      readActivityHistory(savedKey).catch(() => undefined),
+    ]).then(([backup, savedActivity]) => {
       if (!current) return
-      const restored = savedActivity
-        ? [...withoutVideoHistory.filter(item => !['strategy', 'pulin-report'].includes(item.type)), ...savedActivity]
-        : withoutVideoHistory
+      const restored = restoreConversationRecords(loaded, backup, savedActivity).filter(item => item.type !== 'video')
       setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
       const url = new URL(window.location.href)
       const linkedId = url.searchParams.get('conversation')
@@ -1999,7 +2004,7 @@ export default function App() {
       setHistoryReady(savedKey)
     })
     return () => { current = false }
-  }, [user, authState])
+  }, [conversationStorageKey, authState])
 
   useEffect(() => {
     if (!THEME_SELECTION_ENABLED) return
@@ -2013,8 +2018,7 @@ export default function App() {
     setConversations((current) => {
       const next = transform(current)
       if (next === current) return current
-      void saveActivityHistory(conversationStorageKey, next).catch(() => {})
-      try { writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))) } catch { /* Storage quota: keep the in-memory history. */ }
+      persistConversations(conversationStorageKey, next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))
       return next
     })
   }
@@ -2086,8 +2090,7 @@ export default function App() {
       const existing = current.find((conversation) => conversation.id === update.id)
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
       const next = [record, ...current.filter((conversation) => conversation.id !== update.id)].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-      if (['strategy', 'pulin-report'].includes(update.type)) void saveActivityHistory(conversationStorageKey, next).catch(() => {})
-      try { writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next)) } catch { /* Storage quota: keep the in-memory history. */ }
+      persistConversations(conversationStorageKey, next)
       return next
     })
   }
@@ -2238,8 +2241,6 @@ export default function App() {
     } else if (item && user) {
       try {
         const restored = { ...item, archived: false, updatedAt: new Date().toISOString() }
-        const next = conversations.map(record => record.id === id ? restored : record).filter(record => !(record.archived && record.type !== 'film'))
-        writeWorkspaceStorage(conversationStorageKey, JSON.stringify(next))
         await filmRequest('/archive-records', { id, record: restored, restore: true })
       } catch (error) { window.alert(`恢复失败：${error.message}`); return }
     }
@@ -2293,7 +2294,7 @@ export default function App() {
         ? <section className="material-library-workspace"><div className="material-library-page"><header className="material-library-header"><div><span>KNOWLEDGE BASE</span><h1>{KNOWLEDGE_SECTIONS.find((item) => item.id === active)?.label}</h1><p>{active === 'brand-manual' ? '集中查阅品牌规范与使用指引。' : '集中查阅营销策略与策划参考。'}</p></div></header><div className="knowledge-empty glass-strong"><Icon name="book" size={32}/><h2>暂无{active === 'brand-manual' ? '品牌手册' : '营销策略'}</h2><p>相关内容待补充</p></div></div></section>
       : active === 'video'
         ? <VideoStudio key={workspaceToken} onUserUpdate={setUser}/>
-      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : active === 'strategy' && (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation} onUserUpdate={setUser}/>
+      : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation} onUserUpdate={setUser}/>
 
   async function logout() {
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
