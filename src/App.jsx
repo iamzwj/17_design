@@ -1677,7 +1677,10 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
           if (content.length > MAX_COMPLIANCE_TEXT_LENGTH) throw new Error(`${file.name} 超过 ${MAX_COMPLIANCE_TEXT_LENGTH} 字符，请拆分后上传`)
           return { name: file.name, kind: 'text', mime: 'text/html', content }
         }
-        if (file.type.startsWith('image/')) return { name: file.name, kind: 'image', mime: file.type, src: await fileToDataUrl(file) }
+        if (file.type.startsWith('image/')) {
+          const prepared = type === 'chat' ? await compressImageForUpload(file) : file
+          return { name: file.name, kind: 'image', mime: prepared.type, src: await fileToDataUrl(prepared) }
+        }
         const content = await extractComplianceText(file)
         if (!plainText(content)) throw new Error(`${file.name} 未提取到可审核的文字内容`)
         return { name: file.name, kind: 'text', mime: file.type || 'application/octet-stream', content }
@@ -1805,7 +1808,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
       if (generateImage) {
         const created = await createConversationImageTask({
           prompt: imagePrompt, clientRequestId: requestId,
-          images: uploadedAttachments.filter(file => file.kind === 'image').map(file => file.src),
+          images: submittedAttachments.filter(file => file.kind === 'image').map(file => file.src),
           aspectRatio: normalizedImageRatio(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, content.match(/(?:^|[^\d])(\d{1,2}[:：]\d{1,2})(?!\d)/u)?.[1]?.replace('：', ':') || '1:1'),
           model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION,
           quality: imageQualityForModel(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY),
