@@ -40,6 +40,16 @@ function apiUrl(path) {
   return apiBase ? `${apiBase}${path}` : path
 }
 
+export async function conversationHistoryRequest(id, { method = 'GET', body, signal, token = getAuthToken() } = {}) {
+  const url = apiUrl('/api/conversation-history' + (id ? '/' + encodeURIComponent(id) : ''))
+  const response = await fetch(url, { method, signal, cache: 'no-store',
+    headers: { Authorization: `Bearer ${token}`, ...(body && { 'Content-Type': 'application/json' }) },
+    ...(body && { body: JSON.stringify(body) }),
+  })
+  if (!response.ok) throw Object.assign(new Error('对话同步失败'), { status: response.status })
+  return response.json()
+}
+
 function assetUrl(url) {
   if (!url || !apiBase || !url.startsWith('/')) return url
   return `${apiBase}${url}`

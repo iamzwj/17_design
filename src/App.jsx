@@ -7,6 +7,7 @@ import { readWorkspaceStorage, writeWorkspaceStorage, workspaceStorageUnavailabl
 import { ACCOUNT_IDENTITY_LABELS, scopedBrand, testAccountIdentity } from '../shared/accountIdentity.js'
 import { ACTIVITY_ANSWER_INSTRUCTIONS, splitActivityAnswer } from './activityAnswer.js'
 import { readActivityHistory, readConversationSnapshot, restoreConversationRecords, saveConversationSnapshot } from './activityConversations.js'
+import { conversationHistoryRequest } from './api.js'
 import { ActivityHtmlResult, ActivityImageResults, groupActivityImages, useActivityImages, activityContentPages, activityVisibleText } from './ActivityOutputs.jsx'
 import ActivityStrategy, { ActivityKnowledgePicker, DEFAULT_ACTIVITY } from './ActivityStrategy.jsx'
 import { canonicalImageModel } from '../shared/vibbitImageModels.js'
@@ -401,6 +402,8 @@ function conversationTitle(conversation) {
   const firstUserMessage = conversation.messages?.find((message) => message.role === 'user')
   return firstUserMessage?.content?.trim().slice(0, 22) || '未命名对话'
 }
+
+const cloudConversation = record => ['chat', 'strategy', 'image', 'compliance', 'pulin-report'].includes(record?.type)
 
 function useConversationFocus() {
   return useRef(null)
@@ -1958,6 +1961,8 @@ export default function App() {
   })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [conversations, setConversations] = useState([])
+  const cloudQueue = useRef(new Map())
+  const openingConversation = useRef(0)
   const [historyReady, setHistoryReady] = useState(null)
   useToolZoomLock(active === 'more')
   const [activeConversationId, setActiveConversationId] = useState(null)
@@ -1974,6 +1979,8 @@ export default function App() {
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId) || null
   const activeConversations = conversations.filter((conversation) => !conversation.archived && !conversation.deleted && pendingArchives.current.get(conversation.id) !== conversationStorageKey)
   const archivedConversations = conversations.filter((conversation) => conversation.archived && !conversation.deleted)
+  const latestConversations = useRef(conversations)
+  latestConversations.current = conversations
 
   useEffect(() => {
     if (authState !== 'checking') return
@@ -1991,15 +1998,24 @@ export default function App() {
     Promise.all([
       readConversationSnapshot(savedKey).catch(() => undefined),
       readActivityHistory(savedKey).catch(() => undefined),
-    ]).then(([backup, savedActivity]) => {
+    ]).then(async ([backup, savedActivity]) => {
       if (!current) return
       const restored = restoreConversationRecords(loaded, backup, savedActivity).filter(item => item.type !== 'video')
-      setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
       const url = new URL(window.location.href)
       const linkedId = url.searchParams.get('conversation')
       const linkedType = url.searchParams.get('module')
-      const record = ['strategy', 'pulin-report'].includes(linkedType) &&
+      let record = ['strategy', 'pulin-report'].includes(linkedType) &&
         restored.find(c => c.id === linkedId && c.type === linkedType && !c.archived && !c.deleted)
+      if (record?.cloudSummary) {
+        try {
+          const result = await conversationHistoryRequest(record.id, { signal: AbortSignal.timeout(6000) })
+          const index = restored.indexOf(record)
+          record = { ...result.record, cloudRevision: result.cloudRevision }
+          restored[index] = record
+        } catch { record = null }
+      }
+      if (!current) return
+      setConversations(restored.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)))
       setActiveConversationId(record ? record.id : null)
       if (record) setWorkspaceToken(value => value + 1)
       setHistoryReady(savedKey)
@@ -2015,10 +2031,86 @@ export default function App() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#16191f' : '#fcfcfd')
   }, [theme])
 
-  function updateConversations(transform) {
+  function queueCloudConversation(record, importOnly = false) {
+    if (!user || !cloudConversation(record) || record.serverArchived || accountScope.current !== user.id) return
+    const { cloudSummary, cloudRevision, cloudDirty, ...clean } = record
+    const entry = { userId: user.id, record: { ...clean, title: conversationTitle(record) }, importOnly, metadataOnly: Boolean(cloudSummary) }
+    if (importOnly && (cloudSummary || cloudQueue.current.has(record.id))) return
+    cloudQueue.current.set(record.id, entry)
+  }
+
+  useEffect(() => {
+    if (!user || authState !== 'authenticated' || historyReady !== conversationStorageKey) return
+    const userId = user.id
+    let busy = false
+    const controller = new AbortController()
+    const sync = async () => {
+      if (busy || controller.signal.aborted) return
+      busy = true
+      try {
+        const token = getAuthToken()
+        const { records } = await conversationHistoryRequest(null, { signal: controller.signal, token })
+        if (controller.signal.aborted || accountScope.current !== userId) return
+        const remote = new Map(records.map(record => [record.id, record]))
+        for (const record of latestConversations.current) {
+          if (!remote.has(record.id) && !record.cloudRevision) queueCloudConversation(record, true)
+          else if (record.cloudDirty && !remote.get(record.id)?.deleted && !cloudQueue.current.has(record.id)) queueCloudConversation(record)
+        }
+        const pending = new Set(cloudQueue.current.keys())
+        setConversations(current => {
+          const local = new Map(current.map(record => [record.id, record]))
+          for (const record of records) {
+            if (pendingArchives.current.has(record.id)) continue
+            const cached = local.get(record.id)
+            if (record.deleted) local.delete(record.id)
+            else if (!pending.has(record.id) && (!cached || (cached.cloudRevision || 0) < record.cloudRevision)) {
+              if (cached && (cached.id === activeConversationId || cached.serverArchived)) continue
+              local.set(record.id, { ...record, cloudSummary: true })
+            }
+          }
+          const next = [...local.values()]
+          if (next.length === current.length && next.every((record, index) => record === current[index])) return current
+          persistConversations(conversationStorageKey, next.filter(record => !record.serverArchived))
+          return next
+        })
+        for (const [id, entry] of cloudQueue.current) {
+          if (controller.signal.aborted) break
+          if (entry.userId !== userId) continue
+          if (remote.get(id)?.deleted) { cloudQueue.current.delete(id); continue }
+          try {
+            const { record, importOnly, metadataOnly } = entry
+            const result = await conversationHistoryRequest(id, { method: 'PUT', body: { record, importOnly, metadataOnly }, token, signal: controller.signal })
+            if (controller.signal.aborted || cloudQueue.current.get(id) !== entry) continue
+            cloudQueue.current.delete(id)
+            setConversations(current => {
+              const next = current.map(record => record.id === id ? { ...record, cloudDirty: false, cloudRevision: result.cloudRevision } : record)
+              persistConversations(conversationStorageKey, next.filter(record => !record.serverArchived))
+              return next
+            })
+          } catch (error) {
+            if (error.status === 410) cloudQueue.current.delete(id)
+          }
+        }
+      } catch { /* Keep the local copy available while offline. */ }
+      finally { busy = false }
+    }
+    void sync()
+    const timer = setInterval(sync, 5000)
+    return () => { controller.abort(); clearInterval(timer) }
+  }, [conversationStorageKey, historyReady, authState, user?.id, activeConversationId])
+
+  function updateConversations(transform, syncCloud = false) {
     setConversations((current) => {
-      const next = transform(current)
+      let next = transform(current)
       if (next === current) return current
+      if (syncCloud && user) {
+        const previous = new Map(current.map(record => [record.id, record]))
+        next = next.map(record => {
+          if (record === previous.get(record.id) || !cloudConversation(record) || record.serverArchived) return record
+          queueCloudConversation(record)
+          return { ...record, cloudDirty: true }
+        })
+      }
       persistConversations(conversationStorageKey, next.filter(item => !(item.archived && item.serverArchived && item.type !== 'film')))
       return next
     })
@@ -2042,7 +2134,8 @@ export default function App() {
       return filmRequest('/archive-records').then(({ records }) => {
         if (!live || revision !== archiveRevision.current) return
         updateConversations(current => {
-          const confirmed = records.filter(record => !pending(record.id))
+          const cloudIds = new Set(current.filter(record => record.cloudRevision || record.cloudDirty).map(record => record.id))
+          const confirmed = records.filter(record => !pending(record.id) && !cloudIds.has(record.id))
           const remoteIds = new Set(confirmed.map(record => record.id))
           return [...current.filter(item => pending(item.id) || (!remoteIds.has(item.id) && !item.serverArchived)), ...confirmed.map(record => ({ ...record, serverArchived: Boolean(record.archived) }))]
         })
@@ -2090,6 +2183,11 @@ export default function App() {
     setConversations((current) => {
       const existing = current.find((conversation) => conversation.id === update.id)
       const record = safeConversation({ ...existing, ...conversationUpdate, createdAt: existing?.createdAt || now, updatedAt: now })
+      if (user && cloudConversation(record)) {
+        delete record.cloudSummary
+        record.cloudDirty = true
+        queueCloudConversation(record)
+      }
       const next = [record, ...current.filter((conversation) => conversation.id !== update.id)].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
       persistConversations(conversationStorageKey, next)
       return next
@@ -2097,6 +2195,7 @@ export default function App() {
   }
 
   function startNew(type = active, { keepSkill = false } = {}) {
+    openingConversation.current++
     if (type === 'chat' && !keepSkill) selectGenerationSkill('chat', '')
     const url = new URL(window.location.href); url.searchParams.delete('conversation'); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     setFilmDeepLink(null)
@@ -2161,7 +2260,20 @@ export default function App() {
     } else if (requestedModule && requestedModule !== 'general') startNew(requestedModule)
   }
 
-  function selectConversation(conversation) {
+  async function selectConversation(conversation) {
+    const request = ++openingConversation.current
+    if (conversation.cloudSummary) {
+      try {
+        const { record, cloudRevision } = await conversationHistoryRequest(conversation.id)
+        if (openingConversation.current !== request || accountScope.current !== user?.id) return
+        conversation = { ...record, cloudRevision }
+        const opened = conversation
+        updateConversations(current => current.map(item => item.id === opened.id ? opened : item))
+      } catch {
+        if (openingConversation.current === request) window.alert('暂时无法读取对话，请稍后重试。')
+        return
+      }
+    }
     if (['strategy', 'pulin-report'].includes(conversation.type)) { const url = new URL(window.location.href); url.searchParams.set('module', conversation.type); url.searchParams.set('conversation', conversation.id); window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`) }
     setFilmDeepLink(null)
     setArchiveViewOpen(false)
@@ -2181,7 +2293,7 @@ export default function App() {
   }
 
   function togglePinConversation(id) {
-    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, pinned: !conversation.pinned, pinnedAt: conversation.pinned ? null : new Date().toISOString() } : conversation))
+    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, pinned: !conversation.pinned, pinnedAt: conversation.pinned ? null : new Date().toISOString() } : conversation), true)
   }
 
   function renameConversation(id, title) {
@@ -2189,7 +2301,7 @@ export default function App() {
     if (!nextTitle) return
     updateConversations((current) => current.map((conversation) => conversation.id === id
       ? { ...conversation, title: nextTitle, updatedAt: new Date().toISOString() }
-      : conversation))
+      : conversation), true)
   }
 
   function clearFilmCache(userId, projectId) {
@@ -2202,6 +2314,13 @@ export default function App() {
   async function archiveConversation(id) {
     const item = conversations.find(conversation => conversation.id === id)
     if (!item || item.archived || pendingArchives.current.get(id) === conversationStorageKey) return
+    if (user && cloudConversation(item) && !item.serverArchived) {
+      updateConversations(current => current.map(record => record.id === id
+        ? { ...record, archived: true, pinned: false, pinnedAt: null }
+        : record), true)
+      if (activeConversationId === id) startNew()
+      return
+    }
     pendingArchives.current.set(id, conversationStorageKey)
     archiveRevision.current++
     updateConversations(current => current.map(conversation => conversation.id === id
@@ -2239,30 +2358,30 @@ export default function App() {
     if (item?.type === 'film' && item.projectId) {
       try { await filmRequest(`/${encodeURIComponent(item.projectId)}/archive`, { archived: false }) }
       catch (error) { window.alert(`恢复失败：${error.message}`); return }
-    } else if (item && user) {
+    } else if (item?.serverArchived && user) {
       try {
         const restored = { ...item, archived: false, updatedAt: new Date().toISOString() }
         await filmRequest('/archive-records', { id, record: restored, restore: true })
       } catch (error) { window.alert(`恢复失败：${error.message}`); return }
     }
-    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: false, updatedAt: new Date().toISOString() } : conversation))
+    updateConversations((current) => current.map((conversation) => conversation.id === id ? { ...conversation, archived: false, serverArchived: false, updatedAt: new Date().toISOString() } : conversation), true)
   }
 
   async function deleteConversation(id) {
     const item = conversations.find(conversation => conversation.id === id)
     if (user && item?.type !== 'film') {
-      try { await filmRequest('/archive-records', { id, restore: true }) }
+      try {
+        if (item?.serverArchived) await filmRequest('/archive-records', { id, restore: true })
+        if (cloudConversation(item)) await conversationHistoryRequest(id, { method: 'DELETE' })
+        cloudQueue.current.delete(id)
+      }
       catch (error) { window.alert(`删除失败：${error.message}`); return }
     }
     updateConversations((current) => current.flatMap((conversation) => conversation.id !== id ? [conversation] : conversation.type === 'film' ? [{ id, type: 'film', deleted: true }] : []))
   }
 
   async function deleteAllArchived() {
-    if (user) {
-      try { for (const item of archivedConversations.filter(conversation => conversation.type !== 'film')) await filmRequest('/archive-records', { id: item.id, restore: true }) }
-      catch (error) { window.alert(`删除失败：${error.message}`); return }
-    }
-    updateConversations((current) => current.flatMap((conversation) => !conversation.archived ? [conversation] : conversation.type === 'film' ? [{ id: conversation.id, type: 'film', deleted: true }] : []))
+    for (const item of archivedConversations) await deleteConversation(item.id)
   }
 
   const pageTitle = archiveViewOpen ? WORKSPACE_TITLES.archive
