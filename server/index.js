@@ -1,5 +1,6 @@
 import { embedHtmlBrand, htmlBrandPrompt } from './htmlBrand.js'
 import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_ATTRIBUTION_RULE, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
+import { BUILTIN_SKILLS } from './builtinSkills.js'
 import { cleanChromaPixels } from './chromaMatte.js'
 import { collectMaiziStream } from './maiziStream.js'
 import { isImageToPptSkill, reconstructPpt } from './pptReconstruction.js'
@@ -1366,7 +1367,7 @@ async function handleTextCompletion(req, res, next) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'messages 不能为空' })
     }
-    const skill = req.body.__skill
+    const selectedSkill = req.body.__skill
     if (isImageToPptSkill(skill)) {
       const taskId = req.body.requestId
       if (!req.user?.id || !/^[a-f0-9-]{36}$/i.test(taskId || '')) throw Object.assign(new Error('转换任务无效'), { status: 400 })
@@ -1400,7 +1401,20 @@ async function handleTextCompletion(req, res, next) {
       .filter(Boolean)
     const lastUser = [...safeMessages].reverse().find(message => message.role === 'user')
     const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : (lastUser?.content || []).filter(part => part.type === 'text').map(part => part.text).join(' ')
-    const { confirmedPlan, needsPlan, directHtml } = htmlPresentationPhase(safeMessages, lastUserText, req.body.activityContext?.format, Boolean(skill))
+    const format = req.body.activityContext?.format
+    let phase = htmlPresentationPhase(safeMessages, lastUserText, format, Boolean(selectedSkill))
+    let defaultSkill
+    if (!selectedSkill && req.body.imageAnalysisMode === 'general') {
+      const requestText = lastUserText.split('\n\n--- 文件：', 1)[0]
+      const automatic = htmlPresentationPhase(safeMessages, requestText, format, true)
+      if (automatic.directHtml || phase.confirmedPlan) {
+        defaultSkill = BUILTIN_SKILLS.find(entry => entry.id === 'magazine-editorial-layout')
+        if (defaultSkill && !phase.confirmedPlan) phase = automatic
+      }
+    }
+    const skill = selectedSkill || defaultSkill
+    const { confirmedPlan, needsPlan, directHtml } = phase
+    const defaultSkillSnapshot = defaultSkill ? { skillSnapshot: { id: defaultSkill.id, title: defaultSkill.title } } : {}
     const context = req.body.__knowledge
     if (!needsPlan && !confirmedPlan && !directHtml && req.body.imageAnalysisMode === 'general' && isCurrentWeatherQuery(lastUserText)) {
       const weather = await weatherFallbackSearch(lastUserText)
@@ -1485,7 +1499,7 @@ async function handleTextCompletion(req, res, next) {
       if (!styled) throw new Error('排版模型未返回可用的版式。已确认的规划仍可使用，请重试生成。')
       const content = '```html\n' + renderHtmlDeck(styled, htmlBrand) + '\n```'
       if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
+      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, ...defaultSkillSnapshot })
     }
     if (needsPlan) {
       upstreamRequest.messages.push({ role: 'system', content: HTML_PLAN_PROMPT })
@@ -1543,7 +1557,7 @@ async function handleTextCompletion(req, res, next) {
     }
     if (htmlBrand) content = embedHtmlBrand(content, htmlBrand)
     if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, skillApplied: Boolean(directHtml) || appliedChatSkill || (confirmed && Boolean(skill)) })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, skillApplied: Boolean(directHtml) || appliedChatSkill || (confirmed && Boolean(skill)), ...defaultSkillSnapshot })
   } catch (error) {
     if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
