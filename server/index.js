@@ -1404,17 +1404,21 @@ async function handleTextCompletion(req, res, next) {
     const format = req.body.activityContext?.format
     let phase = htmlPresentationPhase(safeMessages, lastUserText, format, Boolean(selectedSkill))
     let defaultSkill
-    if (!selectedSkill && req.body.imageAnalysisMode === 'general') {
+    const activityPlanning = Boolean(req.body.activityContext)
+    if (!selectedSkill && (req.body.imageAnalysisMode === 'general' || activityPlanning)) {
       const requestText = lastUserText.split('\n\n--- 文件：', 1)[0]
       const automatic = htmlPresentationPhase(safeMessages, requestText, format, true)
       if (automatic.directHtml || phase.confirmedPlan) {
         defaultSkill = BUILTIN_SKILLS.find(entry => entry.id === 'magazine-editorial-layout')
-        if (defaultSkill && !phase.confirmedPlan) phase = automatic
+        // Keep the activity presentation's outline and approval step.
+        if (defaultSkill && !phase.confirmedPlan && !(activityPlanning && phase.needsPlan)) phase = automatic
       }
     }
     const skill = selectedSkill || defaultSkill
     const { confirmedPlan, needsPlan, directHtml } = phase
-    const defaultSkillSnapshot = defaultSkill ? { skillSnapshot: { id: defaultSkill.id, title: defaultSkill.title } } : {}
+    const defaultSkillSnapshot = defaultSkill && (confirmedPlan || directHtml)
+      ? { skillSnapshot: { id: defaultSkill.id, title: defaultSkill.title } }
+      : {}
     const context = req.body.__knowledge
     if (!needsPlan && !confirmedPlan && !directHtml && req.body.imageAnalysisMode === 'general' && isCurrentWeatherQuery(lastUserText)) {
       const weather = await weatherFallbackSearch(lastUserText)
