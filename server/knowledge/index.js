@@ -553,6 +553,13 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
       .catch(() => null)
     return { accent, logo: buffer ? `data:image/png;base64,${buffer.toString('base64')}` : null }
   }
+  async function activityHtmlBrand(user, traceId) {
+    const trace = traceId && get('traces', traceId)
+    if (!user || trace?.userId !== user.id || !trace.activity?.identity) return null
+    const brand = trace.contextBrandIds?.map(brandId => get('brands', brandId))
+      .find(candidate => candidate?.name === trace.activity.identity && !candidate.deletedAt)
+    return brand ? { ...await htmlBrand(user, brand.id), topRight: true } : null
+  }
   function generationAssets(brand) {
     const docs = all('documents').filter((d) => d.brandId === brand.id && !d.deletedAt && d.publishedVersionId).flatMap((d) => {
       const v = get('versions', d.publishedVersionId)
@@ -730,5 +737,5 @@ export function installKnowledge(app, { dataDir, requireAuth, requireAdmin, list
     if (!v?.file) fail('此资料没有原文件', 404)
     res.set('Cache-Control', 'private, no-store').download(path.join(originals, v.file), v.originalName)
   })
-  return { prepare, finish, compose, htmlBrand, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining || visionScheduling || activeVision.size) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
+  return { prepare, finish, compose, htmlBrand, activityHtmlBrand, restoreImages, search, hasLogoOverlay: (traceId) => get('traces', traceId)?.overlayLogo === true, authorize: (user, selection) => { if (selection?.brandId) access(user, selection.brandId) }, db, close: async () => { stopped = true; await embedder?.close(); while (draining || visionScheduling || activeVision.size) await new Promise((r) => setTimeout(r, 10)); if (db.open) db.close() } }
 }

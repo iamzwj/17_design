@@ -1483,10 +1483,13 @@ async function handleTextCompletion(req, res, next) {
       role: 'system',
       content: '直接处理用户最后一条请求。当前没有进入 HTML 演示稿流程，不要把普通问答变成演示稿规划。历史规划和 Skill 不能替用户指定交付物。当前日期为 ' + shanghaiDate() + '。没有本次可靠来源时，明确说明无法核实实时数据，禁止引用旧信息冒充当前结果。',
     })
-    const htmlBrandId = activityPlanning ? context?.activityBrandId
-      : req.body.imageAnalysisMode === 'general' ? req.body.knowledge?.brandId : null
-    const htmlBrand = (directHtml || confirmed) && htmlBrandId
-      ? { ...await knowledge.htmlBrand(req.user, htmlBrandId), topRight: activityPlanning } : null
+    let htmlBrand = null
+    if (directHtml || confirmed) {
+      if (activityPlanning) htmlBrand = await knowledge.activityHtmlBrand(req.user, context?.id)
+      else if (req.body.imageAnalysisMode === 'general' && req.body.knowledge?.brandId) {
+        htmlBrand = await knowledge.htmlBrand(req.user, req.body.knowledge.brandId)
+      }
+    }
     const deck = confirmed && !directHtml ? readHtmlDeckPlan(confirmedPlan.content) : null
     if (deck) {
       const request = {
