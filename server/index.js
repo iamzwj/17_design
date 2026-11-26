@@ -1181,6 +1181,9 @@ async function recognizeImageText(source, index) {
       maxBuffer: 2 * 1024 * 1024,
     })
     return stdout.trim()
+  } catch (error) {
+    console.warn('optional-image-ocr-failed', { index, code: error.code })
+    return ''
   } finally {
     await fs.promises.rm(temporaryDir, { recursive: true, force: true })
   }
@@ -1392,9 +1395,10 @@ async function handleTextCompletion(req, res, next) {
           const source = part?.image_url?.url
           if (part?.type !== 'image_url' || !/^\/api\/chat-images\/[a-f0-9-]{36}\.png$/i.test(source || '')) return part
           const id = path.basename(source, '.png'), directory = path.join(waterfallDataDir, 'chat-images')
-          const owner = JSON.parse(await fs.promises.readFile(path.join(directory, `${id}.json`), 'utf8'))
-          if (owner.userId !== req.user?.id) throw Object.assign(new Error('图片不存在或无权访问'), { status: 404 })
-          const buffer = await fs.promises.readFile(path.join(directory, `${id}.png`))
+          const owner = await fs.promises.readFile(path.join(directory, `${id}.json`), 'utf8').then(JSON.parse).catch(() => null)
+          if (!owner || owner.userId !== req.user?.id) throw Object.assign(new Error('附件图片已不可用，请重新上传后发送'), { status: 404 })
+          const buffer = await fs.promises.readFile(path.join(directory, `${id}.png`)).catch(() => null)
+          if (!buffer) throw Object.assign(new Error('附件图片已不可用，请重新上传后发送'), { status: 404 })
           return { ...part, image_url: { ...part.image_url, url: `data:image/png;base64,${buffer.toString('base64')}` } }
         }))
         return normalizeTextMessage({ ...message, content: parts }, req.body.imageAnalysisMode === 'general')
