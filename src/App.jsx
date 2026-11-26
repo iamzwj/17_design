@@ -1475,6 +1475,8 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
   </div>
 }
 
+const isChatHtmlFile = (file) => /\.html?$/i.test(file.name) || file.type === 'text/html'
+
 function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
   const brandScope = scopedBrand(user)
   const chatSkill = useGenerationSkill('chat')
@@ -1520,6 +1522,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     if (type === 'strategy') writeWorkspaceStorage(activityDraftKey, input)
   }, [activityDraftKey, input, type])
   const [attachments, setAttachments] = useState([])
+  const hasChatHtml = type === 'chat' && attachments.some((file) => file.mime === 'text/html')
   const [attachmentError, setAttachmentError] = useState('')
   const [brand, setBrand] = useState(conversation?.brand === 'general' ? '' : conversation?.brand || '')
   const webSearch = type === 'strategy'
@@ -1652,11 +1655,17 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     const limit = type === 'chat' ? 6 : 4
     const files = Array.from(fileList || []).slice(0, limit - attachments.length)
     if (!files.length && fileList?.length) { setAttachmentError(`最多上传 ${limit} 张图片或文件`); return }
-    if (type === 'chat' && files.some((file) => !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 10 * 1024 * 1024)) { setAttachmentError('请拖入 10MB 以内的 JPG、PNG、WebP 或 GIF 图片'); return }
-    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || !complianceFileKind(file))
+    if (type === 'chat' && files.some((file) => (!isChatHtmlFile(file) && !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) || file.size > 10 * 1024 * 1024)) { setAttachmentError('请选择 10MB 以内的 JPG、PNG、WebP、GIF 或 HTML 文件'); return }
+    const invalid = files.find((file) => file.size > 12 * 1024 * 1024 || (!complianceFileKind(file) && !(type === 'chat' && isChatHtmlFile(file))))
     if (invalid) { setAttachmentError(`${invalid.name} 不支持或超过 12MB`); return }
     try {
       const encoded = await Promise.all(files.map(async (file) => {
+        if (type === 'chat' && isChatHtmlFile(file)) {
+          const content = await file.text()
+          if (!content.trim()) throw new Error(`${file.name} 是空文件`)
+          if (content.length > MAX_COMPLIANCE_TEXT_LENGTH) throw new Error(`${file.name} 超过 ${MAX_COMPLIANCE_TEXT_LENGTH} 字符，请拆分后上传`)
+          return { name: file.name, kind: 'text', mime: 'text/html', content }
+        }
         if (file.type.startsWith('image/')) return { name: file.name, kind: 'image', mime: file.type, src: await fileToDataUrl(file) }
         const content = await extractComplianceText(file)
         if (!plainText(content)) throw new Error(`${file.name} 未提取到可审核的文字内容`)
@@ -1713,10 +1722,10 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     if (type === 'chat' && chatSkill.id && !chatSkill.selected) { setAttachmentError('所选 Skill 不可用，请重新选择或重新下载'); return }
     const submittedAttachments = attachments
     const submittedInput = customInput || input
-    const content = submittedInput.trim() || (submittedAttachments.length ? (type === 'chat' ? '请分析我上传的图片。' : '请审核我上传的文件。') : '')
+    const content = submittedInput.trim() || (submittedAttachments.length ? (hasChatHtml ? '请分析我上传的 HTML 文件。' : type === 'chat' ? '请分析我上传的图片。' : '请审核我上传的文件。') : '')
     const needsImageUpload = submittedAttachments.some((file) => file.kind === 'image' && file.src?.startsWith('data:image/'))
     if (!content || (needsImageUpload && uploadingImageAttachmentsRef.current)) return
-    const generateImage = type === 'chat' && isChatImageRequest(content)
+    const generateImage = type === 'chat' && !hasChatHtml && isChatImageRequest(content)
     if (!generateImage && usesTextModel && !textModel) return
     const imageSkill = generateImage && chatSkill.selected?.targets?.includes('image') ? chatSkill.selected : null
     if (generateImage && submittedAttachments.length + (imageSkill?.referenceCount || 0) > 4) {
@@ -1883,16 +1892,16 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
       </div>}
     </div>
     <div className="composer-wrap text-composer-wrap">{type === 'strategy' && messages.length > 0 && <ActivityStrategy compact brandScope={brandScope} value={activityContext} onChange={setActivityContext} onPrompt={prompt => setInput(current => activityFormatDraft(current, prompt))}/>}<div className={`composer glass-strong ${draggingComplianceFiles ? 'is-dragging-files' : ''}`}>
-      {['compliance', 'chat'].includes(type) && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>松开以上传图片</b><small>支持多张</small></div>}
+      {['compliance', 'chat'].includes(type) && draggingComplianceFiles && <div className="image-drop-zone" aria-hidden="true"><span><Icon name="plus" size={16}/></span><b>{type === 'chat' ? '松开以上传图片或 HTML' : '松开以上传图片'}</b><small>支持多张</small></div>}
       {['compliance', 'chat'].includes(type) && attachments.some((file) => file.kind === 'image' && file.src) && <div className="reference-strip">{attachments.filter((file) => file.kind === 'image' && file.src).map((file, index) => <div key={file.name + index}><button type="button" className="reference-preview" onClick={() => setPreviewImage(file.src)} aria-label={`预览上传图片 ${index + 1}`}><QuietReferenceImage src={file.src}/></button><button type="button" className="reference-remove" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除图片 ${index + 1}`}><Icon name="x" size={13}/></button></div>)}</div>}
-      {type === 'compliance' && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
+      {['compliance', 'chat'].includes(type) && attachments.some((file) => file.kind !== 'image') && <div className="compliance-file-strip">{attachments.filter((file) => file.kind !== 'image').map((file, index) => <span key={file.name + index}><Icon name="book" size={14}/><b>{file.name}</b><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item !== file))} aria-label={`移除文件 ${index + 1}`}><Icon name="x" size={12}/></button></span>)}</div>}
       <textarea rows="3" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} placeholder={type === 'chat' ? '告诉我你想做什么，或拖入图片…' : copy.placeholder}/><div className="composer-tools">
         {type === 'compliance' ? <div className="tool-group">
           <button className="tool-button reference-add" type="button" title="上传文件" aria-label="上传文件" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 4}><Icon name="plus" size={18}/></button>
           <input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.txt,.md,.csv,.json,.html,.xml,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/*" onChange={addComplianceFiles}/>
           <ComposerSelect className="compliance-brand-select" label="选择审核品牌" placeholder="请选择审核品牌或项目" value={brand} options={COMPLIANCE_BRANDS} onChange={(value) => { setBrand(value); setAttachmentError('') }}/>
-        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片" aria-label="上传图片" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null && type === 'chat' ? 'Gemini 3.7 Flash' : textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text" localSelection={type === 'chat' ? chatKnowledge : undefined} onLocalSelectionChange={setChatKnowledge}/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
-        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel && !(type === 'chat' && isChatImageRequest(input))) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
+        </div> : <div className="text-tools">{type === 'chat' && <><button className="tool-button reference-add" type="button" title="上传图片或 HTML" aria-label="上传图片或 HTML" onClick={() => complianceFileRef.current?.click()} disabled={attachments.length >= 6}><Icon name="plus" size={18}/></button><input ref={complianceFileRef} type="file" hidden multiple accept="image/*,.html,.htm,text/html" onChange={addComplianceFiles}/></>}{usesTextModel ? <ComposerSelect label="模型选择" placeholder={textModels === null && type === 'chat' ? 'Gemini 3.7 Flash' : textModels === null || textModels.length ? '模型选择' : '暂无可用模型'} value={textModel} options={allTextModels} onChange={setSelectedTextModel} disabled={!allTextModels.length} portal/> : <span className="model-chip">Image 2.5</span>}{type === 'strategy' ? <ActivityKnowledgePicker brandScope={brandScope} value={activityContext} onChange={setActivityContext}/> : <KnowledgeContext tool="text" localSelection={type === 'chat' ? chatKnowledge : undefined} onLocalSelectionChange={setChatKnowledge}/>}{type === 'chat' && <GenerationSkillPicker target="chat" state={chatSkill}/>}</div>}
+        <button className={`send-button${type === 'compliance' ? ' compliance-start-button' : ''}`} aria-label={uploadingImages ? '正在上传图片' : type === 'compliance' ? '开始审核' : '发送'} onClick={() => submit()} disabled={uploadingImages || (usesTextModel && !textModel && !(type === 'chat' && !hasChatHtml && isChatImageRequest(input))) || (!input.trim() && attachments.length === 0)}>{type === 'compliance' ? '开始审核' : <Icon name="arrowUp" size={18}/>}</button>
       </div></div>{attachmentError && <small className="composer-note error">{attachmentError}</small>}</div>
     {previewImage && <ImagePreview url={previewImage} onClose={() => setPreviewImage(null)}/>} 
   </section>
