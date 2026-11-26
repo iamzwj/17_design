@@ -1485,6 +1485,19 @@ function ImageComposer({ skillState, prompt, setPrompt, ratio, setRatio, model, 
   </div>
 }
 
+function extractChatHtmlBody(source) {
+  // Template contents are inert: attachments are never mounted or executed.
+  const template = document.createElement('template')
+  template.innerHTML = source
+  const fragment = template.content
+  fragment.querySelectorAll('head, title, style, script, template, svg, [aria-hidden="true"]').forEach(node => node.remove())
+  fragment.querySelectorAll('br').forEach(node => node.replaceWith('\n'))
+  fragment.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, tr, div, section, article, pre, blockquote').forEach(node => node.append('\n'))
+  fragment.querySelectorAll('th, td').forEach(node => node.append('\t'))
+  const text = fragment.textContent.split('\n').map(line => line.trim()).filter(Boolean).join('\n')
+  return text
+}
+
 const isChatHtmlFile = (file) => /\.html?$/i.test(file.name) || file.type === 'text/html'
 
 function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
@@ -1671,9 +1684,10 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
     try {
       const encoded = await Promise.all(files.map(async (file) => {
         if (type === 'chat' && isChatHtmlFile(file)) {
-          const content = await file.text()
-          if (!content.trim()) throw new Error(`${file.name} 是空文件`)
-          if (content.length > MAX_COMPLIANCE_TEXT_LENGTH) throw new Error(`${file.name} 超过 ${MAX_COMPLIANCE_TEXT_LENGTH} 字符，请拆分后上传`)
+          const source = await file.text()
+          const content = source.length > MAX_COMPLIANCE_TEXT_LENGTH ? extractChatHtmlBody(source) : source
+          if (!content.trim()) throw new Error(`${file.name} 没有可读取的文字内容`)
+          if (content.length > MAX_COMPLIANCE_TEXT_LENGTH) throw new Error(`${file.name} 的正文超过 ${MAX_COMPLIANCE_TEXT_LENGTH} 字符，请拆分后上传`)
           return { name: file.name, kind: 'text', mime: 'text/html', content }
         }
         if (file.type.startsWith('image/')) {
