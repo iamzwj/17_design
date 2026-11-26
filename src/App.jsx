@@ -1808,7 +1808,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
       if (generateImage) {
         const created = await createConversationImageTask({
           prompt: imagePrompt, clientRequestId: requestId,
-          images: submittedAttachments.filter(file => file.kind === 'image').map(file => file.src),
+          images: uploadedAttachments.filter(file => file.kind === 'image').map(file => file.src),
           aspectRatio: normalizedImageRatio(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_RESOLUTION, content.match(/(?:^|[^\d])(\d{1,2}[:：]\d{1,2})(?!\d)/u)?.[1]?.replace('：', ':') || '1:1'),
           model: DEFAULT_IMAGE_MODEL, resolution: DEFAULT_IMAGE_RESOLUTION,
           quality: imageQualityForModel(DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_QUALITY),
