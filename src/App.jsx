@@ -1,3 +1,4 @@
+import { MAX_CHAT_HTML_CHARACTERS } from '../shared/chatTextLimits.js'
 import { chatImagePrompt, isChatImageRequest } from './chatImageIntent.js'
 import WorkspaceLoading from './WorkspaceLoading.jsx'
 import useToolZoomLock from './useToolZoomLock.js'
@@ -1685,9 +1686,9 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
       const encoded = await Promise.all(files.map(async (file) => {
         if (type === 'chat' && isChatHtmlFile(file)) {
           const source = await file.text()
-          const content = source.length > MAX_COMPLIANCE_TEXT_LENGTH ? extractChatHtmlBody(source) : source
+          const content = source.length > MAX_CHAT_HTML_CHARACTERS ? extractChatHtmlBody(source) : source
           if (!content.trim()) throw new Error(`${file.name} 没有可读取的文字内容`)
-          if (content.length > MAX_COMPLIANCE_TEXT_LENGTH) throw new Error(`${file.name} 的正文超过 ${MAX_COMPLIANCE_TEXT_LENGTH} 字符，请拆分后上传`)
+          if (content.length > MAX_CHAT_HTML_CHARACTERS) throw new Error(`${file.name} 的正文超过 200,000 字符，请拆分后上传`)
           return { name: file.name, kind: 'text', mime: 'text/html', content }
         }
         if (file.type.startsWith('image/')) {

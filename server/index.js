@@ -1,3 +1,4 @@
+import { validateChatMessageLength } from '../shared/chatTextLimits.js'
 import { embedHtmlBrand, htmlBrandPrompt } from './htmlBrand.js'
 import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_ATTRIBUTION_RULE, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
 import { BUILTIN_SKILLS } from './builtinSkills.js'
@@ -1205,6 +1206,7 @@ async function recognizeImageText(source, index) {
 
 async function normalizeTextMessage({ role, content }, generalImages = false) {
   if (typeof content === 'string') {
+    if (generalImages && role === 'user') return { role, content: validateChatMessageLength(content) }
     const limit = role === 'assistant' && content.startsWith(HTML_PLAN_MARKER) ? 260_000 : 60_000
     return { role, content: content.slice(0, limit) }
   }
@@ -1227,8 +1229,8 @@ async function normalizeTextMessage({ role, content }, generalImages = false) {
   ])
 
   const visualEvidence = visionAnalysis ? `\n\n--- 视觉模型对图片的观察 ---\n${visionAnalysis}${generalImages ? '' : '\n\n请以视觉观察判断 Logo 遮挡、变形、裁切与排版覆盖，以本机 OCR 仅校对文字。'}` : ''
-  const combined = [...textParts, visualEvidence, ...recognizedImages].join('').slice(0, 60_000)
-  return combined ? { role, content: combined } : null
+  const combined = [...textParts, visualEvidence, ...recognizedImages].join('')
+  return combined ? { role, content: generalImages ? validateChatMessageLength(combined) : combined.slice(0, 60_000) } : null
 }
 
 function searchQueryFromMessages(messages, requestedQuery) {
