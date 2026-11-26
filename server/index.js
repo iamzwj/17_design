@@ -1386,7 +1386,7 @@ async function handleTextCompletion(req, res, next) {
       return res.status(400).json({ error: 'messages 不能为空' })
     }
     const selectedSkill = req.body.__skill
-    if (isImageToPptSkill(skill)) {
+    if (isImageToPptSkill(selectedSkill)) {
       const taskId = req.body.requestId
       if (!req.user?.id || !/^[a-f0-9-]{36}$/i.test(taskId || '')) throw Object.assign(new Error('转换任务无效'), { status: 400 })
       const last = [...messages].reverse().find((message) => message.role === 'user' && Array.isArray(message.content))
@@ -1400,7 +1400,7 @@ async function handleTextCompletion(req, res, next) {
       await fs.promises.writeFile(path.join(folder, 'owner.json'), JSON.stringify({ userId: req.user.id }), { mode: 0o600 })
       return res.json({ content: `已生成可编辑 PPT，共重建 ${result.objects} 个元素。复杂图片以独立图片保留，请检查文字和排版。`, pptTaskId: taskId, sources: [] })
     }
-    if (skill && (!skill.markdown || skill.markdown.length > 24000)) throw Object.assign(new Error('Skill 内容过长，请精简到 24,000 字符以内'), { status: 400 })
+    if (selectedSkill && (!selectedSkill.markdown || selectedSkill.markdown.length > 24000)) throw Object.assign(new Error('Skill 内容过长，请精简到 24,000 字符以内'), { status: 400 })
     const safeMessages = (await Promise.all(messages
       .filter((message) => ['user', 'assistant'].includes(message.role))
       .map(async (message) => {
