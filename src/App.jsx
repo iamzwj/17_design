@@ -1350,10 +1350,9 @@ function UserMessage({ content, images = [], files = [], messageRef, onPreview, 
 function ImageMessage({ message, focusRef, onPreview }) {
   if (message.role === 'user') return <UserMessage messageRef={focusRef} content={message.content} images={(message.references || []).filter(item => item.src)} onPreview={onPreview}/>
   if (message.role === 'error') return <div ref={focusRef} className="error-message"><span><b>生成失败{message.elapsedMs != null ? ` · 耗时 ${formatElapsed(message.elapsedMs)}` : ''}</b>{message.content}</span></div>
-  return <div ref={focusRef} className="assistant-turn has-copy-control">{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
+  return <div ref={focusRef} className="assistant-turn">{message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
     <div className={`generated-grid ${message.urls.length === 1 ? 'single' : ''}`}>{message.urls.map((url, index) => <figure key={url}><button className="image-preview-trigger" onClick={() => onPreview({ url, urls: message.urls, prompt: message.prompt })} aria-label={`预览生成图片 ${index + 1}`}><img src={url} alt={`AI 生成结果 ${index + 1}`} loading="lazy" decoding="async" draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData(GENERATED_IMAGE_DRAG_TYPE, url); event.dataTransfer.setData('text/uri-list', url) }}/></button></figure>)}</div>
     {message.brandWarning && <div className="image-brand-warning" role="status">{message.brandWarning}</div>}
-    <MessageCopyButton content={message.urls.join('\n')}/>
   </div>
 }
 
