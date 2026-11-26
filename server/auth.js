@@ -28,7 +28,7 @@ export const REGISTRATION_WHITELIST = new Set([
   'caoyh21@onewo.com', 'chenj529@onewo.com', 'chent05@onewo.com', 'huangpd01@onewo.com', 'shenxx09@onewo.com', 'tangf16@onewo.com', 'wangyc48@onewo.com',
   'zhoumt10@onewo.com', 'chenjl76@onewo.com', 'cheny453@onewo.com',
   'helg03@onewo.com', 'huangjq59@onewo.com', 'ligy70@onewo.com',
-  'lind01@onewo.com', 'yem15@onewo.com', 'zhangwj159@onewo.com', 'zhouz76@onewo.com', 'wangnf@onewo.com',
+  'lind01@onewo.com', 'changyy06@onewo.com', 'yem15@onewo.com', 'zhangwj159@onewo.com', 'zhouz76@onewo.com', 'wangnf@onewo.com',
 ])
 
 function normalizeEmail(value) { return String(value || '').trim().toLowerCase() }
@@ -44,7 +44,7 @@ function bearer(req) {
 
 export function installAuth(app, { dataDir, allowTestAccounts = false }) {
   function identityFor(email) {
-    return testAccountIdentity(email) || (normalizeEmail(email) === 'lind01@onewo.com' ? 'yanxuanjia' : REGISTRATION_WHITELIST.has(email) ? 'marketing' : null)
+    return testAccountIdentity(email) || (['lind01@onewo.com', 'changyy06@onewo.com'].includes(normalizeEmail(email)) ? 'yanxuanjia' : REGISTRATION_WHITELIST.has(email) ? 'marketing' : null)
   }
   function listAccountIdentities() {
     return [
