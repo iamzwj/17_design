@@ -20,7 +20,7 @@ const BUILTIN_USERS = [
   },
 ]
 const DAILY_CREDIT_OVERRIDES = new Map([
-  ['cheny453@onewo.com', 500],
+  ['cheny453@onewo.com', 999],
   ['zhangwj159@onewo.com', 999],
   ['yem15@onewo.com', 500],
 ])
