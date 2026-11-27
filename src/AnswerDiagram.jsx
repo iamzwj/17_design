@@ -1,10 +1,22 @@
 import { useEffect, useId, useState } from 'react'
+import mermaidUrl from 'mermaid/dist/mermaid.min.js?url'
 
 let renderer
 function loadRenderer() {
-  renderer ??= import('mermaid').then(({ default: mermaid }) => {
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, maxTextSize: 20000, maxEdges: 200 })
-    return mermaid
+  renderer ??= new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = mermaidUrl
+    script.onload = () => {
+      const mermaid = window.mermaid
+      if (!mermaid?.render) { reject(new Error('Diagram renderer unavailable')); return }
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, htmlLabels: false, maxTextSize: 20000, maxEdges: 200 })
+      resolve(mermaid)
+    }
+    script.onerror = () => reject(new Error('Diagram renderer failed to load'))
+    document.head.append(script)
+  }).catch(error => {
+    renderer = undefined
+    throw error
   })
   return renderer
 }
