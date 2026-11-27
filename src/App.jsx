@@ -1905,7 +1905,7 @@ function TextStudio({ type, conversation, onSave, user, onUserUpdate }) {
         const presentationPlan = typeof message.content === 'string' && message.content.startsWith('[HTML演示稿规划]')
         const displayContent = presentationPlan ? message.content.replace(/^\[HTML演示稿规划\]\s*/, '').replace(/<!-- dgen-deck:[A-Za-z0-9+/=]+ -->\s*$/, '').trimEnd() : message.content
         return <div ref={messageRef} className="assistant-turn text-answer has-copy-control" key={index}>
-          {message.skillSnapshot?.title && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
+          {message.skillSnapshot?.title && message.skillSnapshot.id !== 'magazine-editorial-layout' && <div className="task-elapsed">使用 Skill · {skillDisplayName(message.skillSnapshot.title)}</div>}
           {message.elapsedMs != null && <div className="task-elapsed">耗时 {formatElapsed(message.elapsedMs)}</div>}
           {type === 'strategy' ? <ActivityAnswer content={displayContent} sources={message.sources}/> : <>
             {type === 'compliance' ? <ComplianceReport content={message.content} brand={message.complianceBrand || conversation?.brand || brand}/> : <AnswerText content={activityVisibleText(displayContent)} trailing={message.pptTaskId ? <span className="ppt-copy-action"><MessageCopyButton content={displayContent}/></span> : null}/>}

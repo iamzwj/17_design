@@ -1443,9 +1443,6 @@ async function handleTextCompletion(req, res, next) {
     }
     const skill = selectedSkill || defaultSkill
     const { confirmedPlan, needsPlan, directHtml } = phase
-    const defaultSkillSnapshot = defaultSkill && (confirmedPlan || directHtml)
-      ? { skillSnapshot: { id: defaultSkill.id, title: defaultSkill.title } }
-      : {}
     const context = req.body.__knowledge
     if (!needsPlan && !confirmedPlan && !directHtml && req.body.imageAnalysisMode === 'general' && isCurrentWeatherQuery(lastUserText)) {
       const weather = await weatherFallbackSearch(lastUserText)
@@ -1535,7 +1532,7 @@ async function handleTextCompletion(req, res, next) {
       if (!styled) throw new Error('排版模型未返回可用的版式。已确认的规划仍可使用，请重试生成。')
       const content = '```html\n' + renderHtmlDeck(styled, htmlBrand) + '\n```'
       if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, ...defaultSkillSnapshot })
+      return res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model })
     }
     if (needsPlan) {
       upstreamRequest.messages.push({ role: 'system', content: HTML_PLAN_PROMPT })
@@ -1593,7 +1590,7 @@ async function handleTextCompletion(req, res, next) {
     }
     if (htmlBrand) content = embedHtmlBrand(content, htmlBrand)
     if (context) knowledge.finish(context.id, { status: 'succeeded', model: data.model, completedAt: new Date().toISOString(), requestId: req.body.requestId || null })
-    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, skillApplied: Boolean(directHtml) || appliedChatSkill || (confirmed && Boolean(skill)), ...defaultSkillSnapshot })
+    res.json({ content, sources, knowledgeTraceId: context?.id || null, usage: data.usage || null, model: data.model, skillApplied: Boolean(directHtml) || appliedChatSkill || (confirmed && Boolean(skill)) })
   } catch (error) {
     if (req.body.__knowledge) knowledge.finish(req.body.__knowledge.id, { status: 'failed', error: error.message })
     next(error)
