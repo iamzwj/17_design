@@ -70,7 +70,7 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
   }
   .features, .checks { display: grid; gap: 20px; margin: 0; padding: 0; min-width: 0; list-style: none; }
   .section-heading { display: grid; gap: 5px; }
-  .section-label { line-height: 1.35; color: var(--section-label, #007d6b); font-weight: 750; letter-spacing: .12em; }
+  .section-label { font-size: .82em; line-height: 1.35; color: var(--section-label, #007d6b); font-weight: 400; letter-spacing: .12em; }
   .features h3 { position: relative; padding-left: 1.2em; }
   .features h3::before { content: ''; position: absolute; top: .55em; left: 0; width: .33em; height: .33em; background: var(--accent); }
   .report-points { margin: 5px 0 0; padding-left: 1.4em; list-style: none; color: var(--muted); font-size: .94em; line-height: 1.65; font-weight: 400; }
