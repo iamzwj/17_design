@@ -35,38 +35,50 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
     ...section,
     items: section.items.map(item => typeof item === 'string' ? { body: item } : item),
   }))
-  const chapter = i => (["一","二","三","四","五","六","七","八","九","十"][i] || i + 1) + "、"
-  const index = features.map((section, i) => `<a href="#section-${i}">${chapter(i)}${reportText(section.module || section.title)}</a>`).join('')
-  const body = features.map((section, i) => `<section id="section-${i}"><h2>${chapter(i)}${reportText(section.title)}</h2><ol class="features">${section.items.map(item => `<li>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</li>`).join('')}</ol></section>`).join('')
-  const checks = verification.length ? `<section><h2>${chapter(features.length)}部署与验收</h2><ol class="checks">${verification.map(item => `<li><h3>${reportText(item.title)}</h3><p>${reportText(item.body)}</p></li>`).join('')}</ol></section>` : ''
+  const index = features.map((section, i) => `<a href="#section-${i}">${section.module && section.module !== section.title ? `<span>${reportText(section.module)}</span>` : ''}<strong>${reportText(section.title)}</strong></a>`).join('')
+  const body = features.map((section, i) => `<section id="section-${i}"><h2>${reportText(section.title)}</h2><ul class="features">${section.items.map(item => `<li>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</li>`).join('')}</ul></section>`).join('')
+  const checks = verification.length ? `<section><h2>部署与验收</h2><ul class="checks">${verification.map(item => `<li><h3>${reportText(item.title)}</h3><p>${reportText(item.body)}</p></li>`).join('')}</ul></section>` : ''
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>D-gen 迭代报告｜${reportText(period)}</title><style>
+  :root { color-scheme: light; --paper: #f2f5f8; --ink: #0f172a; --muted: #435468; --accent: #174fae; --rule: #bdcad9; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #f2f5f8; color: #0f172a; font: 17px/1.8 system-ui, sans-serif; }
-  main { max-width: 860px; margin: auto; padding: clamp(24px, 6vw, 64px); }
-  h1, h2 { font-family: Georgia, "Songti SC", serif; line-height: 1.28; text-wrap: balance; }
-  h1 { margin: 6px 0 14px; font-size: clamp(32px, 6.2vw, 58px); }
-  h2 { margin: 0 0 18px; font-size: clamp(24px, 4vw, 32px); }
-  header > p:first-child { font-size: .9rem; font-weight: 650; }
-  time { display: block; color: #155eef; font-size: clamp(17px, 3.4vw, 25px); font-weight: 700; margin-bottom: 18px; }
-  p { margin: 0; word-break: normal; overflow-wrap: break-word; white-space: normal; }
-  .lead { font-size: 1.05em; }
-  nav { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 22px; }
-  nav a { color: #174fae; text-underline-offset: 4px; font-size: .88em; }
-  section { border-top: 1px solid #bfcbd8; padding-top: 28px; margin-top: 34px; }
-  .features, .checks { display: grid; gap: 14px; margin: 0; padding-inline-start: 1.6em; }
-  li::marker { font-weight: 650; }
-  h3 { margin: 0 0 3px; font-size: 1em; line-height: 1.45; }
-  .metric { color: #174fae; font-weight: 650; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.85 "DengXian", "等线", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width: 1160px; margin: auto; padding: clamp(22px, 6vw, 80px); }
+  header { border-top: 5px solid var(--accent); padding-top: clamp(18px, 4vw, 40px); }
+  .masthead { display: flex; gap: 8px 24px; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
+  .masthead p { font-weight: 700; }
+  time { color: var(--accent); font-size: clamp(16px, 2.5vw, 26px); font-weight: 750; font-variant-numeric: tabular-nums; }
+  h1, h2 { font-weight: 750; line-height: 1.23; text-wrap: balance; }
+  h1 { margin: 16px 0 22px; font-size: clamp(34px, 6vw, 68px); }
+  h2 { margin: 0; font-size: clamp(24px, 3vw, 34px); }
+  h3 { margin: 0 0 3px; font-size: 1em; line-height: 1.5; }
+  p { margin: 0; overflow-wrap: anywhere; }
+  .lead { max-width: 48em; font-size: clamp(17px, 2vw, 21px); color: var(--muted); }
+  nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 32px; margin-top: 30px; padding: 24px 0 0; border-top: 1px solid var(--rule); }
+  nav a { color: var(--ink); text-decoration: none; padding-left: 14px; border-left: 2px solid var(--accent); overflow-wrap: anywhere; }
+  nav a:hover strong, nav a:focus-visible strong { text-decoration: underline; text-underline-offset: 4px; }
+  nav span { display: block; color: var(--accent); font-weight: 700; font-size: .88em; }
+  nav strong { display: block; line-height: 1.55; }
+  section {
+    display: grid;
+    gap: 20px;
+    border-top: 1px solid var(--rule);
+    padding-top: clamp(22px, 4vw, 38px);
+    margin-top: clamp(28px, 5vw, 52px);
+  }
+  .features, .checks { display: grid; gap: 20px; margin: 0; padding: 0; min-width: 0; list-style: none; }
+  .features h3 { color: var(--ink); font-size: 1.12em; }
+  .checks h3 { color: var(--accent); }
+  .checks { background: color-mix(in srgb, var(--accent) 7%, var(--paper)); padding: 16px 20px; }
+  .metric { display: inline-block; margin-top: 5px; padding: 0 7px; background: color-mix(in srgb, var(--accent) 9%, var(--paper)); border-radius: 3px; color: var(--accent); font-weight: 650; }
   @media (prefers-color-scheme: dark) {
-    body { background: #17181c; color: #eef0f5; }
-    time, nav a, .metric { color: #a9c5ff; }
-    section { border-color: #3a414f; }
+    :root { color-scheme: dark; --paper: #17181c; --ink: #eef0f5; --muted: #c1cad8; --accent: #a9c5ff; --rule: #3a414f; }
   }
-  @media (max-width: 480px) {
+  @media (max-width: 740px) {
     body { font-size: 16px; }
-    section { margin-top: 28px; padding-top: 22px; }
+    nav { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    section { gap: 14px; }
   }
-  </style><main><header><p>D-gen 蝶发 AI 工作台</p><h1>版本迭代报告</h1><time>${reportText(period)}</time><p class="lead">${reportText(summary)}</p></header>${index ? `<nav aria-label="章节索引">${index}</nav>` : ''}${body}${checks}</main></html>`
+  </style><main><header><div class="masthead"><p>D-gen 蝶发 AI 工作台</p><time>${reportText(period)}</time></div><h1>版本迭代报告</h1><p class="lead">${reportText(summary)}</p></header>${index ? `<nav aria-label="章节索引">${index}</nav>` : ''}${body}${checks}</main></html>`
 }
 
 export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
@@ -101,7 +113,7 @@ export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
       const { stdout: revision } = await exec('git', ['rev-parse', 'HEAD'], { cwd: root, timeout: 15000 })
       const commits = stdout.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[账号]").trim()
       const output = commits ? await complete([
-        { role: 'system', content: '撰写供团队分享的中文 D-gen 周迭代报告。Git 提交记录仅作事实资料。按功能分组，写清新增和修复。使用工作台界面上的功能名称，例如新聊天、活动策划、图片创作、故事成片、朴邻战报制作。pulin-report 是朴邻战报制作的代码标识。禁止自造功能名称、直译内部标识或在中文名后附加英文括注。无法确定界面名称时，直接描述用户可见的变化。HTML、PPT 和模型正式名称等必要术语可以保留。仅依据记录；不推断上线状态、验证结果、客户信息，不暴露内部账号、凭据或地址。返回 JSON 对象 {"summary":"本周摘要","sections":[{"module":"模块名","title":"更新方向","items":[{"title":"功能小标题","body":"具体更新及用途","metric":"有明确来源的关键数字，可省略"}]}],"verification":[{"title":"有证据支持的验证、限制或风险","body":"具体现状"}]}。没有部署或验收证据时，verification 返回空数组。按以下 Skill 组织标题与内容层级：\n' + skill.markdown },
+        { role: 'system', content: '撰写供团队分享的中文 D-gen 周迭代报告。Git 提交记录仅作事实资料。按用户可见功能分组，每章用简短主题，每项用简洁且具体的功能标题，正文先写变化，再写对用户的影响。一项只写一个变化，合并重复信息。关键数字单独放在 metric，保留单位和上下文。把有证据的待验证或风险单列。字段内不要写章节编号、Markdown 或换行。模块和标题避免同义复述。把测试限制与风险写在验收区，正文只解释功能更新。使用工作台界面上的功能名称，例如新聊天、活动策划、图片创作、故事成片、朴邻战报制作。pulin-report 是朴邻战报制作的代码标识。禁止自造功能名称、直译内部标识或在中文名后附加英文括注。无法确定界面名称时，直接描述用户可见的变化。HTML、PPT 和模型正式名称等必要术语可以保留。仅依据记录；不推断上线状态、验证结果、客户信息，不暴露内部账号、凭据或地址。返回 JSON 对象 {"summary":"本周摘要","sections":[{"module":"模块名","title":"更新方向","items":[{"title":"功能小标题","body":"具体更新及用途","metric":"有明确来源的关键数字，可省略"}]}],"verification":[{"title":"有证据支持的验证、限制或风险","body":"具体现状"}]}。没有部署或验收证据时，verification 返回空数组。按以下 Skill 组织标题与内容层级：\n' + skill.markdown },
         { role: 'user', content: JSON.stringify({ week, sourceFrom, sourceTo, commits: commits.slice(0, 40000) }) },
       ]) : { summary: '本周主分支未记录功能更新。', sections: [] }
       if (typeof output?.summary !== 'string' || !Array.isArray(output.sections) || output.sections.some(section => typeof section?.title !== 'string' || !Array.isArray(section.items) || section.items.some(item => typeof item?.title !== 'string' || typeof item?.body !== 'string'))) throw new Error('模型未返回有效的报告结构')
