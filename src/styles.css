@@ -2,6 +2,14 @@
 
 @import './designTokens.css';
 
+.account-logout-confirm { margin: 4px 0; padding: 10px; border: 1px solid var(--dp-line, #8a8c94); border-radius: 9px; background: var(--dp-panel-solid); color: var(--ink); }
+.account-logout-confirm p { margin: 0 0 8px; font-size: 13px; }
+.account-logout-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.account-logout-actions button { min-height: 30px; padding: 0 9px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.account-logout-actions button:last-child { color: var(--dp-highlight, var(--accent)); }
+.account-logout-actions button:hover { background: rgb(var(--theme-blue-rgb) / .12); }
+.account-logout-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 :root {
   font-family: var(--dp-font-body);
   color: var(--dp-ink);

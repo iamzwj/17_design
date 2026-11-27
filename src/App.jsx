@@ -581,6 +581,18 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
   const [expandedMenu, setExpandedMenu] = useState(() => ['video', 'film'].includes(active) ? 'video' : knowledgeActive ? 'knowledge' : ['skills', 'discover-skills'].includes(active) ? 'skills' : active === 'content' ? 'content' : null)
   const toggleMenu = (menu) => setExpandedMenu((current) => current === menu ? null : menu)
   const accountCloseTimer = useRef(null)
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const logoutTrigger = useRef(null)
+  const logoutCancel = useRef(null)
+  useEffect(() => {
+    if (!accountExpanded || !user) setConfirmLogout(false)
+    else if (confirmLogout) logoutCancel.current?.focus()
+  }, [accountExpanded, confirmLogout, user])
+
+  function cancelLogout() {
+    setConfirmLogout(false)
+    logoutTrigger.current?.focus()
+  }
 
   function keepAccountMenuOpen() {
     window.clearTimeout(accountCloseTimer.current)
@@ -588,7 +600,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
 
   function scheduleAccountMenuClose() {
     window.clearTimeout(accountCloseTimer.current)
-    accountCloseTimer.current = window.setTimeout(() => setAccountExpanded(false), 520)
+    if (!confirmLogout) accountCloseTimer.current = window.setTimeout(() => setAccountExpanded(false), 520)
   }
 
   useEffect(() => () => window.clearTimeout(accountCloseTimer.current), [])
@@ -660,7 +672,19 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
               <button type="button" aria-pressed={theme === 'dark'} className={theme === 'dark' ? 'active' : ''} onClick={() => onThemeChange('dark')}>DARK</button>
             </div>
           </div>}
-          <button className="account-logout" onClick={onLogout}><Icon name="logout" size={16}/><span>退出登录</span><Icon name="chevron" size={14}/></button>
+          {confirmLogout && <div className="account-logout-confirm" id="account-logout-confirm" role="dialog" aria-label="确认退出登录" onKeyDown={event => {
+            if (event.key === 'Escape') { event.stopPropagation(); cancelLogout() }
+          }}>
+            <p>确定退出登录吗？</p>
+            <div className="account-logout-actions">
+              <button type="button" ref={logoutCancel} onClick={cancelLogout}>取消</button>
+              <button type="button" onClick={() => { setConfirmLogout(false); setAccountExpanded(false); onLogout() }}>退出登录</button>
+            </div>
+          </div>}
+          <button type="button" ref={logoutTrigger} className="account-logout" aria-expanded={confirmLogout} aria-controls={confirmLogout ? 'account-logout-confirm' : undefined} onClick={() => {
+            keepAccountMenuOpen()
+            setConfirmLogout(value => !value)
+          }}><Icon name="logout" size={16}/><span>退出登录</span><Icon name="chevron" size={14}/></button>
         </div>}
         {user ? <button className="account" onMouseEnter={keepAccountMenuOpen} onClick={() => { keepAccountMenuOpen(); setAccountExpanded((value) => !value) }}><span>{user.email.slice(0, 2).toUpperCase()}</span><b>{user.email.split('@')[0]}<small>积分 {user.credits ?? 100}</small></b></button> : <button className="guest-account" onClick={onLogin}><Icon name="lock" size={16}/><span>登录以使用 AI 功能</span></button>}
       </div>
@@ -2439,7 +2463,6 @@ export default function App() {
       : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation} onUserUpdate={setUser}/>
 
   async function logout() {
-    if (!window.confirm('确定退出登录吗？')) return
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
     clearAuthToken(); setUser(null); setConversations([]); setAuthState('guest')
   }
