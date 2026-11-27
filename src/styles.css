@@ -2,6 +2,9 @@
 
 @import './designTokens.css';
 
+.answer-diagram { min-width: 0; max-width: 100%; margin: 4px 0; padding: 12px; overflow: auto; border-radius: 10px; background: #f5f5f7; }
+.answer-diagram img { display: block; width: 100%; height: auto; }
+
 .account-logout-confirm { margin: 4px 0; padding: 10px; border: 1px solid var(--dp-line, #8a8c94); border-radius: 9px; background: var(--dp-panel-solid); color: var(--ink); }
 .account-logout-confirm p { margin: 0 0 8px; font-size: 13px; }
 .account-logout-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }

@@ -1,5 +1,6 @@
 import { MAX_CHAT_HTML_CHARACTERS } from '../shared/chatTextLimits.js'
 import { chatImagePrompt, isChatImageRequest } from './chatImageIntent.js'
+import AnswerDiagram from './AnswerDiagram.jsx'
 import WorkspaceLoading from './WorkspaceLoading.jsx'
 import useToolZoomLock from './useToolZoomLock.js'
 import { activityFormatDraft } from './activityDraft.js'
@@ -476,8 +477,16 @@ function LiveTaskStatus({ startedAt, label = '思考中' }) {
   return <div className="task-elapsed live" role="status"><span className="task-thinking"><i/>{label}</span><LiveElapsed startedAt={startedAt}/></div>
 }
 
-function AnswerText({ content, trailing }) {
-  const lines = String(content || '').replace(/\r/g, '').split('\n')
+function AnswerText({ content, trailing, diagrams = true }) {
+  const text = String(content || '').replace(/\r/g, '')
+  if (diagrams) {
+    const blocks = text.split(/^[\t ]*```mermaid[\t ]*\n([\s\S]*?)^[\t ]*```[\t ]*$/gim)
+    if (blocks.length > 1) return <div className="answer-plain">{blocks.map((block, index) =>
+      index % 2 ? <AnswerDiagram key={index} source={block.trim()}/> :
+        block.trim() ? <AnswerText key={index} content={block} diagrams={false}/> : null
+    )}{trailing}</div>
+  }
+  const lines = text.split('\n')
 
   const lastLine = lines.findLastIndex((line) => line.trim())
 
