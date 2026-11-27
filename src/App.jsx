@@ -2439,6 +2439,7 @@ export default function App() {
       : active === 'film' ? <FilmStudio key={`film:${user?.id || 'guest'}:${workspaceToken}`} user={user} projectId={activeConversation?.projectId || filmDeepLink} onCreated={recordFilm} onNew={() => startNew('film')} onLogin={() => openLogin('film')}/> : (authState === 'checking' || historyReady !== conversationStorageKey) ? <WorkspaceLoading>正在恢复对话…</WorkspaceLoading> : <TextStudio key={`${user?.id || 'guest'}:${workspaceToken}`} user={user} type={active} conversation={activeConversation} onSave={saveConversation} onUserUpdate={setUser}/>
 
   async function logout() {
+    if (!window.confirm('确定退出登录吗？')) return
     try { await logoutAccount() } catch { /* Clear local login even if the server is unavailable. */ }
     clearAuthToken(); setUser(null); setConversations([]); setAuthState('guest')
   }
