@@ -654,8 +654,10 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
 
 const requestTextUpstream = (endpoint, body, timeout) => requestUpstream(endpoint, body, undefined, timeout)
 installWeeklyReports(app, { dataDir: waterfallDataDir, requireAdmin, complete: async (messages) => {
-  const reply = await requestTextUpstream('/v1/chat/completions', { model: 'gemini-3.7-flash', messages, response_format: { type: 'json_object' } }, 120_000)
-  return JSON.parse(completionText(reply).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+  const reply = await requestTextUpstream('/v1/chat/completions', { model: 'gemini-3.7-flash', messages, max_tokens: 16_000 }, 180_000)
+  const content = completionText(reply)?.trim()
+  if (!content) throw new Error('模型未返回报告内容')
+  return content
 } })
 
 
