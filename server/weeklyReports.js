@@ -10,12 +10,32 @@ const exec = promisify(execFile)
 const root = fileURLToPath(new URL('..', import.meta.url))
 const skill = BUILTIN_SKILLS.find(item => item.id === 'magazine-editorial-layout')
 const encode = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+const correctPulinReportName = value => typeof value === 'string'
+  ? value.replace(/(?:普林|朴林)(?:报批|战报)/g, '朴邻战报')
+  : value
+
+export function correctWeeklyReportNames(report) {
+  return {
+    ...report,
+    summary: correctPulinReportName(report.summary),
+    sections: report.sections?.map(section => ({
+      ...section,
+      title: correctPulinReportName(section.title),
+      items: section.items?.map(item => ({
+        ...item,
+        title: correctPulinReportName(item.title),
+        points: item.points?.map(correctPulinReportName),
+      })),
+    })),
+    html: correctPulinReportName(report.html),
+  }
+}
+
 function reportText(value) {
-  return encode(String(value ?? '')
+  return encode(correctPulinReportName(String(value ?? ''))
     .replace(/(?:（|\()\s*(?:Pulin[\s_-]*Report|Accent Theme|Zoom Lock|Drag\s*&\s*Drop|Activity Strategy|Film Editor)\s*(?:）|\))/gi, '')
     .replace(/\bpulin[\s_-]*report\b/gi, '朴邻战报制作')
     .replace(/朴[林邻]绩效报告(?:工具)?/g, '朴邻战报制作')
-    .replace(/(?:普林|朴林)(?:报批|战报)/g, '朴邻战报')
     .replace(/朴里(?=战报)/g, '朴邻')
     .replace(/支持最多 10 人并发生成单人及半身正装照，并在前端独立完成团队合成排版/g, '团队战报最多支持 8 人，可使用人物形象照制作团队合成排版')
     .replace(/视觉\s*Token(?:s)?/gi, '样式变量'))
@@ -114,7 +134,7 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
 export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
   const folder = path.join(dataDir, 'weekly-reports')
   const read = async id => {
-    try { return JSON.parse(await fs.readFile(path.join(folder, id + '.json'), 'utf8')) }
+    try { return correctWeeklyReportNames(JSON.parse(await fs.readFile(path.join(folder, id + '.json'), 'utf8'))) }
     catch (error) { if (error.code !== 'ENOENT') throw error; return null }
   }
   const save = async report => {
@@ -174,7 +194,7 @@ export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
           section.items.some(item => typeof item?.title !== 'string' || !Array.isArray(item.points) ||
             !item.points.length || item.points.some(point => typeof point !== 'string'))
         )) throw new Error('模型未返回有效的分组报告')
-        const report = { ...week, summary: output.summary, sections: output.sections.map(section => ({ ...section, english: section.english.toUpperCase() })), layout: 'reference-grouped', revision: revision.trim(), createdAt: new Date().toISOString(), shareId: existing?.shareId || randomUUID() }
+        const report = correctWeeklyReportNames({ ...week, summary: output.summary, sections: output.sections.map(section => ({ ...section, english: section.english.toUpperCase() })), layout: 'reference-grouped', revision: revision.trim(), createdAt: new Date().toISOString(), shareId: existing?.shareId || randomUUID() })
         const review = await reviewWeeklyDraft(complete, report, evidence)
         if (!review.passed) {
           issues = review.issues
