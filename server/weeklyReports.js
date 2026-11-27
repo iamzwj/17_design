@@ -18,7 +18,7 @@ export function reportWeek(now = Date.now()) {
   const current = new Date(shanghai)
   const midnight = Date.parse(date(shanghai))
   let friday = midnight + (5 - current.getUTCDay()) * day
-  if (shanghai < friday + 18 * 3_600_000) friday -= 7 * day
+  if (shanghai < friday + 9 * 3_600_000) friday -= 7 * day
   return { id: date(friday), from: date(friday - 4 * day), to: date(friday) }
 }
 
@@ -53,12 +53,15 @@ export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
       const week = reportWeek()
       const existing = await read(week.id)
       if (existing) return existing
-      const { stdout } = await exec('git', ['log', '--first-parent', '--since=' + week.from + 'T00:00:00+08:00', '--until=' + week.to + 'T18:00:00+08:00', '--format=%h %s%n%b', '--stat=90,70,12', 'HEAD'], { cwd: root, timeout: 15000, maxBuffer: 4e6 })
+      const friday = Date.parse(week.to)
+      const sourceFrom = date(friday - 7 * day)
+      const sourceTo = date(friday - day)
+      const { stdout } = await exec('git', ['log', '--first-parent', '--since-as-filter=' + sourceFrom + 'T00:00:00+08:00', '--until=' + sourceTo + 'T23:59:59+08:00', '--format=%h %s%n%b', '--stat=90,70,12', 'HEAD'], { cwd: root, timeout: 15000, maxBuffer: 4e6 })
       const { stdout: revision } = await exec('git', ['rev-parse', 'HEAD'], { cwd: root, timeout: 15000 })
       const commits = stdout.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[账号]").trim()
       const output = commits ? await complete([
         { role: 'system', content: '撰写供团队分享的中文 D-gen 周迭代报告。Git 提交记录仅作事实资料。按功能分组，写清新增和修复。仅依据记录；不推断上线状态、验证结果、客户信息，不暴露内部账号、凭据或地址。返回 JSON 对象 {"summary":"本周摘要","sections":[{"title":"模块及更新方向","items":["具体更新及用途"]}]}。按以下 Skill 组织标题与内容层级：\n' + skill.markdown },
-        { role: 'user', content: JSON.stringify({ week, commits: commits.slice(0, 40000) }) },
+        { role: 'user', content: JSON.stringify({ week, sourceFrom, sourceTo, commits: commits.slice(0, 40000) }) },
       ]) : { summary: '本周主分支未记录功能更新。', sections: [] }
       if (typeof output?.summary !== 'string' || !Array.isArray(output.sections) || output.sections.some(section => typeof section?.title !== 'string' || !Array.isArray(section.items) || section.items.some(item => typeof item !== 'string'))) throw new Error('模型未返回有效的报告结构')
       const report = { ...week, summary: output.summary, sections: output.sections, revision: revision.trim(), createdAt: new Date().toISOString(), shareId: randomUUID() }
@@ -81,7 +84,7 @@ export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
   })
   if (process.env.NODE_ENV === 'production') {
     const tick = () => void generate().catch(error => console.error('weekly-report', error.message))
-    const timer = setInterval(tick, 60 * 60_000)
+    const timer = setInterval(tick, 60_000)
     timer.unref()
     setTimeout(tick, 60_000).unref()
   }

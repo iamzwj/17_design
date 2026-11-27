@@ -32,7 +32,7 @@ export default function WeeklyReports({ copyLink }) {
 
   return <section className="workspace admin-workspace weekly-reports">
     <header className="admin-heading">
-      <div><p>每周五 18:00（北京时间）汇总主分支更新。持有分享链接的人可以查看报告。</p></div>
+      <div><p>每周五 09:00（北京时间）生成，汇总上周五至本周四的主分支更新。持有分享链接的人可以查看报告。</p></div>
       <button type="button" disabled={busy} onClick={generate}>{busy ? '生成中…' : '生成最新一期'}</button>
     </header>
     {error && <p role="alert" className="admin-error">{error}</p>}
