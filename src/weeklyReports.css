@@ -1,0 +1,22 @@
+.weekly-reports .admin-heading { min-height: 0; align-items: center; }
+.weekly-reports .admin-heading > button { padding-inline: 12px; flex-shrink: 0; }
+.weekly-reports article {
+  border-top: 1px solid var(--dp-rule);
+  padding: 22px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.weekly-reports h2 { margin: 0 0 8px; font-size: 17px; color: var(--ink); }
+.weekly-reports article p { margin: 0; color: var(--dp-secondary); line-height: 1.65; overflow-wrap: anywhere; }
+.weekly-report-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.weekly-report-actions :is(a, button) {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px;
+  border: 1px solid var(--dp-rule); border-radius: 8px; color: var(--ink);
+  background: var(--dp-panel); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none;
+}
+.weekly-report-actions :is(a, button):hover { color: var(--accent); }
+@media (max-width: 720px) {
+  .weekly-reports .admin-heading, .weekly-reports article { align-items: flex-start; flex-direction: column; }
+}

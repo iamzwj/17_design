@@ -1,3 +1,4 @@
+import { installWeeklyReports } from './weeklyReports.js'
 import { validateChatMessageLength } from '../shared/chatTextLimits.js'
 import { embedHtmlBrand, htmlBrandPrompt } from './htmlBrand.js'
 import { applyHtmlDeckDesign, formatHtmlDeckPlan, htmlPresentationPhase, isCurrentWeatherQuery, HTML_ATTRIBUTION_RULE, HTML_DESIGN_PROMPT, HTML_PLAN_MARKER, HTML_PLAN_PROMPT, parseHtmlDeck, readHtmlDeckPlan, renderHtmlDeck } from './htmlDeck.js'
@@ -652,6 +653,11 @@ async function requestUpstream(endpoint, body, signal, timeoutMs = 180_000) {
 }
 
 const requestTextUpstream = (endpoint, body, timeout) => requestUpstream(endpoint, body, undefined, timeout)
+installWeeklyReports(app, { dataDir: waterfallDataDir, requireAdmin, complete: async (messages) => {
+  const reply = await requestTextUpstream('/v1/chat/completions', { model: 'gemini-3.7-flash', messages, response_format: { type: 'json_object' } }, 120_000)
+  return JSON.parse(completionText(reply).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''))
+} })
+
 
 async function requestUpstreamResult(id, signal) {
   const response = await fetch(`${apiBase}/v1/api/result?id=${encodeURIComponent(id)}`, {

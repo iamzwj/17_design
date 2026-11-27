@@ -341,3 +341,16 @@ export function fileToDataUrl(file) {
     reader.readAsDataURL(file)
   })
 }
+
+export async function readWeeklyReports(signal) {
+  const response = await fetch(apiUrl('/api/admin/weekly-reports'), {
+    cache: 'no-store',
+    headers: { Authorization: `Bearer ${getAuthToken()}` },
+    signal,
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || '无法读取版本迭代报告')
+  return data.reports
+}
+
+export const createWeeklyReport = () => post('/api/admin/weekly-reports', {})

@@ -27,6 +27,7 @@ import { cancelWaterfallTask, clearAuthToken, createConversationImageTask, creat
 import { buildComplianceSystemPrompt, COMPLIANCE_BRANDS } from './complianceRules.js'
 import { Icon } from './icons.jsx'
 import PleaseDayAvatarStudio from './PleaseDayAvatarStudio.jsx'
+import WeeklyReports from './WeeklyReports.jsx'
 import AdminStudio from './AdminStudio.jsx'
 import VideoStudio from './VideoStudio.jsx'
 import GenerationWelcome from './GenerationWelcome.jsx'
@@ -75,6 +76,7 @@ const WORKSPACE_TITLES = {
   assets: ['ASSET LIBRARY', '品牌素材'],
   'brand-manual': ['KNOWLEDGE BASE', '品牌手册'],
   'marketing-strategy': ['KNOWLEDGE BASE', '营销策略'],
+  'weekly-reports': ['WEEKLY REPORT', '版本迭代'],
   admin: ['ADMINISTRATION', '后台管理'],
   archive: ['ARCHIVE', '已归档对话'],
 }
@@ -567,7 +569,7 @@ function BrandIcon({ alt = '' }) {
   return <span className="brand-icon-static" role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}/>
 }
 
-function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, theme, onThemeChange, open, onClose, user, onLogout, onLogin }) {
+function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onSelectMoreTool, conversations, activeConversationId, onSelectConversation, onPinConversation, onArchiveConversation, onRenameConversation, onOpenArchive, onOpenAdmin, onOpenWeeklyReports, theme, onThemeChange, open, onClose, user, onLogout, onLogin }) {
   const byRecent = (a, b) => (Date.parse(b.updatedAt || b.createdAt) || 0) - (Date.parse(a.updatedAt || a.createdAt) || 0)
   const pinned = conversations.filter((conversation) => conversation.pinned).sort(byRecent)
   const regular = conversations.filter((conversation) => !conversation.pinned).sort(byRecent)
@@ -649,6 +651,7 @@ function Sidebar({ active, onChange, imageMode, onSelectImageMode, moreTool, onS
           <div className="account-credit-summary"><Icon name="spark" size={16}/><span>当前积分</span><b>{user.credits ?? 100}</b></div>
           <button onClick={() => { onOpenArchive(); setAccountExpanded(false); onClose() }}><Icon name="database" size={16}/><span>已归档对话</span><Icon name="chevron" size={14}/></button>
           {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenAdmin(); setAccountExpanded(false); onClose() }}><Icon name="gear" size={16}/><span>后台管理</span><Icon name="chevron" size={14}/></button>}
+          {user.email.toLowerCase() === 'zhangwj159@onewo.com' && <button onClick={() => { onOpenWeeklyReports(); setAccountExpanded(false); onClose() }}><Icon name="book" size={16}/><span>版本迭代</span><Icon name="chevron" size={14}/></button>}
           <AccentTheme user={user}/>
           {THEME_SELECTION_ENABLED && <div className="theme-menu-row">
             <span className="theme-menu-label"><Icon name="sun" size={16}/><span>显示模式</span></span>
@@ -2251,10 +2254,10 @@ export default function App() {
     setWorkspaceToken((value) => value + 1)
   }
 
-  function openAdmin() {
+  function openAdmin(module = 'admin') {
     if (user?.email?.toLowerCase() !== 'zhangwj159@onewo.com') return
     setArchiveViewOpen(false)
-    setActive('admin')
+    setActive(module)
     setActiveConversationId(null)
     setWorkspaceToken((value) => value + 1)
   }
@@ -2407,6 +2410,8 @@ export default function App() {
 
   const content = archiveViewOpen
     ? <ArchiveWorkspace key={workspaceToken} archived={archivedConversations} onRestore={restoreConversation} onDelete={deleteConversation} onDeleteAll={deleteAllArchived}/>
+    : active === 'weekly-reports' && user?.email?.toLowerCase() === 'zhangwj159@onewo.com'
+      ? <WeeklyReports key={workspaceToken} copyLink={copyToClipboard}/>
     : active === 'admin'
       ? <AdminStudio key={workspaceToken}/>
     : active === 'more' && moreTool === 'pulin-report' && user && historyReady !== conversationStorageKey
@@ -2441,5 +2446,5 @@ export default function App() {
   if (localBatchPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><Suspense fallback={<WorkspaceLoading fluid={active === 'film'}>正在加载工具…</WorkspaceLoading>}><QrBatchStudio/></Suspense></main></div>
   if (localAvatarPreview) return <div className="app-shell batch-preview-shell"><div className="atmosphere"/><main className="main"><PleaseDayAvatarStudio/></main></div>
   if (authState === 'checking') return <div className="auth-loading"><span className="brand-avatar"><BrandIcon alt="D-Gen"/></span><i/></div>
-  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{storageWarning && <p role="alert" style={{padding: "10px 18px", margin: 0}}>浏览器本地空间已满，未提交的草稿在刷新或关闭后可能丢失，请及时保存。</p>}{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}<Suspense fallback={<WorkspaceLoading fluid={active === 'film'}>正在加载工具…</WorkspaceLoading>}>{content}</Suspense></main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
+  return <div className="app-shell"><div className="atmosphere"/><Sidebar active={active} onChange={changeModule} imageMode={imageMode} onSelectImageMode={selectImageMode} moreTool={moreTool} onSelectMoreTool={selectMoreTool} onNew={() => user || active === 'compliance' || active === 'more' ? startNew(active, { createHistory: true }) : openLogin('image')} conversations={activeConversations} activeConversationId={activeConversationId} onSelectConversation={selectConversation} onPinConversation={togglePinConversation} onArchiveConversation={archiveConversation} onRenameConversation={renameConversation} onOpenArchive={openArchiveView} onOpenAdmin={openAdmin} onOpenWeeklyReports={() => openAdmin('weekly-reports')} theme={theme} onThemeChange={setTheme} open={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={logout} onLogin={() => openLogin('general')}/><main className={`main${pageTitle ? " has-workspace-title" : ""}`}><Topbar onMenu={() => setSidebarOpen(true)}/>{storageWarning && <p role="alert" style={{padding: "10px 18px", margin: 0}}>浏览器本地空间已满，未提交的草稿在刷新或关闭后可能丢失，请及时保存。</p>}{pageTitle && <div className="workspace-title-slot"><ToolPageHeader eyebrow={pageTitle[0]} title={pageTitle[1]}/></div>}<Suspense fallback={<WorkspaceLoading fluid={active === 'film'}>正在加载工具…</WorkspaceLoading>}>{content}</Suspense></main>{loginPromptModule && <AuthScreen onClose={() => { setLoginPromptModule(null); setPendingImageMode(null) }} onAuthenticated={completeLogin}/>}</div>
 }
