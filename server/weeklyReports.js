@@ -35,9 +35,10 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
     ...section,
     items: section.items.map(item => typeof item === 'string' ? { body: item } : item),
   }))
-  const index = features.map((section, i) => `<a href="#section-${i}">${reportText(section.module || section.title)}</a>`).join('')
-  const body = features.map((section, i) => `<section id="section-${i}"><h2>${reportText(section.title)}</h2><div class="features">${section.items.map(item => `<article>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</article>`).join('')}</div></section>`).join('')
-  const checks = verification.length ? `<section><h2>部署与验收</h2><div class="checks">${verification.map(item => `<article><h3>${reportText(item.title)}</h3><p>${reportText(item.body)}</p></article>`).join('')}</div></section>` : ''
+  const chapter = i => (["一","二","三","四","五","六","七","八","九","十"][i] || i + 1) + "、"
+  const index = features.map((section, i) => `<a href="#section-${i}">${chapter(i)}${reportText(section.module || section.title)}</a>`).join('')
+  const body = features.map((section, i) => `<section id="section-${i}"><h2>${chapter(i)}${reportText(section.title)}</h2><ol class="features">${section.items.map(item => `<li>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</li>`).join('')}</ol></section>`).join('')
+  const checks = verification.length ? `<section><h2>${chapter(features.length)}部署与验收</h2><ol class="checks">${verification.map(item => `<li><h3>${reportText(item.title)}</h3><p>${reportText(item.body)}</p></li>`).join('')}</ol></section>` : ''
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>D-gen 迭代报告｜${reportText(period)}</title><style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #f2f5f8; color: #0f172a; font: 17px/1.8 system-ui, sans-serif; }
@@ -52,7 +53,8 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
   nav { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 22px; }
   nav a { color: #174fae; text-underline-offset: 4px; font-size: .88em; }
   section { border-top: 1px solid #bfcbd8; padding-top: 28px; margin-top: 34px; }
-  .features, .checks { display: grid; gap: 14px; }
+  .features, .checks { display: grid; gap: 14px; margin: 0; padding-inline-start: 1.6em; }
+  li::marker { font-weight: 650; }
   h3 { margin: 0 0 3px; font-size: 1em; line-height: 1.45; }
   .metric { color: #174fae; font-weight: 650; }
   @media (prefers-color-scheme: dark) {
