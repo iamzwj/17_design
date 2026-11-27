@@ -35,13 +35,36 @@ export function renderWeeklyReport({ from, to, summary, sections, verification =
     ...section,
     items: section.items.map(item => typeof item === 'string' ? { body: item } : item),
   }))
-  const index = features.map((section, i) => `<a href="#section-${i}"><span>${reportText(section.module || '更新 ' + (i + 1))}</span><strong>${reportText(section.title)}</strong></a>`).join('')
-  const body = features.map((section, i) => `<section id="section-${i}"><div><small>${reportText(section.module || '')}</small><h2>${reportText(section.title)}</h2></div><div class="features">${section.items.map(item => `<article>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</article>`).join('')}</div></section>`).join('')
+  const index = features.map((section, i) => `<a href="#section-${i}">${reportText(section.module || section.title)}</a>`).join('')
+  const body = features.map((section, i) => `<section id="section-${i}"><h2>${reportText(section.title)}</h2><div class="features">${section.items.map(item => `<article>${item.title ? `<h3>${reportText(item.title)}</h3>` : ''}<p>${reportText(item.body)}</p>${item.metric ? `<p class="metric">${reportText(item.metric)}</p>` : ''}</article>`).join('')}</div></section>`).join('')
   const checks = verification.length ? `<section><h2>部署与验收</h2><div class="checks">${verification.map(item => `<article><h3>${reportText(item.title)}</h3><p>${reportText(item.body)}</p></article>`).join('')}</div></section>` : ''
   return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>D-gen 迭代报告｜${reportText(period)}</title><style>
-  *{box-sizing:border-box}body{margin:0;background:#f2f5f8;color:#0f172a;font:16px/1.75 system-ui,sans-serif}main{max-width:940px;margin:auto;padding:clamp(24px,6vw,80px)}header{border-top:5px solid #155eef;padding-top:24px}time{display:block;color:#155eef;font-size:clamp(20px,3.5vw,34px);font-weight:750;line-height:1.4;font-variant-numeric:tabular-nums;margin:0 0 20px}h1,h2{font-family:Georgia,"Songti SC",serif;line-height:1.3}h1{font-size:clamp(32px,6vw,60px);margin:14px 0 20px}section{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:28px;padding:24px 0;border-top:1px solid #aebaca}h2{margin:0;font-size:24px}p{margin:0 0 14px;overflow-wrap:anywhere}.lead{font-size:1.15rem;margin-bottom:30px}@media(max-width:600px){section{grid-template-columns:1fr;gap:12px}}
-  nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:16px;margin:32px 0}nav a{border-top:2px solid #155eef;padding:12px 0;color:inherit;text-decoration:none}nav a:hover strong{text-decoration:underline}nav span,nav strong{display:block}nav span,small{font-size:.82rem;color:#155eef}h3{margin:0 0 6px;font-size:1.05rem}.features{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.features article{border-top:1px solid #c4cedb;padding-top:10px}.checks{border-left:3px solid #155eef;padding-left:16px}.metric{color:#155eef;font-weight:750}@media(max-width:600px){.features{grid-template-columns:1fr}}
-  </style><main><header><h1>D-gen 蝶发 AI 工作台<br>版本迭代报告</h1><time>${reportText(period)}</time><p class="lead">${reportText(summary)}</p></header>${index ? `<nav aria-label="章节索引">${index}</nav>` : ''}${body}${checks}</main></html>`
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f2f5f8; color: #0f172a; font: 17px/1.8 system-ui, sans-serif; }
+  main { max-width: 860px; margin: auto; padding: clamp(24px, 6vw, 64px); }
+  h1, h2 { font-family: Georgia, "Songti SC", serif; line-height: 1.28; text-wrap: balance; }
+  h1 { margin: 6px 0 14px; font-size: clamp(32px, 6.2vw, 58px); }
+  h2 { margin: 0 0 18px; font-size: clamp(24px, 4vw, 32px); }
+  header > p:first-child { font-size: .9rem; font-weight: 650; }
+  time { display: block; color: #155eef; font-size: clamp(17px, 3.4vw, 25px); font-weight: 700; margin-bottom: 18px; }
+  p { margin: 0; word-break: normal; overflow-wrap: break-word; white-space: normal; }
+  .lead { font-size: 1.05em; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 22px; }
+  nav a { color: #174fae; text-underline-offset: 4px; font-size: .88em; }
+  section { border-top: 1px solid #bfcbd8; padding-top: 28px; margin-top: 34px; }
+  .features, .checks { display: grid; gap: 14px; }
+  h3 { margin: 0 0 3px; font-size: 1em; line-height: 1.45; }
+  .metric { color: #174fae; font-weight: 650; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #17181c; color: #eef0f5; }
+    time, nav a, .metric { color: #a9c5ff; }
+    section { border-color: #3a414f; }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    section { margin-top: 28px; padding-top: 22px; }
+  }
+  </style><main><header><p>D-gen 蝶发 AI 工作台</p><h1>版本迭代报告</h1><time>${reportText(period)}</time><p class="lead">${reportText(summary)}</p></header>${index ? `<nav aria-label="章节索引">${index}</nav>` : ''}${body}${checks}</main></html>`
 }
 
 export function installWeeklyReports(app, { dataDir, requireAdmin, complete }) {
