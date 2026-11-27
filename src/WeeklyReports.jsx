@@ -11,10 +11,25 @@ export default function WeeklyReports({ copyLink }) {
   const [error, setError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    readWeeklyReports(controller.signal).then(setReports).catch(err => {
-      if (!controller.signal.aborted) setError(err.message)
-    })
-    return () => controller.abort()
+    async function refresh() {
+      try {
+        const latest = await readWeeklyReports(controller.signal)
+        if (controller.signal.aborted) return
+        setReports(current => {
+          const byWeek = new Map((current || []).map(report => [report.id, report]))
+          for (const report of latest) byWeek.set(report.id, report)
+          return [...byWeek.values()].sort((a, b) => b.id.localeCompare(a.id))
+        })
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err.message)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(refresh, 60_000)
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+    }
   }, [])
 
   async function generate() {
